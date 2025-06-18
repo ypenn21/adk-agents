@@ -1,0 +1,17 @@
+[project]
+name = "software-bug-assistant"
+version = "0.1.0"
+description = "Software bug assistant using ADK"
+authors = [{ name = "Jack Wotherspoon", email = "jackwoth@google.com" }]
+license = "Apache-2.0"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "google-adk==1.2.1",
+    "python-dotenv==1.1.0",
+    "toolbox-core==0.1.0",
+    "gunicorn",
+    "whitenoise[brotli]",
+    "django>=5.0,<5.3",
+    "google-generativeai>=0.8.5",
+]

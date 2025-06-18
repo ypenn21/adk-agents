@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>ADK Agent Interaction</title>
+    <style>
+        body { font-family: sans-serif; margin: 20px; background-color: #f4f4f4; color: #333; }
+        h1 { color: #333; }
+        #chatbox { width: 100%; max-width: 600px; margin: 0 auto; background-color: #fff; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); padding: 20px; }
+        .message { margin-bottom: 15px; padding: 10px; border-radius: 5px; }
+        .user-message { background-color: #e1f5fe; text-align: right; }
+        .agent-message { background-color: #f0f0f0; }
+        #messageInput { width: calc(100% - 80px); padding: 10px; border: 1px solid #ccc; border-radius: 4px; margin-right: 10px; }
+        button { padding: 10px 15px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background-color: #0056b3; }
+        #conversation { max-height: 400px; overflow-y: auto; margin-bottom: 20px; border: 1px solid #eee; padding: 10px; }
+
+        /* New table styles */
+        .agent-message table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            font-size: 0.9em;
+            table-layout: auto; /* Allows table to adjust to content */
+        }
+        .agent-message th, .agent-message td {
+            border: 1px solid #ccc; /* Consistent border for table elements */
+            padding: 8px;
+            text-align: left;
+            word-wrap: break-word; /* Ensures long text wraps within cells */
+        }
+        .agent-message th {
+            background-color: #e0e0e0; /* Distinct background for headers */
+            font-weight: bold;
+            color: #333;
+        }
+        .agent-message tr:nth-child(even) td { /* Zebra striping for data rows */
+            background-color: #f9f9f9;
+        }
+        .agent-message tr:hover td { /* Hover effect for data rows */
+            background-color: #f1f1f1;
+        }
+    </style>
+</head>
+<body>
+    <div id="chatbox">
+        <h1>Chat with Software Bug Assistant</h1>
+        <div id="conversation">
+            <div class="message agent-message">Hello! How can I help you today?</div>
+        </div>
+        <div>
+            <input type="text" id="messageInput" placeholder="Type your message...">
+            <button onclick="sendMessage()">Send</button>
+        </div>
+    </div>
+
+    <script>
+        async function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const message = input.value.trim();
+            if (!message) return;
+
+            const conversation = document.getElementById('conversation');
+            const userMessageDiv = document.createElement('div');
+            userMessageDiv.classList.add('message', 'user-message');
+            const userPre = document.createElement('pre');
+            userPre.style.whiteSpace = 'pre-wrap';
+            userPre.style.fontFamily = 'inherit';
+            userPre.textContent = message;
+            userMessageDiv.appendChild(userPre);
+            conversation.appendChild(userMessageDiv);
+
+            input.value = '';
+            input.disabled = true;
+            document.querySelector('button').disabled = true;
+
+            try {
+                const response = await fetch('{% url "interact_with_agent" %}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        // 'X-CSRFToken': '{{ csrf_token }}' 
+                    },
+                    body: JSON.stringify({ message: message })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                appendAgentMessage(data.reply, 'agent-message');
+            } catch (error) {
+                console.error('Error:', error);
+                appendAgentMessage(`Error: ${error.message}`, 'agent-message');
+            }
+            input.disabled = false;
+            document.querySelector('button').disabled = false;
+            input.focus();
+            conversation.scrollTop = conversation.scrollHeight;
+        }
+
+        function parseMarkdownTable(markdown) {
+            const lines = markdown.trim().split('\n').map(line => line.trim());
+            if (lines.length < 2) return null;
+
+            const table = document.createElement('table');
+            const thead = document.createElement('thead');
+            const tbody = document.createElement('tbody');
+            table.appendChild(thead);
+            table.appendChild(tbody);
+
+            // Helper function to robustly extract cells from a line
+            function getCells(lineString) {
+                // This function assumes lineString is already trimmed.
+                // It also expects the line to start and end with '|', 
+                // which is ensured by the collection logic in appendAgentMessage.
+                if (!lineString.startsWith('|') || !lineString.endsWith('|')) {
+                    // This check is a safeguard; appendAgentMessage should pre-filter lines.
+                    console.warn("getCells received a line not starting/ending with '|':", lineString);
+                    return null; // Or handle error as appropriate for your logic
+                }
+                // Remove the leading and trailing '|' then split by '|'
+                const content = lineString.slice(1, lineString.length - 1);
+                return content.split('|').map(cell => cell.trim());
+            }
+
+            const headerLine = lines[0];
+            const headers = getCells(headerLine);
+            if (!headers) {
+                console.warn("Failed to parse headers from:", headerLine);
+                return null;
+            }
+
+            const trHead = document.createElement('tr');
+            headers.forEach(headerText => {
+                const th = document.createElement('th');
+                th.textContent = headerText;
+                trHead.appendChild(th);
+            });
+            thead.appendChild(trHead);
+
+            const separatorLine = lines[1];
+            const separatorCells = getCells(separatorLine);
+            if (!separatorCells || separatorCells.length !== headers.length) {
+                console.warn("Failed to parse or validate separator cells from:", separatorLine, "Expected", headers.length, "got", separatorCells ? separatorCells.length : 'null');
+                return null;
+            }
+
+            for (const cell of separatorCells) {
+                if (!/^:?-+:?$/.test(cell)) { 
+                    console.warn('Invalid separator cell format:', cell);
+                    return null; 
+                }
+            }
+
+            for (let i = 2; i < lines.length; i++) {
+                const dataLine = lines[i];
+                // Skip any genuinely empty lines that might have been collected if the table had blank lines
+                if (dataLine === "") continue; 
+                
+                const cells = getCells(dataLine);
+                if (!cells) {
+                    console.warn("Skipping malformed data line (getCells failed):", dataLine);
+                    continue; // Skip this row if cell parsing fails
+                }
+
+                const trBody = document.createElement('tr');
+                for (let k = 0; k < headers.length; k++) {
+                    const td = document.createElement('td');
+                    td.textContent = cells[k] || ''; // Use empty string if cell is undefined (e.g. fewer cells than headers)
+                    trBody.appendChild(td);
+                }
+                tbody.appendChild(trBody);
+            }
+            
+            // A valid table must have headers. 
+            // It can be an empty table (header + separator only) or have data rows.
+            if (headers.length > 0) {
+                if (tbody.hasChildNodes() || lines.length === 2) { 
+                    return table;
+                }
+            }
+            console.warn("Table parsing completed without returning a valid table structure for markdown:", markdown);
+            return null;
+        }
+
+        function appendAgentMessage(text, className) {
+            const conversation = document.getElementById('conversation');
+            const messageDiv = document.createElement('div');
+            messageDiv.classList.add('message', className);
+
+            const lines = text.split('\n');
+            let currentTextBuffer = [];
+            let i = 0;
+
+            function flushTextBuffer() {
+                if (currentTextBuffer.length > 0) {
+                    const bufferedText = currentTextBuffer.join('\n');
+                    if (bufferedText.trim().length > 0) {
+                        const pre = document.createElement('pre');
+                        pre.style.whiteSpace = 'pre-wrap';
+                        pre.style.fontFamily = 'inherit';
+                        pre.textContent = bufferedText;
+                        messageDiv.appendChild(pre);
+                    }
+                    currentTextBuffer = [];
+                }
+            }
+
+            while (i < lines.length) {
+                const currentLineRaw = lines[i];
+                const currentLineTrimmed = currentLineRaw.trim();
+                let successfullyProcessedAsTable = false;
+
+                // Check for potential table start: header line + separator line
+                if (currentLineTrimmed.startsWith('|') && (currentLineTrimmed.endsWith('|') || currentLineTrimmed.endsWith('| |'))) {
+                    if (i + 1 < lines.length) {
+                        const nextLineRaw = lines[i+1];
+                        const nextLineTrimmed = nextLineRaw.trim();
+                        if (nextLineTrimmed.startsWith('|') && 
+                            (nextLineTrimmed.endsWith('|') || nextLineTrimmed.endsWith('| |')) && 
+                            nextLineTrimmed.includes('-')) {
+                            
+                            flushTextBuffer(); // Render any preceding text
+
+                            let tableLinesCollector = [currentLineRaw, nextLineRaw];
+                            let tableEndIndex = i + 1;
+
+                            // Collect all subsequent lines that appear to be part of this table
+                            for (let j = i + 2; j < lines.length; j++) {
+                                const rowLineRaw = lines[j];
+                                const rowLineTrimmed = rowLineRaw.trim();
+                                // Ensure collected lines for the table also conform to the basic pipe structure
+                                if (rowLineTrimmed.startsWith('|') && (rowLineTrimmed.endsWith('|') || rowLineTrimmed.endsWith('| |'))) {
+                                    tableLinesCollector.push(rowLineRaw);
+                                    tableEndIndex = j;
+                                } else if (rowLineTrimmed === "") { // Allow empty lines within a table block
+                                    tableLinesCollector.push(rowLineRaw); 
+                                    tableEndIndex = j;
+                                } else {
+                                    break; // Line does not look like a table row, so table ends here.
+                                }
+                            }
+
+                            const tableMarkdown = tableLinesCollector.join('\n');
+                            const tableElement = parseMarkdownTable(tableMarkdown);
+
+                            if (tableElement) {
+                                messageDiv.appendChild(tableElement);
+                                i = tableEndIndex + 1; // Move loop index past the parsed table
+                                successfullyProcessedAsTable = true;
+                            } else {
+                                // Table parsing failed. The currentLineRaw will be added to the buffer below.
+                                // successfullyProcessedAsTable remains false, so normal text processing occurs for this line.
+                            }
+                        }
+                    }
+                }
+
+                if (!successfullyProcessedAsTable) {
+                    currentTextBuffer.push(currentLineRaw);
+                    i++;
+                }
+            }
+
+            flushTextBuffer(); // Render any remaining text in the buffer
+            
+            if (messageDiv.hasChildNodes()) {
+                conversation.appendChild(messageDiv);
+            }
+        }
+
+        document.getElementById('messageInput').addEventListener('keypress', function(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        });
+    </script>
+</body>
+</html>
