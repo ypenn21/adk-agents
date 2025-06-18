@@ -4,7 +4,7 @@
 
 The Software Bug Assistant is a sample agent designed to help IT Support and Software Developers triage, manage, and resolve software issues. This sample agent uses ADK Python, a PostgreSQL bug ticket database, RAG, and Google Search to assist in debugging. 
 
-![](deployment/images/google-cloud-architecture.png)
+![](mcp-server/images/google-cloud-architecture.png)
 
 This README contains instructions for local and Google Cloud deployment. 
 
@@ -22,7 +22,7 @@ The key features of the Software Bug Assistant Agent include:
 
 ## Agent Architecture
 
-<img src="deployment/images/architecture.svg" width="50%" alt="Architecture">
+<img src="mcp-server/images/architecture.svg" width="50%" alt="Architecture">
 
 ## Key Features
 
@@ -43,8 +43,8 @@ The key features of the Software Bug Assistant Agent include:
 1. Clone the repository:
 
 ```bash
-git clone https://github.com/google/adk-samples.git
-cd adk-samples/python/agents/software-bug-assistant
+git clone git@github.com:ypenn21/adk-agents.git
+cd adk-agents
 ```
 
 2. Configure environment variables (via `.env` file):
@@ -110,8 +110,8 @@ set -o allexport && source .env && set +o allexport
 
 ```bash
 export OS="linux/amd64" # one of linux/amd64, darwin/arm64, darwin/amd64, or windows/amd64
-curl -O --output-dir deployment/mcp-toolbox https://storage.googleapis.com/genai-toolbox/v0.6.0/$OS/toolbox
-chmod +x deployment/mcp-toolbox/toolbox
+curl -O --output-dir mcp-server/mcp-toolbox https://storage.googleapis.com/genai-toolbox/v0.6.0/$OS/toolbox
+chmod +x mcp-server/mcp-toolbox/toolbox
 ```
 
 **Jump to**:
@@ -198,7 +198,7 @@ INSERT INTO tickets (title, description, assignee, priority, status) VALUES
 
 First, [download the MCP toolbox](https://googleapis.github.io/genai-toolbox/getting-started/local_quickstart/) binary if not already installed.
 
-Then, open the `deployment/mcp-toolbox/tools.yaml` file. This is a prebuilt configuration for the MCP Toolbox that defines several SQL tools against the `tickets` table we just created, including getting a ticket by its ID, creating a new ticket, or searching tickets. 
+Then, open the `mcp-server/mcp-toolbox/tools.yaml` file. This is a prebuilt configuration for the MCP Toolbox that defines several SQL tools against the `tickets` table we just created, including getting a ticket by its ID, creating a new ticket, or searching tickets. 
 
 > [!Note]
 > Vector search via `search-tickets` is not yet enabled for local development - see Google Cloud setup below.
@@ -218,7 +218,7 @@ Then, open the `deployment/mcp-toolbox/tools.yaml` file. This is a prebuilt conf
 Now you run the toolbox server locally: 
 
 ```bash 
-cd deployment/mcp-toolbox/
+cd mcp-server/mcp-toolbox/
 ./toolbox --tools-file="tools.yaml"
 ```
 
@@ -266,7 +266,7 @@ You can run the agent using the `adk` command in a **new** terminal.
 1. Through the CLI (`adk run`):
 
     ```bash
-    uv run adk run software_bug_assistant
+    uv run adk run adk_agent_sample
     ```
 
 2. Through the web interface (`adk web`):
@@ -276,7 +276,7 @@ You can run the agent using the `adk` command in a **new** terminal.
     ```
 
 The command `adk` web will start a web server on your machine and print
-the URL. You may open the URL, select "software_bug_assistant" in the top-left drop-down menu, and a chatbot interface will appear on the right. The conversation is initially blank. 
+the URL. You may open the URL, select "adk_agent_sample" in the top-left drop-down menu, and a chatbot interface will appear on the right. The conversation is initially blank. 
 
 Here are some example requests you may ask the agent:
 
@@ -284,7 +284,7 @@ Here are some example requests you may ask the agent:
 - "Can you bump the priority of ticket ID 7 to P0?"
 - "Which issues are currenlty marked as 'In Progress'?"
 
-![](deployment/images/adk-web.png)
+![](mcp-server/images/adk-web.png)
 
 ---------
 
@@ -302,7 +302,7 @@ gunicorn web_ui.wsgi:application --bind 0.0.0.0:8000
 
 These instructions walk through the process of deploying the Software Bug Assistant agent to Google Cloud, including Cloud Run and Cloud SQL (PostgreSQL). This setup also adds RAG capabilities to the tickets database, using the [google_ml_integration](https://cloud.google.com/blog/products/ai-machine-learning/google-ml-intergration-extension-for-cloud-sql) vector plugin for Cloud SQL, and the `text-embeddings-005` model from Vertex AI.
 
-![](deployment/images/google-cloud-architecture.png)
+![](mcp-server/images/google-cloud-architecture.png)
 
 ### Before you begin 
 
@@ -361,7 +361,7 @@ From the Cloud Console (Cloud SQL), open **Cloud SQL Studio**.
 
 Log into the `tickets-db` Database using the `postgres` user (password: `admin`, but note you can change to a more secure password under Cloud SQL > Primary Instance > Users).
 
-![](deployment/images/cloud-sql-studio.png)
+![](mcp-server/images/cloud-sql-studio.png)
 
 Open a new **Editor** tab. Then, paste in the following SQL code to set up the table and create vector embeddings.
 
@@ -452,14 +452,14 @@ SELECT * FROM tickets;
 
 You should see: 
 
-<img src="deployment/images/verify-db.png" width="80%" alt="Verify database table">
+<img src="mcp-server/images/verify-db.png" width="80%" alt="Verify database table">
 
 
 ### 9 - Deploy the MCP Toolbox for Databases server to Cloud Run 
 
 Now that we have a Cloud SQL database, we can deploy the MCP Toolbox for Databases server to Cloud Run and point it at our Cloud SQL instance.
 
-First, update `deployment/mcp-toolbox/tools.yaml` for your Cloud SQL instance: 
+First, update `mcp-server/mcp-toolbox/tools.yaml` for your Cloud SQL instance: 
 
 ```yaml
   postgresql:
@@ -493,7 +493,7 @@ gcloud projects add-iam-policy-binding $PROJECT_ID \
     --member serviceAccount:toolbox-identity@$PROJECT_ID.iam.gserviceaccount.com \
     --role roles/cloudsql.client
 
-gcloud secrets create tools --data-file=deployment/mcp-toolbox/tools.yaml
+gcloud secrets create tools --data-file=mcp-server/mcp-toolbox/tools.yaml
 ```
 
 Now we can deploy Toolbox to Cloud Run. We'll use the latest [release version](https://github.com/googleapis/genai-toolbox/releases) of the MCP Toolbox image (we don't need to build or deploy the `toolbox` from source.)
@@ -594,7 +594,7 @@ Test the agent by asking questions like:
 
 *Example workflow*: 
 
-![](deployment/images/cloud-run-example.png)
+![](mcp-server/images/cloud-run-example.png)
 
 
 ### Clean up 
