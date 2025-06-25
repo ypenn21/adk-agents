@@ -257,10 +257,6 @@ From Cloud SQL studio, run:
 SELECT * FROM tickets;
 ```
 
-You should see: 
-
-<img src="mcp-server/images/verify-db.png" width="80%" alt="Verify database table">
-
 
 ### 9 - Deploy the MCP Toolbox for Databases server to Cloud Run 
 
