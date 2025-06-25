@@ -30,7 +30,7 @@ Connects to MCP Toolbox, which in turn interacts with the Bug Ticket Database
 ### Prerequisites 
 
 - [uv](https://docs.astral.sh/uv/getting-started/installation) (to manage dependencies)
-- Python 3.9+
+- Python 3.10+
 
 ### Installation
 
