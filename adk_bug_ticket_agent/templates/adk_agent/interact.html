@@ -9,8 +9,13 @@
         .message { margin-bottom: 15px; padding: 10px; border-radius: 5px; }
         .user-message { background-color: #e1f5fe; text-align: right; }
         .agent-message { background-color: #f0f0f0; }
-        #messageInput { width: calc(100% - 80px); padding: 10px; border: 1px solid #ccc; border-radius: 4px; margin-right: 10px; }
-        button { padding: 10px 15px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        .input-area {
+            display: flex;
+            align-items: center;
+            margin-top: 20px;
+        }
+        #messageInput { flex-grow: 1; padding: 10px; border: 1px solid #ccc; border-radius: 4px; }
+        button { padding: 10px 15px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; margin-left: 15px; }
         button:hover { background-color: #0056b3; }
         #conversation { max-height: 400px; overflow-y: auto; margin-bottom: 20px; border: 1px solid #eee; padding: 10px; }
 
@@ -74,7 +79,7 @@
         <div id="pendingIndicator">
             <span class="spinner"></span>Waiting for response...
         </div>
-        <div>
+        <div class="input-area">
             <input type="text" id="messageInput" placeholder="Type your message...">
             <button id="sendButton">Send</button>
         </div>
