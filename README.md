@@ -372,11 +372,7 @@ gcloud run deploy adk-agent-bug-assist \
   --set-env-vars=GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=us-central1,GOOGLE_GENAI_USE_VERTEXAI=TRUE,MCP_TOOLBOX_URL=$MCP_TOOLBOX_URL
 ```
 
-When this runs successfully, you should see: 
-
-```bash
-Service [adk-agent-bug-assist] revision [adk-agent-bug-assist-00001-d4s] has been deployed and is serving 100 percent of traffic.
-```
+Check log to see that this deployment is successfully.
 
 
 ### 13 - Test the Cloud Run Agent
