@@ -9,7 +9,7 @@ This README contains instructions for local and Google Cloud deployment.
 ## Agent Flow
 IT Support triggers the Software Bug Agent
 
-* **The agent:**
+**The agent:**
 
 Queries Gemini 2.5 Flash for AI insights
 
