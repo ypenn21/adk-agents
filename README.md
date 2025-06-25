@@ -112,12 +112,10 @@ These instructions walk through the process of deploying the Software Bug Assist
 
 ![](mcp-server/images/adk-cloud-architecture.png)
 
-### Before you begin 
+### Presetup 
 
-Deploying to Google Cloud requires:
-
-- A [Google Cloud project](https://cloud.google.com/resource-manager/docs/creating-managing-projects) with billing enabled. 
 - `gcloud` CLI ([Installation instructions](https://cloud.google.com/sdk/docs/install))
+- A [Google Cloud project](https://cloud.google.com/resource-manager/docs/creating-managing-projects) with billing enabled. 
 
 ### 1 - Authenticate the Google Cloud CLI, and enable Google Cloud APIs. 
 
