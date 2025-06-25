@@ -146,8 +146,6 @@ gcloud sql instances create software-assistant \
 --root-password=admin
 ```
 
-Once created, you can view your instance in the Cloud Console [here](https://console.cloud.google.com/sql/instances/software-assistant/overview).
-
 ### 3 - Create a SQL database, and grant Cloud SQL service account access to Vertex AI. 
 
 This step is necessary for creating vector embeddings (Agent RAG search).
