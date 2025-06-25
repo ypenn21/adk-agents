@@ -1,8 +1,6 @@
 # IT Bug Assistant 
 
-The Bug Assistant is a sample agent designed to help IT Support and Software Developers triage, manage, and resolve software issues. This sample agent uses ADK Python, a PostgreSQL bug ticket database, RAG, and Google Search to assist in debugging. 
-
-![](mcp-server/images/adk-cloud-architecture.png)
+The Bug Assistant is a sample agent hosted on django designed to help IT Support and Software Developers triage, manage, and resolve software issues. This sample agent uses ADK Python, a PostgreSQL bug ticket database, RAG, and Google Search to assist in debugging. 
 
 This README contains instructions for local and Google Cloud deployment. 
 
