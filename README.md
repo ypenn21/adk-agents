@@ -29,10 +29,8 @@ Connects to MCP Toolbox, which in turn interacts with the Bug Ticket Database
 
 ### Prerequisites 
 
-- Python 3.9+
 - [uv](https://docs.astral.sh/uv/getting-started/installation) (to manage dependencies)
-- Git (for cloning the repository, see [Installation Instructions](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git))
-- Google Cloud CLI ([Installation Instructions](https://cloud.google.com/sdk/docs/install))
+- Python 3.9+
 
 ### Installation
 
