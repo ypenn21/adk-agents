@@ -4,7 +4,7 @@
 
 The Software Bug Assistant is a sample agent designed to help IT Support and Software Developers triage, manage, and resolve software issues. This sample agent uses ADK Python, a PostgreSQL bug ticket database, RAG, and Google Search to assist in debugging. 
 
-![](mcp-server/images/google-cloud-architecture.png)
+![](mcp-server/images/adk-cloud-architecture.png)
 
 This README contains instructions for local and Google Cloud deployment. 
 
@@ -276,7 +276,7 @@ Here are some example requests you may ask the agent:
 
 These instructions walk through the process of deploying the Software Bug Assistant agent to Google Cloud, including Cloud Run and Cloud SQL (PostgreSQL). This setup also adds RAG capabilities to the tickets database, using the [google_ml_integration](https://cloud.google.com/blog/products/ai-machine-learning/google-ml-intergration-extension-for-cloud-sql) vector plugin for Cloud SQL, and the `text-embeddings-005` model from Vertex AI.
 
-![](mcp-server/images/google-cloud-architecture.png)
+![](mcp-server/images/adk-cloud-architecture.png)
 
 ### Before you begin 
 
