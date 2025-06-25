@@ -194,6 +194,21 @@ From Cloud SQL Studio, paste in the following SQL code to load in sample data.
 
 ```SQL
 INSERT INTO tickets (title, description, assignee, priority, status) VALUES
+('Database Connection Timeouts During Peak Usage', 'The application is experiencing frequent database connection timeouts, particularly during peak hours (10 AM - 12 PM EDT), affecting all users and causing service interruptions.', 'frank.white@example.com', 'P1 - High', 'Open');
+
+INSERT INTO tickets (title, description, assignee, priority, status) VALUES
+('Export to PDF Truncates Long Text Fields in Reports', 'When generating PDF exports of reports containing extensive text fields, the text is abruptly cut off at the end of the page instead of wrapping or continuing to the next page.', 'samuel.green@example.com', 'P1 - High', 'Open');
+
+INSERT INTO tickets (title, description, assignee, priority, status) VALUES
+('Search Filter "Date Range" Not Applying Correctly', 'The "Date Range" filter on the search results page does not filter records accurately; results outside the specified date range are still displayed.', 'samuel.green@example.com', 'P2 - Medium', 'Resolved');
+
+INSERT INTO tickets (title, description, assignee, priority, status) VALUES
+('Typo in Error Message: "Unathorized Access"', 'The error message displayed when a user attempts an unauthorized action reads "Unathorized Access" instead of "Unauthorized Access."', 'maria.rodriguez@example.com', 'P3 - Low', 'Resolved');
+
+INSERT INTO tickets (title, description, assignee, priority, status) VALUES
+('Intermittent File Upload Failures for Large Files', 'Users are intermittently reporting that file uploads fail without a clear error message or explanation, especially for files exceeding 10MB in size.', 'frank.white@example.com', 'P1 - High', 'Open');
+
+INSERT INTO tickets (title, description, assignee, priority, status) VALUES
 ('Login Page Freezes After Multiple Failed Attempts', 'Users are reporting that after 3 failed login attempts, the login page becomes unresponsive and requires a refresh. No specific error message is displayed.', 'samuel.green@example.com', 'P0 - Critical', 'Open');
 
 INSERT INTO tickets (title, description, assignee, priority, status) VALUES
@@ -208,20 +223,6 @@ INSERT INTO tickets (title, description, assignee, priority, status) VALUES
 INSERT INTO tickets (title, description, assignee, priority, status) VALUES
 ('Critical XZ Utils Backdoor Detected in Core Dependency (CVE-2024-3094)', 'Urgent: A sophisticated supply chain compromise (CVE-2024-3094) has been identified in XZ Utils versions 5.6.0 and 5.6.1. This malicious code potentially allows unauthorized remote SSH access by modifying liblzma. Immediate investigation and action required for affected Linux/Unix systems and services relying on XZ Utils.', 'frank.white@example.com', 'P0 - Critical', 'Open');
 
-INSERT INTO tickets (title, description, assignee, priority, status) VALUES
-('Database Connection Timeouts During Peak Usage', 'The application is experiencing frequent database connection timeouts, particularly during peak hours (10 AM - 12 PM EDT), affecting all users and causing service interruptions.', 'frank.white@example.com', 'P1 - High', 'Open');
-
-INSERT INTO tickets (title, description, assignee, priority, status) VALUES
-('Export to PDF Truncates Long Text Fields in Reports', 'When generating PDF exports of reports containing extensive text fields, the text is abruptly cut off at the end of the page instead of wrapping or continuing to the next page.', 'samuel.green@example.com', 'P1 - High', 'Open');
-
-INSERT INTO tickets (title, description, assignee, priority, status) VALUES
-('Search Filter "Date Range" Not Applying Correctly', 'The "Date Range" filter on the search results page does not filter records accurately; results outside the specified date range are still displayed.', 'samuel.green@example.com', 'P2 - Medium', 'Resolved');
-
-INSERT INTO tickets (title, description, assignee, priority, status) VALUES
-('Typo in Error Message: "Unathorized Access"', 'The error message displayed when a user attempts an unauthorized action reads "Unathorized Access" instead of "Unauthorized Access."', 'maria.rodriguez@example.com', 'P3 - Low', 'Resolved');
-
-INSERT INTO tickets (title, description, assignee, priority, status) VALUES
-('Intermittent File Upload Failures for Large Files', 'Users are intermittently reporting that file uploads fail without a clear error message or explanation, especially for files exceeding 10MB in size.', 'frank.white@example.com', 'P1 - High', 'Open');
 ```
 
 ### 6 - Create a trigger to update the `updated_time` field when a record is updated.
