@@ -112,7 +112,7 @@ curl -O --output-dir mcp-server/mcp-toolbox https://storage.googleapis.com/genai
 chmod +x mcp-server/mcp-toolbox/toolbox
 ```
 
-## ☁️ Deploy to GCP 
+## Deploy to GCP 
 
 These instructions walk through the process of deploying the Software Bug Assistant agent to Google Cloud, including Cloud Run and Cloud SQL (PostgreSQL). This setup also adds RAG capabilities to the tickets database, using the [google_ml_integration](https://cloud.google.com/blog/products/ai-machine-learning/google-ml-intergration-extension-for-cloud-sql) vector plugin for Cloud SQL, and the `text-embeddings-005` model from Vertex AI.
 
@@ -407,9 +407,9 @@ Test the agent by asking questions like:
 - `Create a new bug.` (let the agent guide you through bug creation)
 
 
-## 💻 Run Locally 
+## Local Environment 
 
-### Before you begin
+### Presetup
 
 Install PostgreSQL:
 
