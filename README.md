@@ -19,7 +19,6 @@ Connects to MCP Toolbox, which in turn interacts with the Bug Ticket Database
 * **MVP:**          Bug Support for IT support reps
 
 *   **MCP Toolbox for Databases:** [MCP Toolbox for Databases](https://github.com/googleapis/genai-toolbox) to provide database-specific tools to our agent.
-*   **Retrieval-Augmented Generation (RAG):** Leverages Cloud SQL's built-in [Vertex AI ML Integration](https://cloud.google.com/sql/docs/postgres/integrate-cloud-sql-with-vertex-ai) to fetch relevant/duplicate software bugs.
 
 ## Setup and Installation
 
@@ -248,6 +247,8 @@ EXECUTE PROCEDURE update_updated_time_tickets();
 ```SQL
 ALTER TABLE tickets ADD COLUMN embedding vector(768) GENERATED ALWAYS AS (embedding('text-embedding-005',description)) STORED;
 ```
+
+**Retrieval-Augmented Generation (RAG):** Leverages Cloud SQL's built-in [Vertex AI ML Integration](https://cloud.google.com/sql/docs/postgres/integrate-cloud-sql-with-vertex-ai) to fetch relevant/duplicate software bugs.
 
 ### 8 - Verify that the database is ready.
 
