@@ -113,7 +113,7 @@ These instructions walk through the process of deploying the Software Bug Assist
 ### Presetup 
 
 - `gcloud` CLI ([Installation instructions](https://cloud.google.com/sdk/docs/install))
-- A [Google Cloud project](https://cloud.google.com/resource-manager/docs/creating-managing-projects) with billing enabled. 
+- A [Google Cloud project]
 
 ### 1 - Authenticate the Google Cloud CLI, and enable Google Cloud APIs. 
 
@@ -165,7 +165,6 @@ From the Cloud Console (Cloud SQL), open **Cloud SQL Studio**.
 
 Log into the `tickets-db` Database using the `postgres` user (password: `admin`, but note you can change to a more secure password under Cloud SQL > Primary Instance > Users).
 
-![](mcp-server/images/cloud-sql-studio.png)
 
 Open a new **Editor** tab. Then, paste in the following SQL code to set up the table and create vector embeddings.
 
