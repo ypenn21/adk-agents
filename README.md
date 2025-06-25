@@ -254,38 +254,6 @@ You should see a JSON response with the list of tools specified in `tools.yaml`.
   }
 }
 ```
-
-### 4 - Running the Agent Locally 
-
-Now we're ready to run the ADK Python agent! 
-
-By default, the agent is configured to talk to the local MCP Toolbox server at `http://127.0.0.1:5000`, so **keep the Toolbox server running**. 
-
-You can run the agent using the `adk` command in a **new** terminal.
-
-1. Through the CLI (`adk run`):
-
-    ```bash
-    uv run adk run adk_agent_sample
-    ```
-
-2. Through the web interface (`adk web`):
-
-    ```bash
-    uv run adk web
-    ```
-
-The command `adk` web will start a web server on your machine and print
-the URL. You may open the URL, select "adk_agent_sample" in the top-left drop-down menu, and a chatbot interface will appear on the right. The conversation is initially blank. 
-
-Here are some example requests you may ask the agent:
-
-- "What bugs are assigned to samuel.green@example.com?"
-- "Can you bump the priority of ticket ID 7 to P0?"
-- "Which issues are currenlty marked as 'In Progress'?"
-
-![](mcp-server/images/adk-web.png)
-
 ---------
 
 3. Run django:
@@ -297,6 +265,12 @@ python manage.py runserver
 gunicorn web_ui.wsgi:application --bind 0.0.0.0:8000
 #http://0.0.0.0:8000/agent/interact/
 ```
+
+Here are some example requests you may ask the agent:
+
+- "What bugs are assigned to samuel.green@example.com?"
+- "Can you bump the priority of ticket ID 7 to P0?"
+- "Which issues are currenlty marked as 'In Progress'?"
 
 ## ☁️ Deploy to Google Cloud 
 
@@ -591,16 +565,3 @@ Test the agent by asking questions like:
 - `What are some possible root-causes for the unresponsive login page issue?` (Invoke Google Search tool)
 - `Get the bug ID for the unresponsive login page issues` --> `Boost that bug's priority to P0.`. 
 - `Create a new bug.` (let the agent guide you through bug creation)
-
-*Example workflow*: 
-
-![](mcp-server/images/cloud-run-example.png)
-
-
-### Clean up 
-
-You can clean up this agent sample by: 
-- Deleting the [Artifact Registry](https://console.cloud.google.com/artifacts). 
-- Deleting the two [Cloud Run Services](https://console.cloud.google.com/run). 
-- Deleting the [Cloud SQL instance](https://console.cloud.google.com/sql/instances). 
-- Deleting the [Secret Manager secret](https://console.cloud.google.com/security/secret-manager). 
