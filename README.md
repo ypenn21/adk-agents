@@ -341,7 +341,7 @@ Now we are ready to deploy the ADK Python agent to Cloud Run! :rocket:
 This is where we'll store the agent container image.
 
 ```bash
-gcloud artifacts repositories create adk-samples \
+gcloud artifacts repositories create adk \
   --repository-format=docker \
   --location=us-central1 \
   --description="Repository for ADK Python sample agents" \
