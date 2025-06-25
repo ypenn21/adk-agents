@@ -1,9 +1,9 @@
-# IT Bug Agent 
+# IT Bug Assistant Agent
 
 The Bug Assistant is a sample agent hosted on django designed to help IT Support and Software Developers triage, manage, and resolve software issues. This sample agent uses ADK Python, a PostgreSQL bug ticket database, RAG, and Google Search to assist in debugging. 
 
 ## Agent Flow
-IT Support triggers the Software Bug Agent
+IT Support triggers the Bug Assistant Agent
 
 **The agent:**
 
