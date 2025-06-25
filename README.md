@@ -125,7 +125,7 @@ Install PostgreSQL:
 - [PostgreSQL - local instance and psql command-line tool](https://www.postgresql.org/download/)
 
 
-### 1 - Start a local PostgreSQL instance.
+### 1 - Start a local Pgsql
 
 For instance, on MacOS: 
 
@@ -133,7 +133,7 @@ For instance, on MacOS:
 brew services start postgresql
 ```
 
-### 2 - Initialize the database. 
+### 2 - Setup the database
 
 ```bash
 psql -U postgres
@@ -190,7 +190,7 @@ INSERT INTO tickets (title, description, assignee, priority, status) VALUES
 ('Intermittent File Upload Failures for Large Files', 'Users are intermittently reporting that file uploads fail without a clear error message or explanation, especially for files exceeding 10MB in size.', 'frank.white@example.com', 'P1 - High', 'Open');
 ```
 
-### 3 - Run the MCP Toolbox for Databases Server. 
+### 3 - Run the MCP Toolbox
 
 [MCP Toolbox for Databases](https://googleapis.github.io/genai-toolbox) is an open-source [Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction) server for databases including PostgreSQL. It allows you to define "tools" against your database, with matching SQL queries, effectively enabling agent "function-calling" for your database. 
 
@@ -254,7 +254,7 @@ You should see a JSON response with the list of tools specified in `tools.yaml`.
 ```
 ---------
 
-3. Run django:
+### 3. Run Python Django:
 
 ```bash
 rm uv.lock
