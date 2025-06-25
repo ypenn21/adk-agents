@@ -6,16 +6,7 @@ The Bug Assistant is a sample agent designed to help IT Support and Software Dev
 
 This README contains instructions for local and Google Cloud deployment. 
 
-## Agent Details
-
-The key features of Bug Assistant Agent include:
-
-| Feature | Description |
-| --- | --- |
-| **Components**       | Tools, Database, RAG, Google Search |
-| **Vertical**         | Bug Support for IT support reps |
-
-## Agent Data Flow Summary
+## Agent Flow
 IT Support triggers the Software Bug Agent
 
 The agent:
@@ -27,6 +18,11 @@ Uses Google Search Tool for supplemental external context
 Connects to MCP Toolbox, which in turn interacts with the Bug Ticket Database
 
 ## Key Features
+
+| Feature | Description |
+| --- | --- |
+| **Components**       | Tools, Database, RAG, Google Search |
+| **Vertical**         | Bug Support for IT support reps |
 
 *   **MCP Toolbox for Databases:** [MCP Toolbox for Databases](https://github.com/googleapis/genai-toolbox) to provide database-specific tools to our agent.
 *   **Retrieval-Augmented Generation (RAG):** Leverages Cloud SQL's built-in [Vertex AI ML Integration](https://cloud.google.com/sql/docs/postgres/integrate-cloud-sql-with-vertex-ai) to fetch relevant/duplicate software bugs.
