@@ -15,18 +15,7 @@ The key features of Bug Assistant Agent include:
 | **Components**       | Tools, Database, RAG, Google Search |
 | **Vertical**         | Bug Support for IT support reps |
 
-## Core Agent
-
-Software Bug Agent (ADK Python) on Cloud Run
-
-Central processing unit of the system
-
-Receives input from IT Support
-
-Accesses various external/internal tools to perform bug analysis
-
-
-## Data Flow Summary
+## Agent Data Flow Summary
 IT Support triggers the Software Bug Agent
 
 The agent:
