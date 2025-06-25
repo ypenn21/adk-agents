@@ -112,165 +112,7 @@ curl -O --output-dir mcp-server/mcp-toolbox https://storage.googleapis.com/genai
 chmod +x mcp-server/mcp-toolbox/toolbox
 ```
 
-**Jump to**:
-- [💻 Run Locally](#run-locally)
-- [☁️ Deploy to Google Cloud](#deploy-to-google-cloud)
-
-## 💻 Run Locally 
-
-### Before you begin
-
-Install PostgreSQL:
-
-- [PostgreSQL - local instance and psql command-line tool](https://www.postgresql.org/download/)
-
-
-### 1 - Start a local Pgsql
-
-For instance, on MacOS: 
-
-```bash
-brew services start postgresql
-```
-
-### 2 - Setup the database
-
-```bash
-psql -U postgres
-```
-
-Then, initialize the database and `tickets` table: 
-
-```SQL
-CREATE DATABASE ticketsdb;
-\c ticketsdb;
-CREATE TABLE tickets (
-    ticket_id SERIAL PRIMARY KEY,             -- PostgreSQL's auto-incrementing integer type (SERIAL is equivalent to INT AUTO_INCREMENT)
-    title VARCHAR(255) NOT NULL,              -- A concise summary or title of the bug/issue.
-    description TEXT,                         -- A detailed description of the bug.
-    assignee VARCHAR(100),                    -- The name or email of the person/team assigned to the ticket.
-    priority VARCHAR(50),                     -- The priority level (e.g., 'P0 - Critical', 'P1 - High').
-    status VARCHAR(50) DEFAULT 'Open',        -- The current status of the ticket (e.g., 'Open', 'In Progress', 'Resolved'). Default is 'Open'.
-    creation_time TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP, -- Timestamp when the ticket was first created. 'WITH TIME ZONE' is recommended for clarity and compatibility.
-    updated_time TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP  -- Timestamp when the ticket was last updated. Will be managed by a trigger.
-);
-```
-
-Insert some sample data:
-
-```SQL
-INSERT INTO tickets (title, description, assignee, priority, status) VALUES
-('Login Page Freezes After Multiple Failed Attempts', 'Users are reporting that after 3 failed login attempts, the login page becomes unresponsive and requires a refresh. No specific error message is displayed.', 'samuel.green@example.com', 'P0 - Critical', 'Open');
-
-INSERT INTO tickets (title, description, assignee, priority, status) VALUES
-('Dashboard Sales Widget Intermittent Data Loading Failure', 'The "Sales Overview" widget on the main dashboard intermittently shows a loading spinner but no data. Primarily affects Chrome browser users.', 'maria.rodriguez@example.com', 'P1 - High', 'In Progress');
-
-INSERT INTO tickets (title, description, assignee, priority, status) VALUES
-('Broken Link in Footer - Privacy Policy', 'The "Privacy Policy" hyperlink located in the website footer leads to a 404 "Page Not Found" error.', 'maria.rodriguez@example.com', 'P3 - Low', 'Resolved');
-
-INSERT INTO tickets (title, description, assignee, priority, status) VALUES
-('UI Misalignment on Mobile Landscape View (iOS)', 'On specific iOS devices (e.g., iPhone 14 models), the top navigation bar shifts downwards when the device is viewed in landscape orientation, obscuring content.', 'maria.rodriguez@example.com', 'P2 - Medium', 'In Progress');
-
-INSERT INTO tickets (title, description, assignee, priority, status) VALUES
-('Critical XZ Utils Backdoor Detected in Core Dependency (CVE-2024-3094)', 'Urgent: A sophisticated supply chain compromise (CVE-2024-3094) has been identified in XZ Utils versions 5.6.0 and 5.6.1. This malicious code potentially allows unauthorized remote SSH access by modifying liblzma. Immediate investigation and action required for affected Linux/Unix systems and services relying on XZ Utils.', 'frank.white@example.com', 'P0 - Critical', 'Open');
-
-INSERT INTO tickets (title, description, assignee, priority, status) VALUES
-('Database Connection Timeouts During Peak Usage', 'The application is experiencing frequent database connection timeouts, particularly during peak hours (10 AM - 12 PM EDT), affecting all users and causing service interruptions.', 'frank.white@example.com', 'P1 - High', 'Open');
-
-INSERT INTO tickets (title, description, assignee, priority, status) VALUES
-('Export to PDF Truncates Long Text Fields in Reports', 'When generating PDF exports of reports containing extensive text fields, the text is abruptly cut off at the end of the page instead of wrapping or continuing to the next page.', 'samuel.green@example.com', 'P1 - High', 'Open');
-
-INSERT INTO tickets (title, description, assignee, priority, status) VALUES
-('Search Filter "Date Range" Not Applying Correctly', 'The "Date Range" filter on the search results page does not filter records accurately; results outside the specified date range are still displayed.', 'samuel.green@example.com', 'P2 - Medium', 'Resolved');
-
-INSERT INTO tickets (title, description, assignee, priority, status) VALUES
-('Typo in Error Message: "Unathorized Access"', 'The error message displayed when a user attempts an unauthorized action reads "Unathorized Access" instead of "Unauthorized Access."', 'maria.rodriguez@example.com', 'P3 - Low', 'Resolved');
-
-INSERT INTO tickets (title, description, assignee, priority, status) VALUES
-('Intermittent File Upload Failures for Large Files', 'Users are intermittently reporting that file uploads fail without a clear error message or explanation, especially for files exceeding 10MB in size.', 'frank.white@example.com', 'P1 - High', 'Open');
-```
-
-### 3 - Run the MCP Toolbox
-
-[MCP Toolbox for Databases](https://googleapis.github.io/genai-toolbox) is an open-source [Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction) server for databases including PostgreSQL. It allows you to define "tools" against your database, with matching SQL queries, effectively enabling agent "function-calling" for your database. 
-
-First, [download the MCP toolbox](https://googleapis.github.io/genai-toolbox/getting-started/local_quickstart/) binary if not already installed.
-
-Then, open the `mcp-server/mcp-toolbox/tools.yaml` file. This is a prebuilt configuration for the MCP Toolbox that defines several SQL tools against the `tickets` table we just created, including getting a ticket by its ID, creating a new ticket, or searching tickets. 
-
-> [!Note]
-> Vector search via `search-tickets` is not yet enabled for local development - see Google Cloud setup below.
-
-**Important:** Update the first lines of `tools.yaml` to point to your local Postgres instance, for example: 
-
-```yaml
-  postgresql:
-    kind: postgres
-    host: 127.0.0.1
-    port: 5432
-    database: tickets-db
-    user: ${DB_USER}
-    password: ${DB_PASS}
-```
-
-Now you run the toolbox server locally: 
-
-```bash 
-cd mcp-server/mcp-toolbox/
-./toolbox --tools-file="tools.yaml"
-```
-
-You should see something similar to the following outputted:
-
-```bash
-2025-05-30T02:06:57.479344419Z INFO "Initialized 1 sources." 
-2025-05-30T02:06:57.479696869Z INFO "Initialized 0 authServices." 
-2025-05-30T02:06:57.479973769Z INFO "Initialized 9 tools." 
-2025-05-30T02:06:57.480054519Z INFO "Initialized 2 toolsets." 
-2025-05-30T02:06:57.480739499Z INFO "Server ready to serve!" 
-```
-
-You can verify the server is running by opening http://localhost:5000/api/toolset in your browser. 
-You should see a JSON response with the list of tools specified in `tools.yaml`. 
-
-```json
-{
-  "serverVersion": "0.6.0+binary.linux.amd64.0.5.0.9a5d76e2dc66eaf0d2d0acf9f202a17539879ffe",
-  "tools": {
-    "create-new-ticket": {
-      "description": "Create a new software ticket.",
-      "parameters": [
-        {
-          "name": "title",
-          "type": "string",
-          "description": "The title of the new ticket.",
-          "authSources": []
-        },
-        // ...
-      ],
-    }
-  }
-}
-```
----------
-
-### 3. Run Python Django:
-
-```bash
-rm uv.lock
-uv sync
-python manage.py runserver 
-gunicorn web_ui.wsgi:application --bind 0.0.0.0:8000
-#http://0.0.0.0:8000/agent/interact/
-```
-
-Here are some example requests you may ask the agent:
-
-- "What bugs are assigned to samuel.green@example.com?"
-- "Can you bump the priority of ticket ID 7 to P0?"
-- "Which issues are currenlty marked as 'In Progress'?"
-
-## ☁️ Deploy to Google Cloud 
+## ☁️ Deploy to GCP 
 
 These instructions walk through the process of deploying the Software Bug Assistant agent to Google Cloud, including Cloud Run and Cloud SQL (PostgreSQL). This setup also adds RAG capabilities to the tickets database, using the [google_ml_integration](https://cloud.google.com/blog/products/ai-machine-learning/google-ml-intergration-extension-for-cloud-sql) vector plugin for Cloud SQL, and the `text-embeddings-005` model from Vertex AI.
 
@@ -563,3 +405,158 @@ Test the agent by asking questions like:
 - `What are some possible root-causes for the unresponsive login page issue?` (Invoke Google Search tool)
 - `Get the bug ID for the unresponsive login page issues` --> `Boost that bug's priority to P0.`. 
 - `Create a new bug.` (let the agent guide you through bug creation)
+
+
+## 💻 Run Locally 
+
+### Before you begin
+
+Install PostgreSQL:
+
+- [PostgreSQL - local instance and psql command-line tool](https://www.postgresql.org/download/)
+
+
+### 1 - Start a local Pgsql
+
+For instance, on MacOS: 
+
+```bash
+brew services start postgresql
+```
+
+### 2 - Setup the database
+
+```bash
+psql -U postgres
+```
+
+Then, initialize the database and `tickets` table: 
+
+```SQL
+CREATE DATABASE ticketsdb;
+\c ticketsdb;
+CREATE TABLE tickets (
+    ticket_id SERIAL PRIMARY KEY,             -- PostgreSQL's auto-incrementing integer type (SERIAL is equivalent to INT AUTO_INCREMENT)
+    title VARCHAR(255) NOT NULL,              -- A concise summary or title of the bug/issue.
+    description TEXT,                         -- A detailed description of the bug.
+    assignee VARCHAR(100),                    -- The name or email of the person/team assigned to the ticket.
+    priority VARCHAR(50),                     -- The priority level (e.g., 'P0 - Critical', 'P1 - High').
+    status VARCHAR(50) DEFAULT 'Open',        -- The current status of the ticket (e.g., 'Open', 'In Progress', 'Resolved'). Default is 'Open'.
+    creation_time TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP, -- Timestamp when the ticket was first created. 'WITH TIME ZONE' is recommended for clarity and compatibility.
+    updated_time TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP  -- Timestamp when the ticket was last updated. Will be managed by a trigger.
+);
+```
+
+Insert some sample data:
+
+```SQL
+INSERT INTO tickets (title, description, assignee, priority, status) VALUES
+('Login Page Freezes After Multiple Failed Attempts', 'Users are reporting that after 3 failed login attempts, the login page becomes unresponsive and requires a refresh. No specific error message is displayed.', 'samuel.green@example.com', 'P0 - Critical', 'Open');
+
+INSERT INTO tickets (title, description, assignee, priority, status) VALUES
+('Dashboard Sales Widget Intermittent Data Loading Failure', 'The "Sales Overview" widget on the main dashboard intermittently shows a loading spinner but no data. Primarily affects Chrome browser users.', 'maria.rodriguez@example.com', 'P1 - High', 'In Progress');
+
+INSERT INTO tickets (title, description, assignee, priority, status) VALUES
+('Broken Link in Footer - Privacy Policy', 'The "Privacy Policy" hyperlink located in the website footer leads to a 404 "Page Not Found" error.', 'maria.rodriguez@example.com', 'P3 - Low', 'Resolved');
+
+INSERT INTO tickets (title, description, assignee, priority, status) VALUES
+('UI Misalignment on Mobile Landscape View (iOS)', 'On specific iOS devices (e.g., iPhone 14 models), the top navigation bar shifts downwards when the device is viewed in landscape orientation, obscuring content.', 'maria.rodriguez@example.com', 'P2 - Medium', 'In Progress');
+
+INSERT INTO tickets (title, description, assignee, priority, status) VALUES
+('Critical XZ Utils Backdoor Detected in Core Dependency (CVE-2024-3094)', 'Urgent: A sophisticated supply chain compromise (CVE-2024-3094) has been identified in XZ Utils versions 5.6.0 and 5.6.1. This malicious code potentially allows unauthorized remote SSH access by modifying liblzma. Immediate investigation and action required for affected Linux/Unix systems and services relying on XZ Utils.', 'frank.white@example.com', 'P0 - Critical', 'Open');
+
+INSERT INTO tickets (title, description, assignee, priority, status) VALUES
+('Database Connection Timeouts During Peak Usage', 'The application is experiencing frequent database connection timeouts, particularly during peak hours (10 AM - 12 PM EDT), affecting all users and causing service interruptions.', 'frank.white@example.com', 'P1 - High', 'Open');
+
+INSERT INTO tickets (title, description, assignee, priority, status) VALUES
+('Export to PDF Truncates Long Text Fields in Reports', 'When generating PDF exports of reports containing extensive text fields, the text is abruptly cut off at the end of the page instead of wrapping or continuing to the next page.', 'samuel.green@example.com', 'P1 - High', 'Open');
+
+INSERT INTO tickets (title, description, assignee, priority, status) VALUES
+('Search Filter "Date Range" Not Applying Correctly', 'The "Date Range" filter on the search results page does not filter records accurately; results outside the specified date range are still displayed.', 'samuel.green@example.com', 'P2 - Medium', 'Resolved');
+
+INSERT INTO tickets (title, description, assignee, priority, status) VALUES
+('Typo in Error Message: "Unathorized Access"', 'The error message displayed when a user attempts an unauthorized action reads "Unathorized Access" instead of "Unauthorized Access."', 'maria.rodriguez@example.com', 'P3 - Low', 'Resolved');
+
+INSERT INTO tickets (title, description, assignee, priority, status) VALUES
+('Intermittent File Upload Failures for Large Files', 'Users are intermittently reporting that file uploads fail without a clear error message or explanation, especially for files exceeding 10MB in size.', 'frank.white@example.com', 'P1 - High', 'Open');
+```
+
+### 3 - Run the MCP Toolbox
+
+[MCP Toolbox for Databases](https://googleapis.github.io/genai-toolbox) is an open-source [Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction) server for databases including PostgreSQL. It allows you to define "tools" against your database, with matching SQL queries, effectively enabling agent "function-calling" for your database. 
+
+First, [download the MCP toolbox](https://googleapis.github.io/genai-toolbox/getting-started/local_quickstart/) binary if not already installed.
+
+Then, open the `mcp-server/mcp-toolbox/tools.yaml` file. This is a prebuilt configuration for the MCP Toolbox that defines several SQL tools against the `tickets` table we just created, including getting a ticket by its ID, creating a new ticket, or searching tickets. 
+
+> [!Note]
+> Vector search via `search-tickets` is not yet enabled for local development - see Google Cloud setup below.
+
+**Important:** Update the first lines of `tools.yaml` to point to your local Postgres instance, for example: 
+
+```yaml
+  postgresql:
+    kind: postgres
+    host: 127.0.0.1
+    port: 5432
+    database: tickets-db
+    user: ${DB_USER}
+    password: ${DB_PASS}
+```
+
+Now you run the toolbox server locally: 
+
+```bash 
+cd mcp-server/mcp-toolbox/
+./toolbox --tools-file="tools.yaml"
+```
+
+You should see something similar to the following outputted:
+
+```bash
+2025-05-30T02:06:57.479344419Z INFO "Initialized 1 sources." 
+2025-05-30T02:06:57.479696869Z INFO "Initialized 0 authServices." 
+2025-05-30T02:06:57.479973769Z INFO "Initialized 9 tools." 
+2025-05-30T02:06:57.480054519Z INFO "Initialized 2 toolsets." 
+2025-05-30T02:06:57.480739499Z INFO "Server ready to serve!" 
+```
+
+You can verify the server is running by opening http://localhost:5000/api/toolset in your browser. 
+You should see a JSON response with the list of tools specified in `tools.yaml`. 
+
+```json
+{
+  "serverVersion": "0.6.0+binary.linux.amd64.0.5.0.9a5d76e2dc66eaf0d2d0acf9f202a17539879ffe",
+  "tools": {
+    "create-new-ticket": {
+      "description": "Create a new software ticket.",
+      "parameters": [
+        {
+          "name": "title",
+          "type": "string",
+          "description": "The title of the new ticket.",
+          "authSources": []
+        },
+        // ...
+      ],
+    }
+  }
+}
+```
+---------
+
+### 3. Run Python Django:
+
+```bash
+rm uv.lock
+uv sync
+python manage.py runserver 
+gunicorn web_ui.wsgi:application --bind 0.0.0.0:8000
+#http://0.0.0.0:8000/agent/interact/
+```
+
+Here are some example requests you may ask the agent:
+
+- "What bugs are assigned to samuel.green@example.com?"
+- "Can you bump the priority of ticket ID 7 to P0?"
+- "Which issues are currenlty marked as 'In Progress'?"
