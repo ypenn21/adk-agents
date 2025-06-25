@@ -67,8 +67,7 @@ echo "GOOGLE_GENAI_USE_VERTEXAI=FALSE" >> .env \
 <details>
 <summary>Vertex AI</summary>
 
-To use Vertex AI, you will need to [create a Google Cloud project](https://developers.google.com/workspace/guides/create-project) and [enable Vertex AI](https://cloud.google.com/vertex-ai/docs/start/cloud-environment).
-`gcloud` CLI ([Installation instructions](https://cloud.google.com/sdk/docs/install))
+To use Vertex AI, you will need to [create a Google Cloud project](https://developers.google.com/workspace/guides/create-project) , [enable Vertex AI](https://cloud.google.com/vertex-ai/docs/start/cloud-environment), and `gcloud` CLI ([Installation instructions](https://cloud.google.com/sdk/docs/install))
 
 
 Authenticate and enable Vertex AI API:
