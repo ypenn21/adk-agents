@@ -53,13 +53,8 @@ cd adk-agents
 
 There are two different ways to call Gemini models:
 
-- Calling the Gemini API directly using an API key created via Google AI Studio.
 - Calling Gemini models through Vertex AI APIs on Google Cloud.
-
-> [!TIP] 
-> If you just want to run the sample locally, an API key from Google AI Studio is the quickest way to get started.
-> 
-> If you plan on deploying to Cloud Run, you may want to use Vertex AI.
+- Calling the Gemini API directly using an API key created via Google AI Studio.
 
 <details open>
 <summary>Gemini API Key</summary> 
@@ -69,8 +64,8 @@ Get an API Key from Google AI Studio: https://aistudio.google.com/apikey
 Create a `.env` file by running the following (replace `<your_api_key_here>` with your API key):
 
 ```sh
-echo "GOOGLE_API_KEY=<your_api_key_here>" >> .env \
-&& echo "GOOGLE_GENAI_USE_VERTEXAI=FALSE" >> .env
+echo "GOOGLE_GENAI_USE_VERTEXAI=FALSE" >> .env \
+&& echo "GOOGLE_API_KEY=<your_api_key_here>" >> .env
 ```
 
 </details>
@@ -96,6 +91,7 @@ echo "GOOGLE_GENAI_USE_VERTEXAI=TRUE" >> .env \
 && echo "GOOGLE_CLOUD_LOCATION=us-central1" >> .env
 ```
 
+> Deploying to Cloud Run use Vertex AI instead.
 </details>
 
 
