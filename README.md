@@ -280,7 +280,7 @@ First, update `mcp-server/mcp-toolbox/tools.yaml` for your Cloud SQL instance:
 
 Then, configure Toolbox's Cloud Run service account to access both Secret Manager and Cloud SQL. Secret Manager is where we'll store our `tools.yaml` file because it contains sensitive Cloud SQL credentials. 
 
-Note - run this from the top-level `software-bug-assistant/` directory. 
+Note - run this from the top-level `adk_bug_ticket_agent/` directory. 
 
 ```bash 
 gcloud services enable run.googleapis.com \
@@ -356,7 +356,7 @@ gcloud artifacts repositories create adk-samples \
 Build the container image and push it to Artifact Registry with Cloud Build.
 
 ```bash
-gcloud builds submit --region=us-central1 --tag us-central1-docker.pkg.dev/$PROJECT_ID/adk-samples/software-bug-assistant:latest
+gcloud builds submit --region=us-central1 --tag us-central1-docker.pkg.dev/$PROJECT_ID/adk-samples/adk-agent-bug-assist:latest
 ```
 
 ### 12 - Deploy the agent to Cloud Run 
@@ -371,8 +371,8 @@ gcloud builds submit --region=us-central1 --tag us-central1-docker.pkg.dev/$PROJ
 > ```
 
 ```bash
-gcloud run deploy software-bug-assistant \
-  --image=us-central1-docker.pkg.dev/$PROJECT_ID/adk-samples/software-bug-assistant:latest \
+gcloud run deploy adk-agent-bug-assist \
+  --image=us-central1-docker.pkg.dev/$PROJECT_ID/adk-samples/adk-agent-bug-assist:latest \
   --region=us-central1 \
   --allow-unauthenticated \
   --set-env-vars=GOOGLE_API_KEY=$GOOGLE_API_KEY,MCP_TOOLBOX_URL=$MCP_TOOLBOX_URL 
@@ -381,7 +381,7 @@ gcloud run deploy software-bug-assistant \
 When this runs successfully, you should see: 
 
 ```bash
-Service [software-bug-assistant] revision [software-bug-assistant-00001-d4s] has been deployed and is serving 100 percent of traffic.
+Service [adk-agent-bug-assist] revision [adk-agent-bug-assist-00001-d4s] has been deployed and is serving 100 percent of traffic.
 ```
 
 
