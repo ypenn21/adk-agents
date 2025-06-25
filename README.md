@@ -137,7 +137,7 @@ gcloud services enable sqladmin.googleapis.com \
 ### 2 - Create a Cloud SQL (Postgres) instance. 
 
 ```bash
-gcloud sql instances create software-assistant \
+gcloud sql instances create adk \
 --database-version=POSTGRES_16 \
 --tier=db-custom-1-3840 \
 --region=us-central1 \
@@ -152,7 +152,7 @@ gcloud sql instances create software-assistant \
 This step is necessary for creating vector embeddings (Agent RAG search).
 
 ```bash 
-gcloud sql databases create tickets-db --instance=software-assistant
+gcloud sql databases create tickets-db --instance=adk
 
 SERVICE_ACCOUNT_EMAIL=$(gcloud sql instances describe software-assistant --format="value(serviceAccountEmailAddress)")
 echo $SERVICE_ACCOUNT_EMAIL
