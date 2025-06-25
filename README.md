@@ -154,7 +154,7 @@ This step is necessary for creating vector embeddings (Agent RAG search).
 ```bash 
 gcloud sql databases create tickets-db --instance=adk
 
-SERVICE_ACCOUNT_EMAIL=$(gcloud sql instances describe software-assistant --format="value(serviceAccountEmailAddress)")
+SERVICE_ACCOUNT_EMAIL=$(gcloud sql instances describe adk --format="value(serviceAccountEmailAddress)")
 echo $SERVICE_ACCOUNT_EMAIL
 
 gcloud projects add-iam-policy-binding $PROJECT_ID --member="serviceAccount:$SERVICE_ACCOUNT_EMAIL" --role="roles/aiplatform.user"
