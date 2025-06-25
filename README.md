@@ -366,7 +366,7 @@ gcloud builds submit --region=us-central1 --tag us-central1-docker.pkg.dev/$PROJ
 
 ```bash
 gcloud run deploy adk-agent-bug-assist \
-  --image=us-central1-docker.pkg.dev/$PROJECT_ID/adk-samples/adk-agent-bug-assist:latest \
+  --image=us-central1-docker.pkg.dev/$PROJECT_ID/adk/adk-agent-bug-assist:latest \
   --region=us-central1 \
   --allow-unauthenticated \
   --set-env-vars=GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=us-central1,GOOGLE_GENAI_USE_VERTEXAI=TRUE,MCP_TOOLBOX_URL=$MCP_TOOLBOX_URL
