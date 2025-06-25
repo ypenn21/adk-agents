@@ -526,21 +526,6 @@ You should see a JSON response with the list of tools specified in `tools.yaml`.
 
 ```json
 {
-  "serverVersion": "0.6.0+binary.linux.amd64.0.5.0.9a5d76e2dc66eaf0d2d0acf9f202a17539879ffe",
-  "tools": {
-    "create-new-ticket": {
-      "description": "Create a new software ticket.",
-      "parameters": [
-        {
-          "name": "title",
-          "type": "string",
-          "description": "The title of the new ticket.",
-          "authSources": []
-        },
-        // ...
-      ],
-    }
-  }
 }
 ```
 ---------
