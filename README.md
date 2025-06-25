@@ -32,6 +32,13 @@ Connects to MCP Toolbox, which in turn interacts with the Bug Ticket Database
 - [uv](https://docs.astral.sh/uv/getting-started/installation) (to manage dependencies)
 - Python 3.10+
 
+Install the python 3.12 locally and confirm it as the default:
+```shell
+pyenv install 3.12.4
+pyenv global 3.12.4
+python3 -m venv .venv #check notification in vscode and click click yes
+```
+
 ### Installation
 
 1. Clone the repository:
