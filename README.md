@@ -15,9 +15,27 @@ The key features of Bug Assistant Agent include:
 | **Components**       | Tools, Database, RAG, Google Search |
 | **Vertical**         | Bug Support for IT support reps |
 
-## Agent Architecture
+## Core Agent
 
-<img src="mcp-server/images/architecture.svg" width="50%" alt="Architecture">
+Software Bug Agent (ADK Python) on Cloud Run
+
+Central processing unit of the system
+
+Receives input from IT Support
+
+Accesses various external/internal tools to perform bug analysis
+
+
+## Data Flow Summary
+IT Support triggers the Software Bug Agent
+
+The agent:
+
+Queries Gemini 2.5 Flash for AI insights
+
+Uses Google Search Tool for supplemental external context
+
+Connects to MCP Toolbox, which in turn interacts with the Bug Ticket Database
 
 ## Key Features
 
