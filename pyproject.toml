@@ -1,9 +1,7 @@
 [project]
-name = "software-bug-assistant"
-version = "0.1.0"
-description = "Software bug assistant using ADK"
-authors = [{ name = "Jack Wotherspoon", email = "jackwoth@google.com" }]
-license = "Apache-2.0"
+name = "adk-software-bug-assistant-agent"
+version = "1.0.0"
+description = "ADK Agent"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
