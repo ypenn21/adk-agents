@@ -353,7 +353,7 @@ gcloud artifacts repositories create adk \
 Build the container image and push it to Artifact Registry with Cloud Build.
 
 ```bash
-gcloud builds submit --region=us-central1 --tag us-central1-docker.pkg.dev/$PROJECT_ID/adk-samples/adk-agent-bug-assist:latest
+gcloud builds submit --region=us-central1 --tag us-central1-docker.pkg.dev/$PROJECT_ID/adk/adk-agent-bug-assist:latest
 ```
 
 ### 12 - Deploy the agent to Cloud Run 
