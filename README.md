@@ -49,7 +49,7 @@ git clone git@github.com:ypenn21/adk-agents.git
 cd adk-agents
 ```
 
-2. Configure environment variables (via `.env` file):
+2. Configure environment variables (via `.env.example` file):
 
 There are two different ways to call Gemini models:
 
