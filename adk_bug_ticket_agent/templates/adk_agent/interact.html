@@ -14,6 +14,30 @@
         button:hover { background-color: #0056b3; }
         #conversation { max-height: 400px; overflow-y: auto; margin-bottom: 20px; border: 1px solid #eee; padding: 10px; }
 
+        #pendingIndicator {
+            display: none; /* Hidden by default */
+            margin: 10px 0;
+            text-align: center;
+            color: #555;
+            font-size: 0.9em;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(0,0,0,.1);
+            border-radius: 50%;
+            border-top-color: #007bff;
+            animation: spin 1s ease-infinite;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
         /* New table styles */
         .agent-message table {
             width: 100%;
@@ -47,9 +71,12 @@
         <div id="conversation">
             <div class="message agent-message">Hello! How can I help you today?</div>
         </div>
+        <div id="pendingIndicator">
+            <span class="spinner"></span>Waiting for response...
+        </div>
         <div>
             <input type="text" id="messageInput" placeholder="Type your message...">
-            <button onclick="sendMessage()">Send</button>
+            <button id="sendButton">Send</button>
         </div>
     </div>
 
@@ -71,7 +98,8 @@
 
             input.value = '';
             input.disabled = true;
-            document.querySelector('button').disabled = true;
+            document.getElementById('sendButton').disabled = true;
+            document.getElementById('pendingIndicator').style.display = 'block';
 
             try {
                 const response = await fetch('{% url "interact_with_agent" %}', {
@@ -93,11 +121,13 @@
             } catch (error) {
                 console.error('Error:', error);
                 appendAgentMessage(`Error: ${error.message}`, 'agent-message');
+            } finally {
+                document.getElementById('pendingIndicator').style.display = 'none';
+                input.disabled = false;
+                document.getElementById('sendButton').disabled = false;
+                input.focus();
+                conversation.scrollTop = conversation.scrollHeight;
             }
-            input.disabled = false;
-            document.querySelector('button').disabled = false;
-            input.focus();
-            conversation.scrollTop = conversation.scrollHeight;
         }
 
         function parseMarkdownTable(markdown) {
@@ -193,6 +223,7 @@
             const lines = text.split('\n');
             let currentTextBuffer = [];
             let i = 0;
+            let containsTable = false; // Flag to indicate if this message contains a table
 
             function flushTextBuffer() {
                 if (currentTextBuffer.length > 0) {
@@ -248,6 +279,7 @@
 
                             if (tableElement) {
                                 messageDiv.appendChild(tableElement);
+                                containsTable = true; // Set flag if a table is added
                                 i = tableEndIndex + 1; // Move loop index past the parsed table
                                 successfullyProcessedAsTable = true;
                             } else {
@@ -268,6 +300,16 @@
             
             if (messageDiv.hasChildNodes()) {
                 conversation.appendChild(messageDiv);
+                if (containsTable) {
+                    // Increase the max-height of the conversation div
+                    conversation.style.maxHeight = 'none'; 
+                    const chatbox = document.getElementById('chatbox');
+                    if (chatbox) {
+                        chatbox.style.maxWidth = '90%';
+                    }
+                    conversation.style.width = '100%';
+                    conversation.style.overflowX = 'auto';
+                }
             }
         }
 
@@ -276,6 +318,8 @@
                 sendMessage();
             }
         });
+
+        document.getElementById('sendButton').addEventListener('click', sendMessage);
     </script>
 </body>
 </html>
