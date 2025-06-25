@@ -8,14 +8,20 @@ WORKDIR /app
 ENV UV_LINK_MODE=copy
 ENV PYTHONUNBUFFERED=1
 
-ADD . /app
+COPY pyproject.toml ./
 
-# Install the project's dependencies using the lockfile and settings
-RUN uv sync --frozen --no-install-project --no-dev
+# Generate a fresh lock file and install dependencies. This avoids using a
+# potentially stale local uv.lock and improves caching.
+RUN uv lock && \
+    uv sync --frozen --no-install-project --no-dev
 
-# Then, add the rest of the project source code and install it
-# Installing separately from its dependencies allows optimal layer caching
+# Copy the rest of the application source code.
+COPY . .
+# Install the project itself.
 RUN uv sync --frozen --no-dev
+
+# Place executables in the environment at the front of the path
+ENV PATH="/app/.venv/bin:$PATH"
 
 # Collect static files
 RUN python manage.py collectstatic --noinput
@@ -26,9 +32,6 @@ RUN groupadd -r appgroup && useradd --no-log-init -r -g appgroup appuser
 # Change ownership of the /app directory
 RUN chown -R appuser:appgroup /app
 
-# Place executables in the environment at the front of the path
-ENV PATH="/app/.venv/bin:$PATH"
-
 # Switch to the non-root user
 USER appuser
 
@@ -36,4 +39,4 @@ USER appuser
 EXPOSE 8080
 
 # Run Gunicorn as the production server
-ENTRYPOINT ["gunicorn", "web_ui.wsgi:application", "--bind", "0.0.0.0:8080"]
+ENTRYPOINT ["gunicorn", "web_ui.wsgi:application", "--bind", "0.0.0.0:8080"]:

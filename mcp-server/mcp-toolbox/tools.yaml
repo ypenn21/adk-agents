@@ -1,19 +1,21 @@
 sources:
-  # postgresql: # GCP -  CLOUD SQL
-  #   kind: cloud-sql-postgres
-  #   project: ${PROJECT_ID}
-  #   region: us-central1
-  #   instance: software-assistant
-  #   database: tickets-db
-  #   user: ${DB_USER}
-  #   password: ${DB_PASS}
-  postgresql: # LOCAL
-    kind: postgres
-    host: 127.0.0.1
-    port: 5432
-    database: ticketsdb
-    user: postgres
-    password: admin
+  #alloydb:
+  #  kind: "alloydb-postgres"
+  #  project: ${PROJECT_ID}
+  #  region: "us-central1"
+  #  cluster: "alloydb-aip-01"
+  #  instance: "alloydb-aip-01-pr"
+  #  database: "ticketsdb"
+  #  user: ${DB_USER}
+  #  password: ${DB_PASS}
+  postgresql: # GCP -  CLOUD SQL
+    kind: cloud-sql-postgres
+    project: ${PROJECT_ID}
+    region: us-central1
+    instance: adk
+    database: tickets-db
+    user: ${DB_USER}
+    password: ${DB_PASS}
 tools:
   search-tickets:
     kind: postgres-sql
