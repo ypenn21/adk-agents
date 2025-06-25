@@ -116,7 +116,7 @@ These instructions walk through the process of deploying the Software Bug Assist
 ### Presetup 
 
 - `gcloud` CLI ([Installation instructions](https://cloud.google.com/sdk/docs/install))
-- A [Google Cloud project]
+- A Google Cloud project
 
 ### 1 - Authenticate the Google Cloud CLI, and enable Google Cloud APIs. 
 
