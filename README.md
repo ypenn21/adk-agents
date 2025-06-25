@@ -159,7 +159,7 @@ echo $SERVICE_ACCOUNT_EMAIL
 gcloud projects add-iam-policy-binding $PROJECT_ID --member="serviceAccount:$SERVICE_ACCOUNT_EMAIL" --role="roles/aiplatform.user"
 ```
 
-### 4 - Set up the `tickets` table. 
+### 4 - Set up the db table. 
 
 From the Cloud Console (Cloud SQL), open **Cloud SQL Studio**. 
 
