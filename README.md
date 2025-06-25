@@ -1,8 +1,6 @@
-# Software Bug Assistant - ADK Python Sample Agent
+# IT Bug Assistant 
 
-## Overview
-
-The Software Bug Assistant is a sample agent designed to help IT Support and Software Developers triage, manage, and resolve software issues. This sample agent uses ADK Python, a PostgreSQL bug ticket database, RAG, and Google Search to assist in debugging. 
+The Bug Assistant is a sample agent designed to help IT Support and Software Developers triage, manage, and resolve software issues. This sample agent uses ADK Python, a PostgreSQL bug ticket database, RAG, and Google Search to assist in debugging. 
 
 ![](mcp-server/images/adk-cloud-architecture.png)
 
@@ -10,15 +8,12 @@ This README contains instructions for local and Google Cloud deployment.
 
 ## Agent Details
 
-The key features of the Software Bug Assistant Agent include:
+The key features of Bug Assistant Agent include:
 
 | Feature | Description |
 | --- | --- |
-| **Interaction Type** | Conversational |
-| **Complexity**       | Intermediate |
-| **Agent Type**       | Single Agent |
 | **Components**       | Tools, Database, RAG, Google Search |
-| **Vertical**         | Horizontal / IT Support |
+| **Vertical**         | Bug Support for IT support reps |
 
 ## Agent Architecture
 
@@ -26,8 +21,8 @@ The key features of the Software Bug Assistant Agent include:
 
 ## Key Features
 
-*   **Retrieval-Augmented Generation (RAG):** Leverages Cloud SQL's built-in [Vertex AI ML Integration](https://cloud.google.com/sql/docs/postgres/integrate-cloud-sql-with-vertex-ai) to fetch relevant/duplicate software bugs.
 *   **MCP Toolbox for Databases:** [MCP Toolbox for Databases](https://github.com/googleapis/genai-toolbox) to provide database-specific tools to our agent.
+*   **Retrieval-Augmented Generation (RAG):** Leverages Cloud SQL's built-in [Vertex AI ML Integration](https://cloud.google.com/sql/docs/postgres/integrate-cloud-sql-with-vertex-ai) to fetch relevant/duplicate software bugs.
 
 ## Setup and Installation
 
