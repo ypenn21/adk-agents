@@ -557,7 +557,7 @@ Service [software-bug-assistant] revision [software-bug-assistant-00001-d4s] has
 
 Open the Cloud Run Service URL outputted by the previous step. 
 
-You should see the ADK Web UI for the Software Bug Assistant. 
+You should see the Web UI for the Software Bug Assistant. At https://cloud-run-host.com/agent/interact/
 
 Test the agent by asking questions like: 
 - `Any issues around database timeouts?` 
