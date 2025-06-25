@@ -524,5 +524,6 @@ Here are some example requests you may ask the agent:
 - "Show me all the tickets with status Open"
 - "List the tickets with highest priority"
 - "Can you bump the priority of ticket ID 7 to P0?"
+- "What are some possible root-causes for the unresponsive login page issue? (Invoke Google Search tool)"
 - "Which issues are currenlty marked as 'In Progress'?"
 - "What bugs are assigned to frank.white@example.com?"
