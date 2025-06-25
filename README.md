@@ -489,7 +489,7 @@ Then, open the `mcp-server/mcp-toolbox/tools.yaml` file. This is a prebuilt conf
 ```yaml
   postgresql:
     kind: postgres
-    host: 127.0.0.1
+    host: localhost
     port: 5432
     database: tickets-db
     user: ${DB_USER}
@@ -501,16 +501,6 @@ Now you run the toolbox server locally:
 ```bash 
 cd mcp-server/mcp-toolbox/
 ./toolbox --tools-file="tools.yaml"
-```
-
-You should see something similar to the following outputted:
-
-```bash
-2025-05-30T02:06:57.479344419Z INFO "Initialized 1 sources." 
-2025-05-30T02:06:57.479696869Z INFO "Initialized 0 authServices." 
-2025-05-30T02:06:57.479973769Z INFO "Initialized 9 tools." 
-2025-05-30T02:06:57.480054519Z INFO "Initialized 2 toolsets." 
-2025-05-30T02:06:57.480739499Z INFO "Server ready to serve!" 
 ```
 
 You can verify the server is running by opening http://localhost:5000/api/toolset in your browser. 
