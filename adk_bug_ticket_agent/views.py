@@ -2,6 +2,7 @@ from django.shortcuts import render
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 import json
+import time
 import uuid
 import os
 
@@ -60,47 +61,32 @@ async def interact_with_agent(request):
     if request.method == 'POST':
         try:
             data = json.loads(request.body.decode('utf-8'))
-            user_query = data.get('message')
+            app_name = data.get('appName')
+            user_id = data.get('userId')
+            session_id = data.get('sessionId')
+            new_message_data = data.get('newMessage')
+
+            if not all([app_name, user_id, session_id, new_message_data, new_message_data.get('parts')]):
+                return JsonResponse({'error': 'Invalid payload structure.'}, status=400)
+
+            user_query = new_message_data['parts'][0].get('text')
 
             if not user_query:
                 return JsonResponse({'error': 'No message provided'}, status=400)
 
-            # A persistent user_id is needed for MemoryService to recall context
-            # across different requests. In a real app, this would come from
-            # user authentication. For this example, we'll use a static ID.
-            user_id = "static_user_for_demo"
-
-            # This is a deliberate architectural decision that leverages the distinction between the ADK SessionService and MemoryService to manage the conversation's history.
-
-            # Here’s a breakdown of why it's implemented this way:
-
-            # Atomic Turns as Sessions: The current design treats each user-agent interaction (a single "turn") as a self-contained, atomic Session. The SessionService is used
-            #  to manage the state for just that one turn.
-
-            # MemoryService for Long-Term Context: The InMemoryMemoryService acts as the long-term memory for the agent. After each turn is complete, the entire session (containing 
-            # the user's query and the agent's response) is saved to the MemoryService using memory_service.add_session_to_memory(completed_session).
-
-            # Persistent user_id Links Turns: While the session_id is ephemeral and changes with every turn, the user_id is static ("static_user_for_demo"). This static user_id is
-            #  the crucial link that allows the MemoryService to group all the individual turn-sessions together for a single user.
-
-            # Agent-Driven Recall: When the agent needs to remember something from a previous turn (e.g., "what is my name?"), it doesn't rely on a long-running session. Instead,
-            #  as instructed in your prompt.py, it uses the load_memory tool. This tool queries the MemoryService for all past sessions associated with the user_id, effectively 
-            # searching the entire conversation history to find the answer.
-
-            # In Summary
-            # This approach makes your web backend stateless regarding the active conversation. It doesn't need to manage and persist a single session_id for a user across multiple
-            # requests. Instead, it treats each request as a new unit of work that gets recorded in a long-term, searchable memory. This is a powerful pattern, especially for
-            # agents that need to recall information over very long periods or even across different conversations with the same user.
-            session_id = str(uuid.uuid4()) # A new session for each turn
-
-            current_session = await session_service.create_session(
-                app_name=APP_NAME,
-                user_id=user_id,
-                session_id=session_id,
+            # The client now manages the session ID. We get the session if it
+            # exists, or create a new one. This allows for a persistent
+            # conversation history within a single browser session.
+            current_session = await session_service.get_session(
+                app_name=app_name, user_id=user_id, session_id=session_id
             )
+            if not current_session:
+                current_session = await session_service.create_session(
+                    app_name=app_name, user_id=user_id, session_id=session_id
+                )
 
             runner = Runner(
-                app_name=APP_NAME,
+                app_name=app_name,
                 agent=root_agent,
                 session_service=session_service,
                 memory_service=memory_service,
@@ -126,14 +112,18 @@ async def interact_with_agent(request):
             if final_response_text is None:
                 final_response_text = "Agent did not provide a clear text response."
 
-            # After processing, add the completed session to memory for future recall.
-            completed_session = await session_service.get_session(
-                app_name=APP_NAME, user_id=user_id, session_id=session_id
-            )
-            if completed_session:
-                await memory_service.add_session_to_memory(completed_session)
-
-            return JsonResponse({'reply': final_response_text.strip()})
+            response_payload = {
+                "content": {
+                    "parts": [
+                        {
+                            "text": final_response_text.strip()
+                        }
+                    ],
+                    "role": "model"
+                },
+                "timestamp": time.time()
+            }
+            return JsonResponse(response_payload)
 
         except json.JSONDecodeError:
             return JsonResponse({'error': 'Invalid JSON in request'}, status=400)

@@ -86,6 +86,12 @@
     </div>
 
     <script>
+        let sessionId = sessionStorage.getItem('adk_chat_session_id');
+        if (!sessionId) {
+            sessionId = self.crypto.randomUUID();
+            sessionStorage.setItem('adk_chat_session_id', sessionId);
+        }
+
         async function sendMessage() {
             const input = document.getElementById('messageInput');
             const message = input.value.trim();
@@ -108,14 +114,24 @@
             document.getElementById('sendButton').disabled = true;
             document.getElementById('pendingIndicator').style.display = 'block';
 
+            const payload = {
+                appName: "AgentBugAssistant",
+                userId: "user_123", // Using a static user ID for this session
+                sessionId: sessionId,
+                newMessage: {
+                    role: "user",
+                    parts: [{ text: message }]
+                },
+                streaming: false
+            };
+
             try {
                 const response = await fetch('{% url "interact_with_agent" %}', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        // 'X-CSRFToken': '{{ csrf_token }}' 
                     },
-                    body: JSON.stringify({ message: message })
+                    body: JSON.stringify(payload)
                 });
 
                 if (!response.ok) {
@@ -124,7 +140,7 @@
                 }
 
                 const data = await response.json();
-                appendAgentMessage(data.reply, 'agent-message');
+                appendAgentMessage(data.content.parts[0].text, 'agent-message');
             } catch (error) {
                 console.error('Error:', error);
                 appendAgentMessage(`Error: ${error.message}`, 'agent-message');
