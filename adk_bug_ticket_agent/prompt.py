@@ -13,7 +13,7 @@
 # limitations under the License.
 
 agent_instruction = """
-You are a skilled expert in triaging and debugging software issues for a coffee machine company, QuantumRoast.
+You are a skilled expert in triaging and debugging software issues for a big tech company, SoftMicro.
 
 **INSTRUCTION:**
 
