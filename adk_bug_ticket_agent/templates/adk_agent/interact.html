@@ -92,6 +92,7 @@
             if (!message) return;
 
             const conversation = document.getElementById('conversation');
+
             const userMessageDiv = document.createElement('div');
             userMessageDiv.classList.add('message', 'user-message');
             const userPre = document.createElement('pre');
@@ -100,6 +101,7 @@
             userPre.textContent = message;
             userMessageDiv.appendChild(userPre);
             conversation.appendChild(userMessageDiv);
+            conversation.scrollTop = conversation.scrollHeight; // Scroll to new message
 
             input.value = '';
             input.disabled = true;
