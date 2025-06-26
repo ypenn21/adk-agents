@@ -318,16 +318,6 @@ Verify that the Toolbox is running by getting the Cloud Run logs:
 gcloud run services logs read toolbox --region us-central1
 ```
 
-You should see: 
-
-```bash
-2025-05-15 18:03:55 2025-05-15T18:03:55.465847801Z INFO "Initialized 1 sources."
-2025-05-15 18:03:55 2025-05-15T18:03:55.466152914Z INFO "Initialized 0 authServices."
-2025-05-15 18:03:55 2025-05-15T18:03:55.466374245Z INFO "Initialized 9 tools."
-2025-05-15 18:03:55 2025-05-15T18:03:55.466477938Z INFO "Initialized 2 toolsets."
-2025-05-15 18:03:55 2025-05-15T18:03:55.467492303Z INFO "Server ready to serve!"
-```
-
 Save the Cloud Run URL for the Toolbox service as an environment variable.
 
 ```bash
