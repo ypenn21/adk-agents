@@ -69,6 +69,28 @@ async def interact_with_agent(request):
             # across different requests. In a real app, this would come from
             # user authentication. For this example, we'll use a static ID.
             user_id = "static_user_for_demo"
+
+            # This is a deliberate architectural decision that leverages the distinction between the ADK SessionService and MemoryService to manage the conversation's history.
+
+            # Here’s a breakdown of why it's implemented this way:
+
+            # Atomic Turns as Sessions: The current design treats each user-agent interaction (a single "turn") as a self-contained, atomic Session. The SessionService is used
+            #  to manage the state for just that one turn.
+
+            # MemoryService for Long-Term Context: The InMemoryMemoryService acts as the long-term memory for the agent. After each turn is complete, the entire session (containing 
+            # the user's query and the agent's response) is saved to the MemoryService using memory_service.add_session_to_memory(completed_session).
+
+            # Persistent user_id Links Turns: While the session_id is ephemeral and changes with every turn, the user_id is static ("static_user_for_demo"). This static user_id is
+            #  the crucial link that allows the MemoryService to group all the individual turn-sessions together for a single user.
+
+            # Agent-Driven Recall: When the agent needs to remember something from a previous turn (e.g., "what is my name?"), it doesn't rely on a long-running session. Instead,
+            #  as instructed in your prompt.py, it uses the load_memory tool. This tool queries the MemoryService for all past sessions associated with the user_id, effectively 
+            # searching the entire conversation history to find the answer.
+
+            # In Summary
+            # This approach makes your web backend stateless regarding the active conversation. It doesn't need to manage and persist a single session_id for a user across multiple
+            # requests. Instead, it treats each request as a new unit of work that gets recorded in a long-term, searchable memory. This is a powerful pattern, especially for
+            # agents that need to recall information over very long periods or even across different conversations with the same user.
             session_id = str(uuid.uuid4()) # A new session for each turn
 
             current_session = await session_service.create_session(
