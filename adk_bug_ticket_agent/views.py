@@ -14,7 +14,7 @@ from google.genai import types as genai_types  # Aliased to avoid conflict if Dj
 from . import prompt
 from .tools.tools import get_current_date, search_tool, toolbox_tools
 from google.adk.tools import load_memory
-
+from google.adk.memory import VertexAiRagMemoryService
 
 # --- Global Initializations ---
 # For SQLite, make sure the directory for the DB file is writable by the Django process.
@@ -33,19 +33,21 @@ def get_session_service():
     return _session_service_instance
 
 # adding memory https://google.github.io/adk-docs/sessions/memory/#how-memory-works-in-practice
-# ToDO utilize VertexAiRagMemoryService from from google.adk.memory import VertexAiRagMemoryService
+
 # The RAG Corpus name or ID
-# RAG_CORPUS_RESOURCE_NAME = "projects/your-gcp-project-id/locations/us-central1/ragCorpora/your-corpus-id"
-# ptional configuration for retrieval
+# RAG_CORPUS_RESOURCE_NAME = "projects/genai-playground/locations/us-central1/ragCorpora/12334`"
+# # Optional configuration for retrieval
 # SIMILARITY_TOP_K = 5
 # VECTOR_DISTANCE_THRESHOLD = 0.7
+
 # memory_service = VertexAiRagMemoryService(
 #     rag_corpus=RAG_CORPUS_RESOURCE_NAME,
 #     similarity_top_k=SIMILARITY_TOP_K,
 #     vector_distance_threshold=VECTOR_DISTANCE_THRESHOLD
 # )
 
-memory_service = InMemoryMemoryService()
+
+# memory_service = InMemoryMemoryService()
 
 # Lazy initialization for root_agent
 _root_agent_instance = None
