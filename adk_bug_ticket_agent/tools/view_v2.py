@@ -5,7 +5,6 @@ import json
 import time
 import uuid
 import os
-
 from google.adk.agents import Agent
 from google.adk.runners import Runner
 from google.adk.memory import InMemoryMemoryService
@@ -19,8 +18,8 @@ from google.adk.memory import VertexAiRagMemoryService
 # --- Global Initializations ---
 # For SQLite, make sure the directory for the DB file is writable by the Django process.
 # Using an absolute path or ensuring BASE_DIR is correctly set for Django is important.
-# For simplicity, placing it in the project root.
-DB_URL = f"sqlite:///{(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'adk_sessions.db'))}"
+# For simplicity, placing it in the project root. For local PostgreSQL, use the following format.
+DB_URL = "postgresql://postgres:admin@127.0.0.1:5432/ticketsdb"
 # Explore using VertexAiSessionService or InMemorySessionService for production https://google.github.io/adk-docs/sessions/session/#managing-sessions-with-a-sessionservice
 # Lazy initialization for session_service
 _session_service_instance = None
@@ -35,7 +34,7 @@ def get_session_service():
 # adding memory https://google.github.io/adk-docs/sessions/memory/#how-memory-works-in-practice
 
 # The RAG Corpus name or ID
-RAG_CORPUS_RESOURCE_NAME = "projects/genai-playground/locations/us-central1/ragCorpora/12334"
+RAG_CORPUS_RESOURCE_NAME = "projects/genai-playground24/locations/us-central1/ragCorpora/2305843009213693952"
 # Optional configuration for retrieval
 SIMILARITY_TOP_K = 5
 VECTOR_DISTANCE_THRESHOLD = 0.7
@@ -101,11 +100,14 @@ async def interact_with_agent(request): # Removed the initial check for session_
             current_session = await current_session_service.get_session(
                 app_name=app_name, user_id=user_id, session_id=session_id
             )
+
             if not current_session:
+                print(f"Creating new session for app: {app_name}, user: {user_id}, session: {session_id}")
                 current_session = await current_session_service.create_session(
                     app_name=app_name, user_id=user_id, session_id=session_id
                 )
-
+            else:
+                print(f"Current session for app: {app_name}, user: {user_id}, session: {session_id} is {current_session}")
             runner = Runner(
                 app_name=app_name,
                 agent=get_root_agent(), # Use the lazy-loaded agent
