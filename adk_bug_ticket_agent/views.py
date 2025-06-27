@@ -16,7 +16,6 @@ from .tools.tools import get_current_date, search_tool, toolbox_tools
 from google.adk.tools import load_memory
 
 # --- Global Initializations ---
-APP_NAME = "SoftwareBugAssistant"
 # For SQLite, make sure the directory for the DB file is writable by the Django process.
 # Using an absolute path or ensuring BASE_DIR is correctly set for Django is important.
 # For simplicity, placing it in the project root.
@@ -45,12 +44,20 @@ except Exception as e:
 
 memory_service = InMemoryMemoryService()
 
-root_agent = Agent(
-    model="gemini-2.5-flash",
-    name="software_assistant_agent",
-    instruction=prompt.agent_instruction,
-    tools=[load_memory, get_current_date, search_tool, *toolbox_tools],
-)
+# Lazy initialization for root_agent
+_root_agent_instance = None
+
+def get_root_agent():
+    global _root_agent_instance
+    if _root_agent_instance is None:
+        _root_agent_instance = Agent(
+            model="gemini-2.5-flash",
+            name="software_assistant_agent",
+            instruction=prompt.agent_instruction,
+            tools=[load_memory, get_current_date, search_tool, *toolbox_tools],
+        )
+        print("Root agent initialized.") # Added for debugging cold start
+    return _root_agent_instance
 # --- End Global Initializations ---
 
 @csrf_exempt
@@ -87,7 +94,7 @@ async def interact_with_agent(request):
 
             runner = Runner(
                 app_name=app_name,
-                agent=root_agent,
+                agent=get_root_agent(), # Use the lazy-loaded agent
                 session_service=session_service,
                 memory_service=memory_service,
             )
