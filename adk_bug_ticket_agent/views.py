@@ -27,6 +27,7 @@ _session_service_instance = None
 def get_session_service():
     global _session_service_instance
     if _session_service_instance is None:
+        print("set _session_service_instance to a new DatabaseSessionService instance")
         _session_service_instance = DatabaseSessionService(db_url=DB_URL)
         print(f"ADK Database URL: {DB_URL}")
     return _session_service_instance
@@ -76,8 +77,7 @@ async def interact_with_agent(request): # Removed the initial check for session_
     
     if request.method == 'POST':
         try:
-            print("Database session service initialized successfully.")
-            print(f"Database session service initialization failed: {e}")
+            print("interact_with_agent POST request received.")
             data = json.loads(request.body.decode('utf-8'))
             app_name = data.get('appName')
             user_id = data.get('userId')
