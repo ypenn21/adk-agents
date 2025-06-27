@@ -89,7 +89,7 @@ async def interact_with_agent(request): # Removed the initial check for session_
             # exists, or create a new one. This allows for a persistent
             # conversation history within a single browser session.
             current_session_service = get_session_service() # Get the lazy-loaded instance
-            current_session = await session_service.get_session(
+            current_session = await current_session_service.get_session(
                 app_name=app_name, user_id=user_id, session_id=session_id
             )
             if not current_session:
