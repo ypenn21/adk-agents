@@ -32,13 +32,6 @@ def get_session_service():
         print(f"ADK Database URL: {DB_URL}")
     return _session_service_instance
 
-# try:
-#     session_service = DatabaseSessionService(db_url=DB_URL)
-#     print("Database session service initialized successfully.")
-# except Exception as e:
-#     print(f"Database session service initialization failed: {e}")
-#     session_service = None
-
 # adding memory https://google.github.io/adk-docs/sessions/memory/#how-memory-works-in-practice
 # ToDO utilize VertexAiRagMemoryService from from google.adk.memory import VertexAiRagMemoryService
 # The RAG Corpus name or ID
