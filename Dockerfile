@@ -39,12 +39,15 @@ FROM python:3.13-slim-bookworm
 WORKDIR /app
 
 ENV PYTHONUNBUFFERED=1
-# Copy only the necessary artifacts from the builder stage
-COPY --from=builder /app/.venv /app/.venv \
-    /app/staticfiles /app/staticfiles \
-    /app/web_ui /app/web_ui \
-    /app/gunicorn.conf.py /app/gunicorn.conf.py \
-    /app/manage.py /app/manage.py
+# Copy runtime artifacts from builder stage to final image
+COPY --from=builder \
+    /app/.venv \
+    /app/staticfiles \
+    /app/web_ui \
+    /app/gunicorn.conf.py \
+    /app/manage.py \
+    /app/
+
 
 # Set the PATH to include the virtual environment's bin directory
 ENV PATH="/app/.venv/bin:$PATH"
