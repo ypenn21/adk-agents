@@ -19,7 +19,7 @@ from google.adk.memory import VertexAiRagMemoryService
 # For SQLite, make sure the directory for the DB file is writable by the Django process.
 # Using an absolute path or ensuring BASE_DIR is correctly set for Django is important.
 # For simplicity, placing it in the project root. For local PostgreSQL, use the following format.
-DB_URL = "postgresql://postgres:admin@127.0.0.1:5432/ticketsdb"
+DB_URL = os.environ.get("DB_URL", "postgresql://postgres:admin@127.0.0.1:5432/ticketsdb")
 # Explore using VertexAiSessionService or InMemorySessionService for production https://google.github.io/adk-docs/sessions/session/#managing-sessions-with-a-sessionservice
 # Lazy initialization for session_service
 _session_service_instance = None
@@ -34,7 +34,7 @@ def get_session_service():
 # adding memory https://google.github.io/adk-docs/sessions/memory/#how-memory-works-in-practice
 
 # The RAG Corpus name or ID
-RAG_CORPUS_RESOURCE_NAME = "projects/genai-playground24/locations/us-central1/ragCorpora/rag_corpus_1"
+RAG_CORPUS_RESOURCE_NAME = "projects/genai-playground/locations/us-central1/ragCorpora/2"
 # Optional configuration for retrieval
 SIMILARITY_TOP_K = 5
 VECTOR_DISTANCE_THRESHOLD = 0.7
@@ -102,12 +102,12 @@ async def interact_with_agent(request): # Removed the initial check for session_
             )
 
             if not current_session:
-                print(f"Creating new session for app: {app_name}, user: {user_id}, session: {session_id}")
+                print(f"Current session for app: {app_name}, user: {user_id}, session: {session_id} is {current_session}")
                 current_session = await current_session_service.create_session(
                     app_name=app_name, user_id=user_id, session_id=session_id
                 )
             else:
-                print(f"Current session for app: {app_name}, user: {user_id}, session: {session_id} is {current_session}")
+                print(f"Creating new session for app: {app_name}, user: {user_id}, session: {session_id}")
             runner = Runner(
                 app_name=app_name,
                 agent=get_root_agent(), # Use the lazy-loaded agent
