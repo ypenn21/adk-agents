@@ -34,7 +34,7 @@ def get_session_service():
 # adding memory https://google.github.io/adk-docs/sessions/memory/#how-memory-works-in-practice
 
 # The RAG Corpus name or ID
-RAG_CORPUS_RESOURCE_NAME = "projects/genai-playground24/locations/us-central1/ragCorpora/2305843009213693952"
+RAG_CORPUS_RESOURCE_NAME = "projects/genai-playground24/locations/us-central1/ragCorpora/rag_corpus_1"
 # Optional configuration for retrieval
 SIMILARITY_TOP_K = 5
 VECTOR_DISTANCE_THRESHOLD = 0.7
