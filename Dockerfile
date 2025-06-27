@@ -17,21 +17,29 @@ COPY pyproject.toml ./
 
 # Generate a fresh lock file and install dependencies. This avoids using a
 # potentially stale local uv.lock and improves caching.
-RUN uv lock && \
-    uv sync --frozen --no-install-project --no-dev
+# Add `set -ex` to ensure any command failure stops the build immediately.
+# Add `ls -l /app` to inspect the contents of /app after this step.
+RUN set -ex; \
+    uv lock; \
+    uv sync --frozen --no-install-project --no-dev; \
+    ls -l /app
 
 # Copy the rest of the application source code.
 # Ensure you have a .dockerignore file to exclude unnecessary files (e.g., .git, tests, docs).
 COPY . .
 
 # Install the project itself.
-RUN uv sync --frozen --no-dev
+# Add `ls -l /app` to inspect the contents of /app after this step.
+RUN set -ex; \
+    uv sync --frozen --no-dev; \
+    ls -l /app
 
 # Place executables in the environment at the front of the path
-ENV PATH="/app/.venv/bin:$PATH"
-
 # Collect static files
-RUN python manage.py collectstatic --noinput # This command typically outputs to a directory like 'staticfiles'
+# Add `ls -l /app` to inspect the contents of /app after this step.
+RUN set -ex; \
+    python manage.py collectstatic --noinput; \
+    ls -l /app
 
 # Stage 2: Final image - A smaller runtime image
 FROM python:3.13-slim-bookworm
@@ -41,10 +49,7 @@ WORKDIR /app
 ENV PYTHONUNBUFFERED=1
 
 # Copy only the necessary artifacts from the builder stage
-COPY --from=builder /app/.venv /app/.venv # Essential: Contains all Python dependencies
-COPY --from=builder /app/staticfiles /app/staticfiles # Corrected: Assumes STATIC_ROOT in settings.py is 'staticfiles'
-COPY --from=builder /app/web_ui /app/web_ui
-COPY --from=builder /app/manage.py /app/manage.py
+COPY --from=builder /app/.venv /app/staticfiles /app/web_ui /app/manage.py /app/
 # Add any other application-specific directories/files needed at runtime
 
 # Set the PATH to include the virtual environment's bin directory
