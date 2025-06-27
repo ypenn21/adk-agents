@@ -15,12 +15,21 @@ from . import prompt
 from .tools.tools import get_current_date, search_tool, toolbox_tools
 from google.adk.tools import load_memory
 
+
 # --- Global Initializations ---
 # For SQLite, make sure the directory for the DB file is writable by the Django process.
 # Using an absolute path or ensuring BASE_DIR is correctly set for Django is important.
 # For simplicity, placing it in the project root.
 DB_URL = f"sqlite:///{(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'adk_sessions.db'))}"
-print(f"ADK Database URL: {DB_URL}")
+
+# Lazy initialization for session_service
+_session_service_instance = None
+def get_session_service():
+    global _session_service_instance
+    if _session_service_instance is None:
+        _session_service_instance = DatabaseSessionService(db_url=DB_URL)
+        print(f"ADK Database URL: {DB_URL}")
+    return _session_service_instance
 
 # try:
 #     session_service = DatabaseSessionService(db_url=DB_URL)
@@ -61,13 +70,12 @@ def get_root_agent():
 # --- End Global Initializations ---
 
 @csrf_exempt
-async def interact_with_agent(request):
-    if not session_service or not memory_service:
-        return JsonResponse({"error": "Service not initialized"}, status=500)
-
+async def interact_with_agent(request): # Removed the initial check for session_service and memory_service
+    # Ensure memory_service is initialized (it's lightweight, so global is fine)
+    # If memory_service was also lazy-loaded, you'd call get_memory_service() here.
+    
     if request.method == 'POST':
         try:
-            session_service = DatabaseSessionService(db_url=DB_URL)
             print("Database session service initialized successfully.")
             print(f"Database session service initialization failed: {e}")
             data = json.loads(request.body.decode('utf-8'))
@@ -87,18 +95,19 @@ async def interact_with_agent(request):
             # The client now manages the session ID. We get the session if it
             # exists, or create a new one. This allows for a persistent
             # conversation history within a single browser session.
+            current_session_service = get_session_service() # Get the lazy-loaded instance
             current_session = await session_service.get_session(
                 app_name=app_name, user_id=user_id, session_id=session_id
             )
             if not current_session:
-                current_session = await session_service.create_session(
+                current_session = await current_session_service.create_session(
                     app_name=app_name, user_id=user_id, session_id=session_id
                 )
 
             runner = Runner(
                 app_name=app_name,
                 agent=get_root_agent(), # Use the lazy-loaded agent
-                session_service=session_service,
+                session_service=current_session_service, # Use the lazy-loaded instance
                 memory_service=memory_service,
             )
 
