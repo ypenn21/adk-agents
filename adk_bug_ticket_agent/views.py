@@ -22,12 +22,12 @@ from google.adk.tools import load_memory
 DB_URL = f"sqlite:///{(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'adk_sessions.db'))}"
 print(f"ADK Database URL: {DB_URL}")
 
-try:
-    session_service = DatabaseSessionService(db_url=DB_URL)
-    print("Database session service initialized successfully.")
-except Exception as e:
-    print(f"Database session service initialization failed: {e}")
-    session_service = None
+# try:
+#     session_service = DatabaseSessionService(db_url=DB_URL)
+#     print("Database session service initialized successfully.")
+# except Exception as e:
+#     print(f"Database session service initialization failed: {e}")
+#     session_service = None
 
 # adding memory https://google.github.io/adk-docs/sessions/memory/#how-memory-works-in-practice
 # ToDO utilize VertexAiRagMemoryService from from google.adk.memory import VertexAiRagMemoryService
@@ -67,6 +67,9 @@ async def interact_with_agent(request):
 
     if request.method == 'POST':
         try:
+            session_service = DatabaseSessionService(db_url=DB_URL)
+            print("Database session service initialized successfully.")
+            print(f"Database session service initialization failed: {e}")
             data = json.loads(request.body.decode('utf-8'))
             app_name = data.get('appName')
             user_id = data.get('userId')
