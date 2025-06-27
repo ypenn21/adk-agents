@@ -39,22 +39,18 @@ FROM python:3.13-slim-bookworm
 WORKDIR /app
 
 ENV PYTHONUNBUFFERED=1
-
 # Copy only the necessary artifacts from the builder stage
-COPY --from=builder /app/.venv /app/.venv 
-COPY --from=builder /app/staticfiles /app/staticfiles
-COPY --from=builder /app/web_ui /app/web_ui
-COPY --from=builder /app/manage.py /app/manage.py
-# Add any other application-specific directories/files needed at runtime
+COPY --from=builder /app/.venv /app/.venv \
+    /app/staticfiles /app/staticfiles \
+    /app/web_ui /app/web_ui \
+    /app/gunicorn.conf.py /app/gunicorn.conf.py \
+    /app/manage.py /app/manage.py
 
 # Set the PATH to include the virtual environment's bin directory
 ENV PATH="/app/.venv/bin:$PATH"
 
-# Create a non-root user and group for security best practices
-RUN groupadd -r appgroup && useradd --no-log-init -r -g appgroup appuser
-
-# Change ownership of the /app directory
-RUN chown -R appuser:appgroup /app
+# Create a non-root user and group, and change ownership of /app for security best practices
+RUN groupadd -r appgroup && useradd --no-log-init -r -g appgroup appuser && chown -R appuser:appgroup /app
 
 # Switch to the non-root user
 USER appuser
