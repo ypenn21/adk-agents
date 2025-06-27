@@ -47,7 +47,7 @@ def get_session_service():
 # )
 
 
-# memory_service = InMemoryMemoryService()
+memory_service = InMemoryMemoryService()
 
 # Lazy initialization for root_agent
 _root_agent_instance = None
