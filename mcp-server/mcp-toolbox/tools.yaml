@@ -5,7 +5,7 @@ sources:
   #  region: "us-central1"
   #  cluster: "alloydb-aip-01"
   #  instance: "alloydb-aip-01-pr"
-  #  database: "ticketsdb"
+  #  database: "tickets-db"
   #  user: ${DB_USER}
   #  password: ${DB_PASS}
   postgresql: # GCP -  CLOUD SQL
