@@ -5,7 +5,6 @@ import json
 import time
 import uuid
 import os
-
 from google.adk.agents import Agent
 from google.adk.runners import Runner
 from google.adk.memory import InMemoryMemoryService
@@ -19,9 +18,9 @@ from google.adk.memory import VertexAiRagMemoryService
 # --- Global Initializations ---
 # For SQLite, make sure the directory for the DB file is writable by the Django process.
 # Using an absolute path or ensuring BASE_DIR is correctly set for Django is important.
-# For simplicity, placing it in the project root.
-DB_URL = f"sqlite:///{(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'adk_sessions.db'))}"
-
+# For simplicity, placing it in the project root. For local PostgreSQL, use the following format.
+DB_URL = os.environ.get("DB_URL", "postgresql://postgres:admin@localhost:5432/tickets-db")
+# Explore using VertexAiSessionService or InMemorySessionService for production https://google.github.io/adk-docs/sessions/session/#managing-sessions-with-a-sessionservice
 # Lazy initialization for session_service
 _session_service_instance = None
 def get_session_service():
@@ -35,19 +34,26 @@ def get_session_service():
 # adding memory https://google.github.io/adk-docs/sessions/memory/#how-memory-works-in-practice
 
 # The RAG Corpus name or ID
-# RAG_CORPUS_RESOURCE_NAME = "projects/genai-playground/locations/us-central1/ragCorpora/12334`"
-# # Optional configuration for retrieval
-# SIMILARITY_TOP_K = 5
-# VECTOR_DISTANCE_THRESHOLD = 0.7
+RAG_CORPUS_RESOURCE_NAME = os.environ.get("RAG_CORPUS", "projects/genai-playground/locations/us-central1/ragCorpora/rag-corpus-id")
+# Optional configuration for retrieval
+SIMILARITY_TOP_K = 5
+VECTOR_DISTANCE_THRESHOLD = 0.7
 
-# memory_service = VertexAiRagMemoryService(
-#     rag_corpus=RAG_CORPUS_RESOURCE_NAME,
-#     similarity_top_k=SIMILARITY_TOP_K,
-#     vector_distance_threshold=VECTOR_DISTANCE_THRESHOLD
-# )
+# Lazy initialization for memory_service
+_memory_service_instance = None
+def get_memory_service():
+    global _memory_service_instance
+    if _memory_service_instance is None:
+        print("set _memory_service_instance to a new VertexAiRagMemoryService instance")
+        _memory_service_instance = VertexAiRagMemoryService(
+            rag_corpus=RAG_CORPUS_RESOURCE_NAME,
+            similarity_top_k=SIMILARITY_TOP_K,
+            vector_distance_threshold=VECTOR_DISTANCE_THRESHOLD
+        )
+    return _memory_service_instance
 
 
-memory_service = InMemoryMemoryService()
+#memory_service = InMemoryMemoryService()
 
 # Lazy initialization for root_agent
 _root_agent_instance = None
@@ -94,16 +100,19 @@ async def interact_with_agent(request): # Removed the initial check for session_
             current_session = await current_session_service.get_session(
                 app_name=app_name, user_id=user_id, session_id=session_id
             )
+
             if not current_session:
+                print(f"Current session for app: {app_name}, user: {user_id}, session: {session_id} is {current_session}")
                 current_session = await current_session_service.create_session(
                     app_name=app_name, user_id=user_id, session_id=session_id
                 )
-
+            else:
+                print(f"Creating new session for app: {app_name}, user: {user_id}, session: {session_id}")
             runner = Runner(
                 app_name=app_name,
                 agent=get_root_agent(), # Use the lazy-loaded agent
-                session_service=current_session_service, # Use the lazy-loaded instance
-                memory_service=memory_service,
+                session_service=current_session_service,
+                memory_service=get_memory_service(), # Use the lazy-loaded instance
             )
 
             user_message_content = genai_types.Content(
@@ -152,3 +161,4 @@ async def interact_with_agent(request): # Removed the initial check for session_
         return render(request, 'adk_agent/interact.html')
     
     return JsonResponse({'error': 'Unsupported method'}, status=405)
+
