@@ -19,7 +19,7 @@ from google.adk.memory import VertexAiRagMemoryService
 # For SQLite, make sure the directory for the DB file is writable by the Django process.
 # Using an absolute path or ensuring BASE_DIR is correctly set for Django is important.
 # For simplicity, placing it in the project root. For local PostgreSQL, use the following format.
-DB_URL = os.environ.get("DB_URL", "postgresql://postgres:admin@10.22.0.3:5432/tickets-db")
+DB_URL = os.environ.get("DB_URL", "postgresql://postgres:admin@localhost:5432/tickets-db")
 # Explore using VertexAiSessionService or InMemorySessionService for production https://google.github.io/adk-docs/sessions/session/#managing-sessions-with-a-sessionservice
 # Lazy initialization for session_service
 _session_service_instance = None
