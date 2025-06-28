@@ -102,12 +102,12 @@ async def interact_with_agent(request): # Removed the initial check for session_
             )
 
             if not current_session:
-                print(f"Current session for app: {app_name}, user: {user_id}, session: {session_id} is {current_session}")
+                print(f"Creating new session for app: {app_name}, user: {user_id}, session: {session_id} is {current_session}")
                 current_session = await current_session_service.create_session(
                     app_name=app_name, user_id=user_id, session_id=session_id
                 )
             else:
-                print(f"Creating new session for app: {app_name}, user: {user_id}, session: {session_id}")
+                print(f"Existing session for app: {app_name}, user: {user_id}, session: {session_id}")
             runner = Runner(
                 app_name=app_name,
                 agent=get_root_agent(), # Use the lazy-loaded agent
