@@ -406,26 +406,47 @@ Build the container image and push it to Artifact Registry with Cloud Build.
 gcloud builds submit --region=us-central1 --tag us-central1-docker.pkg.dev/$PROJECT_ID/adk/adk-agent-bug-assist:latest
 ```
 
-### 12 - Deploy the agent to Cloud Run 
+### 12 - Cloud Run Connectivity to Cloud Sql
 
 
 > [!NOTE]    
 > 
-> Switch to using Vertex AI instead of AI Studio for Gemini calls, you will need to replace `GOOGLE_API_KEY` with `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`, and `GOOGLE_GENAI_USE_VERTEXAI=TRUE` in the last line of the below `gcloud run deploy` command.
+> Create a PSC endpoint in your vpc network (assuming you have a [vpc called default if not create one](https://cloud.google.com/vpc/docs/create-modify-vpc-networks#gcloud)
+).
 > 
+```bash
+gcloud compute networks create NETWORK \
+    --subnet-mode=auto \
+    --bgp-routing-mode=DYNAMIC_ROUTING_MODE \
+    --mtu=MTU
+```
+
+Navigate to the Cloud Sql instance called adk, and create the private ip, and connect to the VPC. This is the same vpc you need enable direct vpc-egress on Cloud Run deployment.
+![](mcp-server/images/adk-cloud-architecture.png)
+
+This will take awhile.
+
+### 13 - Deploy the agent to Cloud Run 
+
+You need enable direct vpc-egress on Cloud Run deployment to connect to the Cloud Sql. Network is the same one with the private ip connection to Cloud Sql. Subnet can be any on the network.
 
 ```bash
 gcloud run deploy adk-agent-bug-assist \
   --image=us-central1-docker.pkg.dev/$PROJECT_ID/adk/adk-agent-bug-assist:latest \
   --region=us-central1 \
   --allow-unauthenticated \
+  --cpu=4 \
+  --memory=2Gi \
+  --network=default \
+  --subnet=default \
+  --vpc-egress=private-ranges-only \
   --set-env-vars=GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=us-central1,GOOGLE_GENAI_USE_VERTEXAI=TRUE,MCP_TOOLBOX_URL=$MCP_TOOLBOX_URL
 ```
 
 Check log to see that this deployment is successfully.
 
 
-### 13 - Test the Cloud Run Agent
+### 14 - Test the Cloud Run Agent
 
 Open the Cloud Run Service URL outputted by the previous step. 
 
