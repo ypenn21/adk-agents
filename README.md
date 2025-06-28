@@ -411,7 +411,7 @@ gcloud builds submit --region=us-central1 --tag us-central1-docker.pkg.dev/$PROJ
 
 > [!NOTE]    
 > 
-> Create a PSC endpoint in your vpc network (assuming you have a [vpc called default if not create one](https://cloud.google.com/vpc/docs/create-modify-vpc-networks#gcloud)
+> Create VPC Network Peering connection between your VPC and Google's service producer VPC (assuming you have a [vpc called default if not create one](https://cloud.google.com/vpc/docs/create-modify-vpc-networks#gcloud)
 ).
 > 
 ```bash
@@ -425,6 +425,8 @@ Navigate to the Cloud Sql instance called adk, and create the private ip, and co
 ![](mcp-server/images/cloud-sql-instance.png)
 
 This will take awhile.
+
+*Note you can also connect to Cloud Sql with [PSC connectivity](https://cloud.google.com/sql/docs/mysql/configure-private-service-connect), but for simplicity sake we will go with peering.
 
 ### 13 - Deploy the agent to Cloud Run 
 
