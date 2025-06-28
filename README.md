@@ -113,6 +113,8 @@ These instructions walk through the process of deploying the Software Bug Assist
 
 ![](mcp-server/images/adk-cloud-architecture.png)
 
+*Note you can use Vertexai or AI Studio api key
+
 ### Presetup 
 
 - `gcloud` CLI ([Installation instructions](https://cloud.google.com/sdk/docs/install))
