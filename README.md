@@ -465,8 +465,8 @@ psql -U postgres
 Then, initialize the database and `tickets` table: 
 
 ```SQL
-CREATE DATABASE ticketsdb;
-\c ticketsdb;
+CREATE DATABASE tickets-db;
+\c tickets-db;
 CREATE TABLE tickets (
     ticket_id SERIAL PRIMARY KEY,             -- PostgreSQL's auto-incrementing integer type (SERIAL is equivalent to INT AUTO_INCREMENT)
     title VARCHAR(255) NOT NULL,              -- A concise summary or title of the bug/issue.
