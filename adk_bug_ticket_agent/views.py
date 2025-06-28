@@ -53,7 +53,7 @@ def get_memory_service():
     return _memory_service_instance
 
 
-#memory_service = InMemoryMemoryService()
+#_memory_service_instance = InMemoryMemoryService()
 
 # Lazy initialization for root_agent
 _root_agent_instance = None
