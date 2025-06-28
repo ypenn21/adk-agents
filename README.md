@@ -422,7 +422,7 @@ gcloud compute networks create NETWORK \
 ```
 
 Navigate to the Cloud Sql instance called adk, and create the private ip, and connect to the VPC. This is the same vpc you need enable direct vpc-egress on Cloud Run deployment.
-![](mcp-server/images/adk-cloud-architecture.png)
+![](mcp-server/images/cloud-sql-instance.png)
 
 This will take awhile.
 
