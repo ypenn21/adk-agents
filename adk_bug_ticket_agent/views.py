@@ -63,7 +63,7 @@ def get_root_agent():
     if _root_agent_instance is None:
         _root_agent_instance = Agent(
             model="gemini-2.5-flash",
-            name="software_assistant_agent",
+            name="it_bug_assistant_agent",
             instruction=prompt.agent_instruction,
             tools=[load_memory, get_current_date, search_tool, *toolbox_tools],
         )
