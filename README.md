@@ -406,7 +406,14 @@ Build the container image and push it to Artifact Registry with Cloud Build.
 gcloud builds submit --region=us-central1 --tag us-central1-docker.pkg.dev/$PROJECT_ID/adk/adk-agent-bug-assist:latest
 ```
 
-### 12 - Cloud Run Connectivity to Cloud Sql
+### 12 - Create Rag Engine Corpus in Vertexai
+
+Navigate to the Rag Engine in Vertexai and create a new corpus called user-chat-history
+![](mcp-server/images/vertexai-rag.png)
+
+Once its done. Click on the corpus and click on details to get the Resource name to use in your python adk app. 
+
+### 13 - Cloud Run Connectivity to Cloud Sql
 
 
 > [!NOTE]    
@@ -426,7 +433,7 @@ Navigate to the Cloud Sql instance called adk, and create the private ip, and co
 
 *Note you can also connect to Cloud Sql with [PSC connectivity](https://cloud.google.com/sql/docs/mysql/configure-private-service-connect), but for simplicity sake we will go with peering.
 
-### 13 - Deploy the agent to Cloud Run 
+### 14 - Deploy the agent to Cloud Run 
 
 You need enable direct vpc-egress on Cloud Run deployment to connect to the Cloud Sql. Network is the same one with the private ip connection to Cloud Sql. Subnet can be any on the network.
 
@@ -446,7 +453,7 @@ gcloud run deploy adk-agent-bug-assist \
 Check log to see that this deployment is successfully.
 
 
-### 14 - Test the Cloud Run Agent
+### 15 - Test the Cloud Run Agent
 
 Open the Cloud Run Service URL outputted by the previous step. 
 
