@@ -412,6 +412,10 @@ Navigate to the Rag Engine in Vertexai and create a new corpus called user-chat-
 ![](mcp-server/images/vertexai-rag.png)
 
 Once its done. Click on the corpus and click on details to get the Resource name to use in your python adk app. 
+```bash
+# set using Resource name
+export RAG_CORPUS="projects/project-id/locations/region/ragCorpora/rag-corpus-id"
+```
 
 ### 13 - Cloud Run Connectivity to Cloud Sql
 
@@ -438,6 +442,12 @@ Navigate to the Cloud Sql instance called adk, and create the private ip, and co
 You need enable direct vpc-egress on Cloud Run deployment to connect to the Cloud Sql. Network is the same one with the private ip connection to Cloud Sql. Subnet can be any on the network.
 
 ```bash
+export MCP_TOOLBOX_URL=$(gcloud run services describe toolbox --region us-central1 --format "value(status.url)")
+export PROJECT_ID="project-id"
+# set using Resource name
+export RAG_CORPUS="projects/project-id/locations/region/ragCorpora/rag-corpus-id"
+export DB_URL="postgresql://postgres:pword@internal-ip-address:5432/tickets-db"
+
 gcloud run deploy adk-agent-bug-assist \
   --image=us-central1-docker.pkg.dev/$PROJECT_ID/adk/adk-agent-bug-assist:latest \
   --region=us-central1 \
@@ -447,7 +457,7 @@ gcloud run deploy adk-agent-bug-assist \
   --network=default \
   --subnet=default \
   --vpc-egress=private-ranges-only \
-  --set-env-vars=GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=us-central1,GOOGLE_GENAI_USE_VERTEXAI=TRUE,MCP_TOOLBOX_URL=$MCP_TOOLBOX_URL
+  --set-env-vars=RAG_CORPUS=$RAG_CORPUS,DB_URL=$DB_URL,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=us-central1,GOOGLE_GENAI_USE_VERTEXAI=TRUE,MCP_TOOLBOX_URL=$MCP_TOOLBOX_URL
 ```
 
 Check log to see that this deployment is successfully.
