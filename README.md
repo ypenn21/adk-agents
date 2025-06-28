@@ -415,7 +415,7 @@ gcloud builds submit --region=us-central1 --tag us-central1-docker.pkg.dev/$PROJ
 ).
 > 
 ```bash
-gcloud compute networks create NETWORK \
+gcloud compute networks create default \
     --subnet-mode=auto \
     --bgp-routing-mode=DYNAMIC_ROUTING_MODE \
     --mtu=MTU
