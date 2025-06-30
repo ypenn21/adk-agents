@@ -447,6 +447,10 @@ You should see a JSON response with the list of tools specified in `tools.yaml`.
 
 ### 3. Run Python Django:
 
+uncomment the line _memory_service_instance = InMemoryMemoryService() in view.py  [`adk_bug_ticket_agent/view.py`](adk_bug_ticket_agent/view.py).
+
+Once you are done comment the line out again for cloud deployment. 
+
 ```bash
 rm uv.lock
 uv sync
