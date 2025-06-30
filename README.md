@@ -168,7 +168,7 @@ gcloud projects add-iam-policy-binding $PROJECT_ID --member="serviceAccount:$SER
 
 From the Cloud Console (Cloud SQL), open **Cloud SQL Studio**. 
 
-Log into the `tickets-db` Database using the `postgres` user (password: `admin`, but note you can change to a more secure password under Cloud SQL > Primary Instance > Users).
+Log into the `tickets-db` database using the `postgres` user (password: `admin`, but note you can change to a more secure password under Cloud SQL > Primary Instance > Users).
 
 
 Open a new **Editor** tab. Then, paste in the SQL code from [`sql/data.sql`](sql/data.sql) to set up the table and create vector embeddings.
