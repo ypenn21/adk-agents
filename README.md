@@ -660,8 +660,8 @@ You should see a JSON response with the list of tools specified in `tools.yaml`.
 rm uv.lock
 uv sync
 python manage.py runserver 
-gunicorn web_ui.wsgi:application --bind 0.0.0.0:8000
-#http://0.0.0.0:8000/agent/interact/
+gunicorn web_ui.wsgi:application
+#try the ui: http://127.0.0.1:8000/agent/interact/
 ```
 
 Here are some example requests you may ask the agent:
