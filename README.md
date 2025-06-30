@@ -366,9 +366,11 @@ Open the Cloud Run Service URL outputted by the previous step.
 You should see the Web UI for the Software Bug Assistant. At https://cloud-run-host.com/agent/interact/
 
 Test the agent by asking questions like: 
-- `Any issues around database timeouts?` 
-- `What are some possible root-causes for the unresponsive login page issue?` (Invoke Google Search tool)
-- `Get the bug ID for the unresponsive login page issues` --> `Boost that bug's priority to P0.`. 
+- `Any issues around database timeouts?`
+- `Search the web for database timeout solutions?` (Invoke Search tool)
+- `What are some possible root-causes for the unresponsive login page issue?`
+- `Get the bug ID for the unresponsive login page issues`
+- `Give me all bugs with priority P0.`. 
 - `Create a new bug.` (let the agent guide you through bug creation)
 
 
