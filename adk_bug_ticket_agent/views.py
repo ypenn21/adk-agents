@@ -53,7 +53,7 @@ def get_memory_service():
     return _memory_service_instance
 
 
-#_memory_service_instance = InMemoryMemoryService()
+#_memory_service_instance = InMemoryMemoryService() #uncomment this line to use in-memory storage for local environment testing
 
 # Lazy initialization for root_agent
 _root_agent_instance = None
