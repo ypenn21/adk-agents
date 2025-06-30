@@ -445,7 +445,7 @@ You should see a JSON response with the list of tools specified in `tools.yaml`.
 ```
 ---------
 
-### 3. Run Python Django:
+### 4. Run Python Django:
 
 uncomment the line _memory_service_instance = InMemoryMemoryService() in views.py  [`adk_bug_ticket_agent/views.py`](adk_bug_ticket_agent/views.py).
 
@@ -465,4 +465,4 @@ Here are some example requests you may ask the agent:
 - "Can you bump the priority of ticket ID 7 to P0?"
 - "What are some possible root-causes for the unresponsive login page issue? (Invoke Google Search tool)"
 - "Which issues are currenlty marked as 'In Progress'?"
-- "What bugs are assigned to robert.jones@example.com?"
+- "all bugs that are assigned to user with email user@google.com?"
