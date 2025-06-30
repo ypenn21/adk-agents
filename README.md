@@ -367,7 +367,6 @@ You should see the Web UI for the Software Bug Assistant. At https://cloud-run-h
 
 Test the agent by asking questions like: 
 - `Any issues around database timeouts?` 
-- `How many bugs are assigned to samuel.green@example.com? Show a table.` 
 - `What are some possible root-causes for the unresponsive login page issue?` (Invoke Google Search tool)
 - `Get the bug ID for the unresponsive login page issues` --> `Boost that bug's priority to P0.`. 
 - `Create a new bug.` (let the agent guide you through bug creation)
