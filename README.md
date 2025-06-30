@@ -1,6 +1,6 @@
 # IT Bug Assistant Agent
 
-The Bug Assistant is a sample agent hosted on django designed to help IT Support and Software Developers triage, manage, and resolve software issues. This agent uses ADK Python, PostgreSQL database, Gemini, RAG, and Google Search to assist IT in triaging. 
+The Bug Assistant is a sample agent hosted on django designed to help IT Support and Software Developers triage, manage, and resolve software issues. This agent uses ADK Python, PostgreSQL database, Gemini, MCP server, RAG, and Google Search to assist IT in triaging. 
 
 ![](mcp-server/images/softmicro-agent.png)
 
