@@ -192,7 +192,7 @@ CREATE TABLE tickets (
 
 ### 5 - Load in sample data. 
 
-From Cloud SQL Studio, paste in the following SQL code to load in sample data.
+Run following SQL code to load in sample data.
 
 ```SQL
 INSERT INTO tickets (title, description, assignee, priority, status) VALUES
