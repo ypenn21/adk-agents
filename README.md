@@ -398,7 +398,7 @@ psql -U postgres
 
 Then, initialize the database and `tickets` table by running the queries in [`sql/data.sql`](sql/data.sql).
 
-*note you don't need to create the extension locally. Only create the table and insert the records.
+*note you don't need to create the extension for local environment. Only create the table and insert the records.
 
 ```sql
 CREATE EXTENSION IF NOT EXISTS google_ml_integration CASCADE;
