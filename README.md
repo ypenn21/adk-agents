@@ -397,6 +397,13 @@ psql -U postgres
 ```
 
 Then, initialize the database and `tickets` table by running the queries in [`sql/data.sql`](sql/data.sql).
+*note you don't need to create the extension locally. Only create the table and insert the records.
+
+```sql
+CREATE EXTENSION IF NOT EXISTS google_ml_integration CASCADE;
+CREATE EXTENSION IF NOT EXISTS vector CASCADE;
+GRANT EXECUTE ON FUNCTION embedding TO postgres;
+```
 
 ### 3 - Run the MCP Toolbox
 
