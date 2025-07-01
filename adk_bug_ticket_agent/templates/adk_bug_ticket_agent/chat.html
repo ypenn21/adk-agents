@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>ADK Agent Chat</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        body { font-family: sans-serif; }
+        #chat-container { width: 500px; margin: auto; }
+        #chat-box { border: 1px solid #ccc; padding: 10px; height: 400px; overflow-y: scroll; }
+        #user-input { width: 100%; padding: 5px; }
+        .message { margin-bottom: 10px; }
+        .user-message { text-align: right; }
+    </style>
+</head>
+<body>
+    <div id="chat-container">
+        <div id="chat-box"></div>
+        <input type="text" id="user-input" placeholder="Type your message...">
+        <button id="send-button">Send</button>
+    </div>
+
+    <script>
+        $(document).ready(function() {
+            // Generate a unique session ID for the user
+            let sessionId = sessionStorage.getItem('adk_session_id');
+            if (!sessionId) {
+                sessionId = 'session-' + Date.now() + '-' + Math.random().toString(36).substring(2, 15);
+                sessionStorage.setItem('adk_session_id', sessionId);
+            }
+
+            $('#send-button').click(function() {
+                var userInput = $('#user-input').val();
+                if (userInput.trim() === '') return;
+
+                // Display user message
+                $('#chat-box').append('<div class="message user-message"><b>You:</b> ' + userInput + '</div>');
+                $('#user-input').val('');
+
+                // Send message to the backend
+                $.ajax({
+                    url: '/agent/interact',
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({
+                        appName: 'adk-bug-ticket-agent',
+                        userId: 'user-123', // Replace with actual user ID if available
+                        sessionId: sessionId,
+                        newMessage: {
+                            parts: [{ text: userInput }]
+                        }
+                    }),
+                    success: function(response) {
+                        var agentResponse = response.content.parts[0].text;
+                        $('#chat-box').append('<div class="message"><b>Agent:</b> ' + agentResponse + '</div>');
+                        // Scroll to the bottom of the chat box
+                        $('#chat-box').scrollTop($('#chat-box')[0].scrollHeight);
+                    },
+                    error: function(xhr, status, error) {
+                        console.error("Error:", error);
+                        $('#chat-box').append('<div class="message"><b>Error:</b> Could not get a response from the agent.</div>');
+                    }
+                });
+            });
+
+            // Allow sending message by pressing Enter
+            $('#user-input').keypress(function(e) {
+                if (e.which === 13) { // Enter key
+                    $('#send-button').click();
+                }
+            });
+        });
+    </script>
+</body>
+</html>
