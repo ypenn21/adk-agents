@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>ADK Agent Chat</title>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <style>
+        body { font-family: sans-serif; margin: 20px; background-color: #f4f4f4; color: #333; }
+        h1 { color: #333; }
+        #chatbox { width: 100%; max-width: 600px; margin: 0 auto; background-color: #fff; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); padding: 20px; transition: max-width 0.3s ease-in-out; }
+        .message { margin-bottom: 15px; padding: 10px; border-radius: 5px; }
+        .user-message { background-color: #e1f5fe; text-align: right; }
+        .agent-message { background-color: #f0f0f0; }
+        .input-area {
+            display: flex;
+            align-items: center;
+            margin-top: 20px;
+        }
+        #messageInput { flex-grow: 1; padding: 10px; border: 1px solid #ccc; border-radius: 4px; }
+        button { padding: 10px 15px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; margin-left: 15px; }
+        button:hover { background-color: #0056b3; }
+        #conversation { max-height: 400px; overflow-y: auto; margin-bottom: 20px; border: 1px solid #eee; padding: 10px; }
+        
+        /* Table Styles */
+        .agent-message table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            font-size: 0.9em;
+            table-layout: auto;
+        }
+        .agent-message th, .agent-message td {
+            border: 1px solid #ccc;
+            padding: 8px;
+            text-align: left;
+            word-wrap: break-word;
+        }
+        .agent-message th {
+            background-color: #e0e0e0;
+            font-weight: bold;
+            color: #333;
+        }
+        .agent-message tr:nth-child(even) td {
+            background-color: #f9f9f9;
+        }
+        .agent-message tr:hover td {
+            background-color: #f1f1f1;
+        }
+    </style>
+</head>
+<body>
+    <div id="chatbox">
+        <h1>Chat with ADK Agent</h1>
+        <div id="conversation">
+            <div class="message agent-message">Hello! How can I help you today?</div>
+        </div>
+        <div class="input-area">
+            <input type="text" id="messageInput" placeholder="Type your message...">
+            <button id="sendButton">Send</button>
+        </div>
+    </div>
+
+    <script>
+    $(document).ready(function(){
+        let sessionId = sessionStorage.getItem('adk_chat_session_id');
+        if (!sessionId) {
+            sessionId = self.crypto.randomUUID();
+            sessionStorage.setItem('adk_chat_session_id', sessionId);
+        }
+
+        function parseMarkdownTable(markdown) {
+            const lines = markdown.trim().split('\n').map(line => line.trim());
+            if (lines.length < 2) return null;
+
+            const table = $('<table>');
+            const thead = $('<thead>').appendTo(table);
+            const tbody = $('<tbody>').appendTo(table);
+
+            function getCells(lineString) {
+                if (!lineString.startsWith('|') || !lineString.endsWith('|')) {
+                    return null;
+                }
+                const content = lineString.slice(1, -1);
+                return content.split('|').map(cell => cell.trim());
+            }
+
+            const headerLine = lines[0];
+            const headers = getCells(headerLine);
+            if (!headers) return null;
+
+            const trHead = $('<tr>').appendTo(thead);
+            headers.forEach(headerText => {
+                $('<th>').text(headerText).appendTo(trHead);
+            });
+
+            const separatorLine = lines[1];
+            const separatorCells = getCells(separatorLine);
+            if (!separatorCells || separatorCells.length !== headers.length) {
+                return null;
+            }
+
+            for (const cell of separatorCells) {
+                if (!/^:?-+:?$/.test(cell)) {
+                    return null;
+                }
+            }
+
+            for (let i = 2; i < lines.length; i++) {
+                const dataLine = lines[i];
+                if (dataLine === "") continue;
+                
+                const cells = getCells(dataLine);
+                if (!cells) continue;
+
+                const trBody = $('<tr>').appendTo(tbody);
+                for (let k = 0; k < headers.length; k++) {
+                    $('<td>').text(cells[k] || '').appendTo(trBody);
+                }
+            }
+            
+            if (headers.length > 0) {
+                if (tbody.children().length > 0 || lines.length === 2) {
+                    return table;
+                }
+            }
+            return null;
+        }
+
+        function appendAgentMessage(text) {
+            const conversation = $('#conversation');
+            const messageDiv = $('<div>').addClass('message agent-message');
+
+            const lines = text.split('\n');
+            let currentTextBuffer = [];
+            let i = 0;
+
+            function flushTextBuffer() {
+                if (currentTextBuffer.length > 0) {
+                    const bufferedText = currentTextBuffer.join('\n');
+                    if (bufferedText.trim().length > 0) {
+                        const pre = $('<pre>').css({
+                            'white-space': 'pre-wrap',
+                            'font-family': 'inherit'
+                        }).text(bufferedText);
+                        messageDiv.append(pre);
+                    }
+                    currentTextBuffer = [];
+                }
+            }
+
+            while (i < lines.length) {
+                const currentLineRaw = lines[i];
+                const currentLineTrimmed = currentLineRaw.trim();
+                let successfullyProcessedAsTable = false;
+
+                if (currentLineTrimmed.startsWith('|') && currentLineTrimmed.endsWith('|')) {
+                    if (i + 1 < lines.length) {
+                        const nextLineTrimmed = lines[i+1].trim();
+                        if (nextLineTrimmed.startsWith('|') && nextLineTrimmed.endsWith('|') && nextLineTrimmed.includes('-')) {
+                            
+                            flushTextBuffer();
+
+                            let tableLinesCollector = [currentLineRaw];
+                            let tableEndIndex = i;
+
+                            for (let j = i + 1; j < lines.length; j++) {
+                                const rowLineTrimmed = lines[j].trim();
+                                if (rowLineTrimmed.startsWith('|') && rowLineTrimmed.endsWith('|')) {
+                                    tableLinesCollector.push(lines[j]);
+                                    tableEndIndex = j;
+                                } else {
+                                    break;
+                                }
+                            }
+
+                            const tableMarkdown = tableLinesCollector.join('\n');
+                            const tableElement = parseMarkdownTable(tableMarkdown);
+
+                            if (tableElement) {
+                                messageDiv.append(tableElement);
+                                i = tableEndIndex + 1;
+                                successfullyProcessedAsTable = true;
+                            }
+                        }
+                    }
+                }
+
+                if (!successfullyProcessedAsTable) {
+                    currentTextBuffer.push(currentLineRaw);
+                    i++;
+                }
+            }
+
+            flushTextBuffer();
+            
+            if (messageDiv.children().length > 0) {
+                conversation.append(messageDiv);
+                if (messageDiv.find('table').length > 0) {
+                    $('#chatbox').css('max-width', '90%');
+                    conversation.css('max-height', '600px');
+                }
+            }
+        }
+
+        function sendMessage() {
+            const message = $('#messageInput').val().trim();
+            if (!message) return;
+
+            $('#conversation').append($('<div>').addClass('message user-message').text(message));
+            $('#conversation').scrollTop($('#conversation')[0].scrollHeight);
+            $('#messageInput').val('');
+
+            const payload = {
+                appName: "AgentChat",
+                userId: "user_123",
+                sessionId: sessionId,
+                newMessage: {
+                    role: "user",
+                    parts: [{ text: message }]
+                }
+            };
+
+            $.ajax({
+                url: '{% url "interact_with_agent" %}',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(payload),
+                success: function(data) {
+                    const agentMessage = data.content.parts[0].text;
+                    appendAgentMessage(agentMessage);
+                    $('#conversation').scrollTop($('#conversation')[0].scrollHeight);
+                },
+                error: function(xhr, status, error) {
+                    console.error("Error: " + status + " " + error);
+                    const errorDiv = $('<div>').addClass('message agent-message').text('Error: Could not connect to the agent.');
+                    $('#conversation').append(errorDiv);
+                    $('#conversation').scrollTop($('#conversation')[0].scrollHeight);
+                }
+            });
+        }
+
+        $('#sendButton').click(sendMessage);
+
+        $('#messageInput').keypress(function(e){
+            if(e.which == 13) {
+                sendMessage();
+            }
+        });
+    });
+    </script>
+</body>
+</html>

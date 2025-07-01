@@ -1,0 +1,74 @@
+openapi: 3.0.0
+info:
+  title: ADK Agent API
+  version: 1.0.0
+  description: API for interacting with the ADK agent.
+paths:
+  /agent/interact/:
+    post:
+      summary: Interact with the agent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                appName:
+                  type: string
+                userId:
+                  type: string
+                sessionId:
+                  type: string
+                newMessage:
+                  type: object
+                  properties:
+                    parts:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          text:
+                            type: string
+      responses:
+        '200':
+          description: Successful response from the agent
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  content:
+                    type: object
+                    properties:
+                      parts:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            text:
+                              type: string
+                      role:
+                        type: string
+                  timestamp:
+                    type: number
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  traceback:
+                    type: string
