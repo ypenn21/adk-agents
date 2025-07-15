@@ -474,7 +474,8 @@ gunicorn web_ui.wsgi:application
 Here are some example requests you may ask the agent:
 - "Show me all the tickets with status Open"
 - "List the tickets with highest priority"
-- "Can you bump the priority of ticket ID 7 to P0?"
-- "What are some possible root-causes for the unresponsive login page issue? (Invoke Google Search tool)"
-- "Which issues are currenlty marked as 'In Progress'?"
+- "Can you bump the priority of ticket ID 2 to P1?"
 - "all bugs that are assigned to user with email user@google.com?"
+
+### Reference google adk-samples for more samples on adk
+https://github.com/google/adk-samples
