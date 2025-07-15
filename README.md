@@ -103,8 +103,8 @@ set -o allexport && source .env && set +o allexport
 
 ```bash
 export OS="linux/amd64" # one of linux/amd64, darwin/arm64, darwin/amd64, or windows/amd64
-curl -O --output-dir mcp-server/mcp-toolbox https://storage.googleapis.com/genai-toolbox/v0.6.0/$OS/toolbox
-chmod +x mcp-server/mcp-toolbox/toolbox
+curl -O --output-dir mcp-servers/mcp-toolbox https://storage.googleapis.com/genai-toolbox/v0.6.0/$OS/toolbox
+chmod +x mcp-servers/mcp-toolbox/toolbox
 ```
 
 3. Create a VPC
