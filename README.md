@@ -242,7 +242,7 @@ Navigate to the Cloud Sql instance called adk, and create the private ip, and co
 *Note you can also connect to Cloud Sql with [PSC connectivity](https://cloud.google.com/sql/docs/mysql/configure-private-service-connect), but for simplicity sake we will go with peering.
 
 
-### `0 - Deploy the MCP Toolbox for Databases server to Cloud Run 
+### 10 - Deploy the MCP Toolbox for Databases server to Cloud Run 
 
 Now that we have a Cloud SQL database, we can deploy the MCP Toolbox for Databases server to Cloud Run and point it at our Cloud SQL instance.
 
