@@ -257,6 +257,7 @@ First, update `mcp-server/mcp-toolbox/tools.yaml` for your Cloud SQL instance:
     database: tickets-db
     user: ${DB_USER}
     password: ${DB_PASS}
+    # ipType: "private" default is public set to private if disable public ip
 ```
 
 Then, configure Toolbox's Cloud Run service account to access both Secret Manager and Cloud SQL. Secret Manager is where we'll store our `tools.yaml` file because it contains sensitive Cloud SQL credentials. 
