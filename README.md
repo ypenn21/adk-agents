@@ -11,8 +11,6 @@ IT Support triggers the Bug Assistant Agent
 
 Queries Gemini 2.5 Flash for AI insights
 
-Uses Google Search Tool for supplemental external context
-
 Connects to MCP Toolbox, which in turn interacts with the Bug Ticket Database
 
 ## Key Features
