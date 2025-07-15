@@ -221,9 +221,28 @@ From Cloud SQL studio, run:
 ```SQL
 SELECT * FROM tickets;
 ```
+### 9 - Cloud Run Connectivity to Cloud Sql
 
 
-### 9 - Deploy the MCP Toolbox for Databases server to Cloud Run 
+> [!NOTE]    
+> 
+> Create VPC Network Peering connection between your VPC and Google's service producer VPC (assuming you have a [vpc called default if not create one](https://cloud.google.com/vpc/docs/create-modify-vpc-networks#gcloud)
+).
+> 
+```bash
+gcloud compute networks create default \
+    --subnet-mode=auto \
+    --bgp-routing-mode=DYNAMIC_ROUTING_MODE \
+    --mtu=MTU
+```
+
+Navigate to the Cloud Sql instance called adk, and create the private ip, and connect to the VPC. This is the same vpc you need enable direct vpc-egress on Cloud Run deployment.
+![](mcp-server/images/cloud-sql-instance.png)
+
+*Note you can also connect to Cloud Sql with [PSC connectivity](https://cloud.google.com/sql/docs/mysql/configure-private-service-connect), but for simplicity sake we will go with peering.
+
+
+### `0 - Deploy the MCP Toolbox for Databases server to Cloud Run 
 
 Now that we have a Cloud SQL database, we can deploy the MCP Toolbox for Databases server to Cloud Run and point it at our Cloud SQL instance.
 
@@ -291,7 +310,7 @@ export MCP_TOOLBOX_URL=$(gcloud run services describe toolbox --region us-centra
 
 Now we are ready to deploy the ADK Python agent to Cloud Run! :rocket:
 
-### 10 - Create an Artifact Registry repository.
+### 11 - Create an Artifact Registry repository.
 
 This is where we'll store the agent container image.
 
@@ -303,7 +322,7 @@ gcloud artifacts repositories create adk \
   --project=$PROJECT_ID
 ```
 
-### 11 - Containerize the ADK Python agent. 
+### 12 - Containerize the ADK Python agent. 
 
 Build the container image and push it to Artifact Registry with Cloud Build.
 
@@ -311,7 +330,7 @@ Build the container image and push it to Artifact Registry with Cloud Build.
 gcloud builds submit --region=us-central1 --tag us-central1-docker.pkg.dev/$PROJECT_ID/adk/adk-agent-bug-assist:latest
 ```
 
-### 12 - Create Rag Engine Corpus in Vertexai
+### 13 - Create Rag Engine Corpus in Vertexai
 
 Navigate to the Rag Engine in Vertexai and create a new corpus called user-chat-history
 ![](mcp-server/images/vertexai-rag.png)
@@ -321,26 +340,6 @@ Once its done. Click on the corpus and click on details to get the Resource name
 # set using Resource name
 export RAG_CORPUS="projects/project-id/locations/region/ragCorpora/rag-corpus-id"
 ```
-
-### 13 - Cloud Run Connectivity to Cloud Sql
-
-
-> [!NOTE]    
-> 
-> Create VPC Network Peering connection between your VPC and Google's service producer VPC (assuming you have a [vpc called default if not create one](https://cloud.google.com/vpc/docs/create-modify-vpc-networks#gcloud)
-).
-> 
-```bash
-gcloud compute networks create default \
-    --subnet-mode=auto \
-    --bgp-routing-mode=DYNAMIC_ROUTING_MODE \
-    --mtu=MTU
-```
-
-Navigate to the Cloud Sql instance called adk, and create the private ip, and connect to the VPC. This is the same vpc you need enable direct vpc-egress on Cloud Run deployment.
-![](mcp-server/images/cloud-sql-instance.png)
-
-*Note you can also connect to Cloud Sql with [PSC connectivity](https://cloud.google.com/sql/docs/mysql/configure-private-service-connect), but for simplicity sake we will go with peering.
 
 ### 14 - Deploy the agent to Cloud Run 
 
