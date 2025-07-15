@@ -16,7 +16,7 @@ sources:
     database: tickets-db
     user: ${DB_USER}
     password: ${DB_PASS}
-    ipType: "private"
+    #ipType: "private"
 tools:
   search-tickets:
     kind: postgres-sql
