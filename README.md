@@ -2,7 +2,7 @@
 
 The Bug Assistant is a sample agent hosted on django designed to help IT Support and Software Developers triage, manage, and resolve software issues. This agent uses ADK Python, PostgreSQL database, Gemini, MCP server, RAG, and Google Search to assist IT in triaging. 
 
-![](mcp-server/images/softmicro-agent.png)
+![](images/softmicro-agent.png)
 
 ## Agent Flow
 IT Support triggers the Bug Assistant Agent
@@ -120,7 +120,7 @@ gcloud compute networks create default \
 
 These instructions walk through the process of deploying the Software Bug Assistant agent to Google Cloud, including Cloud Run and Cloud SQL (PostgreSQL). This setup also adds RAG capabilities to the tickets database, using the [google_ml_integration](https://cloud.google.com/blog/products/ai-machine-learning/google-ml-intergration-extension-for-cloud-sql) vector plugin for Cloud SQL, and the `text-embeddings-005` model from Vertex AI.
 
-![](mcp-server/images/adk-cloud-architecture.png)
+![](images/adk-cloud-architecture.png)
 
 *Note you can use Vertexai or AI Studio api key
 
@@ -235,7 +235,7 @@ gcloud compute networks create default \
 ```
 
 Navigate to the Cloud Sql instance called adk, and create the private ip, and connect to the VPC. This is the same vpc you need enable direct vpc-egress on Cloud Run deployment.
-![](mcp-server/images/cloud-sql-instance.png)
+![](images/cloud-sql-instance.png)
 
 *Note you can also connect to Cloud Sql with [PSC connectivity](https://cloud.google.com/sql/docs/mysql/configure-private-service-connect), but for simplicity sake we will go with peering.
 
@@ -335,7 +335,7 @@ gcloud builds submit --region=us-central1 --tag us-central1-docker.pkg.dev/$PROJ
 ### 13 - Create Rag Engine Corpus in Vertexai
 
 Navigate to the Rag Engine in Vertexai and create a new corpus called user-chat-history
-![](mcp-server/images/vertexai-rag.png)
+![](images/vertexai-rag.png)
 
 Once its done. Click on the corpus and click on details to get the Resource name to use in your python adk app. 
 ```bash
