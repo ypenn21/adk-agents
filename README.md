@@ -244,7 +244,7 @@ Navigate to the Cloud Sql instance called adk, and create the private ip, and co
 
 Now that we have a Cloud SQL database, we can deploy the MCP Toolbox for Databases server to Cloud Run and point it at our Cloud SQL instance.
 
-First, update `mcp-server/mcp-toolbox/tools.yaml` for your Cloud SQL instance: 
+First, update `mcp-servers/mcp-toolbox/tools.yaml` for your Cloud SQL instance: 
 
 ```yaml
   postgresql:
@@ -279,7 +279,7 @@ gcloud projects add-iam-policy-binding $PROJECT_ID \
     --member serviceAccount:toolbox-identity@$PROJECT_ID.iam.gserviceaccount.com \
     --role roles/cloudsql.client
 
-gcloud secrets create tools --data-file=mcp-server/mcp-toolbox/tools.yaml
+gcloud secrets create tools --data-file=mcp-servers/mcp-toolbox/tools.yaml
 ```
 
 Now we can deploy Toolbox to Cloud Run. We'll use the latest [release version](https://github.com/googleapis/genai-toolbox/releases) of the MCP Toolbox image (we don't need to build or deploy the `toolbox` from source.)
@@ -423,7 +423,7 @@ GRANT EXECUTE ON FUNCTION embedding TO postgres;
 
 First, [download the MCP toolbox](https://googleapis.github.io/genai-toolbox/getting-started/local_quickstart/) binary if not already installed.
 
-Then, open the `mcp-server/mcp-toolbox/tools.yaml` file. This is a prebuilt configuration for the MCP Toolbox that defines several SQL tools against the `tickets` table we just created, including getting a ticket by its ID, creating a new ticket, or searching tickets. 
+Then, open the `mcp-servers/mcp-toolbox/tools.yaml` file. This is a prebuilt configuration for the MCP Toolbox that defines several SQL tools against the `tickets` table we just created, including getting a ticket by its ID, creating a new ticket, or searching tickets. 
 
 > [!Note]
 > Vector search via `search-tickets` is not yet enabled for local development - see Google Cloud setup below.
@@ -443,7 +443,7 @@ Then, open the `mcp-server/mcp-toolbox/tools.yaml` file. This is a prebuilt conf
 Now you run the toolbox server locally: 
 
 ```bash 
-cd mcp-server/mcp-toolbox/
+cd mcp-servers/mcp-toolbox/
 ./toolbox --tools-file="tools.yaml"
 ```
 
