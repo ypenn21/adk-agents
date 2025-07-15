@@ -396,10 +396,18 @@ Install PostgreSQL:
 
 ### 1 - Start a local Pgsql
 
-For instance, on MacOS: 
+For instance, on Debian-based Linux system: 
 
 ```bash
-brew services start postgresql
+                                                                             
+sudo apt-get update                                                                                                                                
+                                                                     
+sudo apt-get install postgresql postgresql-contrib                                                                                                 
+                                                      
+sudo systemctl status postgresql                                                                                                                   
+                                                                                             
+sudo systemctl start postgresql  
+
 ```
 
 ### 2 - Setup the database
