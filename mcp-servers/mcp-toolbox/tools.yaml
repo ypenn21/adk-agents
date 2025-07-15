@@ -8,13 +8,15 @@ sources:
   #  database: "tickets-db"
   #  user: ${DB_USER}
   #  password: ${DB_PASS}
-  postgresql:
-    kind: postgres
-    host: localhost
-    port: 5432
+  postgresql: # GCP -  CLOUD SQL
+    kind: cloud-sql-postgres
+    project: ${PROJECT_ID}
+    region: us-central1
+    instance: adk
     database: tickets-db
-    user: postgres
-    password: admin
+    user: ${DB_USER}
+    password: ${DB_PASS}
+    ipType: "private"
 tools:
   search-tickets:
     kind: postgres-sql
