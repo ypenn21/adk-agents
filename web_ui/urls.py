@@ -22,3 +22,6 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("agent/", include("adk_bug_ticket_agent.urls")),
 ]
+
+handler404 = 'adk_bug_ticket_agent.views.page_not_found_view'
+

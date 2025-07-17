@@ -11,7 +11,7 @@ from google.adk.runners import Runner
 from google.adk.memory import InMemoryMemoryService
 from google.adk.sessions import DatabaseSessionService
 from google.genai import types as genai_types  # Aliased to avoid conflict if Django has a 'types'
-from . import prompt
+from . import system_prompt
 from .tools.tools import get_current_date, search_tool, toolbox_tools
 from google.adk.tools import load_memory
 from google.adk.memory import VertexAiRagMemoryService
@@ -58,7 +58,7 @@ def get_root_agent():
         _root_agent_instance = Agent(
             model="gemini-2.5-flash",
             name="it_bug_assistant_agent",
-            instruction=prompt.agent_instruction,
+            instruction=system_prompt.agent_instruction,
             tools=[load_memory, get_current_date, search_tool, *toolbox_tools],
         )
         print("Root agent initialized.") # Added for debugging cold start

@@ -53,7 +53,7 @@ def get_memory_service():
     return _memory_service_instance
 
 
-#_memory_service_instance = InMemoryMemoryService() #uncomment this line to use in-memory storage for local environment testing
+_memory_service_instance = InMemoryMemoryService() #uncomment this line to use in-memory storage for local environment testing
 
 # Lazy initialization for root_agent
 _root_agent_instance = None
@@ -70,6 +70,9 @@ def get_root_agent():
         print("Root agent initialized.") # Added for debugging cold start
     return _root_agent_instance
 # --- End Global Initializations ---
+
+def page_not_found_view(request, exception):
+    return render(request, 'adk_agent/404.html', status=404)
 
 @csrf_exempt
 async def interact_with_agent(request): # Removed the initial check for session_service and memory_service
