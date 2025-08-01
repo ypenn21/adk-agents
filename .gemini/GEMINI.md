@@ -1,16 +1,5 @@
-# Example Python dev GEMINI.md file
-...
+This Django web service is designed to facilitate interaction with a conversational agent powered by the Google Agent Development Kit (ADK). The core of the application lies within the `adk_bug_ticket_agent` app, where the `interact_with_agent` view manages the agent's lifecycle. This view handles both the initial rendering of the chat interface and the subsequent processing of user messages.
 
-## Mandatory Tooling
-To ensure all Python code adheres to these standards, the following commands **must** be run before committing any `.py` files. These commands will automatically fix many common issues and flag any that require manual intervention.
+When a user sends a message, the service leverages the ADK's `Runner` to execute the agent, which is configured to use the `gemini-2.5-flash` model. The agent's capabilities are extended through a suite of tools, including functionalities for retrieving the current date and performing searches. Session management is handled by the `DatabaseSessionService`, ensuring a persistent conversation history, while the `VertexAiRagMemoryService` provides the agent with memory capabilities through Vertex AI RAG.
 
-When creating or modifying any `.py` Python files, you **must** run the following commands from the root of the project:
-
-1.  **Check and fix linting issues:**
-    ```bash
-    uvx ruff@latest check --fix .
-    ```
-2.  **Format the code:**
-    ```bash
-    uvx ruff@latest format .
-    ```
+The service is structured as a standard Django project, with the `web_ui` directory serving as the main project container. URL routing is configured to direct requests to the appropriate views, and the service can be run using the `gunicorn web_ui.wsgi:application` command.
