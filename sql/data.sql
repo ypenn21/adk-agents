@@ -13,18 +13,6 @@ CREATE TABLE tickets (
     updated_time TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP  -- Timestamp when the ticket was last updated. Will be managed by a trigger.
 );
 
-CREATE OR REPLACE FUNCTION update_updated_time_tickets()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.updated_time = NOW();  -- Set the updated_time to the current timestamp
-    RETURN NEW;                -- Return the new row
-END;
-
-CREATE TRIGGER update_tickets_updated_time
-BEFORE UPDATE ON tickets
-FOR EACH ROW                  -- This means the trigger fires for each row affected by the UPDATE statement
-EXECUTE PROCEDURE update_updated_time_tickets();
-
 INSERT INTO tickets (title, description, assignee, priority, status) VALUES
 ('User Profile Update Fails Silently', 'When a user attempts to update their profile information, the system indicates success but the changes are not persisted in the database.', 'david.lee@example.com', 'P2 - Medium', 'Open');
 
