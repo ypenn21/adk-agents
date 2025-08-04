@@ -2,7 +2,7 @@ sources:
   #alloydb:
   #  kind: "alloydb-postgres"
   #  project: ${PROJECT_ID}
-  #  region: "us-central1"
+  #  region: "us-east1"
   #  cluster: "alloydb-aip-01"
   #  instance: "alloydb-aip-01-pr"
   #  database: "tickets-db"
