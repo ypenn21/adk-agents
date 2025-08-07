@@ -41,7 +41,7 @@ COPY --from=builder /app/adk_bug_ticket_agent /app/adk_bug_ticket_agent
 ENV PATH="/app/.venv/bin:$PATH"
 
 # Create a non-root user and group for security best practices
-RUN groupadd -r appgroup && useradd --no-log-init -r -g appgroup appuser && chown -R appuser:appgroup /app
+RUN groupadd -r appgroup && useradd --no-log-init -r -m -g appgroup appuser && chown -R appuser:appgroup /app
 
 # Switch to the non-root user
 USER appuser
