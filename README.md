@@ -330,6 +330,9 @@ Build the container image and push it to Artifact Registry with Cloud Build.
 
 ```bash
 gcloud builds submit --region=us-central1 --tag us-central1-docker.pkg.dev/$PROJECT_ID/adk/adk-agent-bug-assist:latest
+
+#for adk web ui use this build instead
+gcloud builds submit . --config cloudbuild.yaml
 ```
 
 ### 13 - Create Rag Engine Corpus in Vertexai
@@ -354,6 +357,7 @@ export PROJECT_ID="project-id"
 export RAG_CORPUS="projects/project-id/locations/region/ragCorpora/rag-corpus-id"
 export DB_URL="postgresql://postgres:pword@internal-ip-address:5432/tickets-db"
 
+#deploy adk custom ui with django
 gcloud run deploy adk-agent-bug-assist \
   --image=us-central1-docker.pkg.dev/$PROJECT_ID/adk/adk-agent-bug-assist:latest \
   --region=us-central1 \
@@ -363,7 +367,19 @@ gcloud run deploy adk-agent-bug-assist \
   --network=default \
   --subnet=default \
   --vpc-egress=private-ranges-only \
-  --set-env-vars=RAG_CORPUS=$RAG_CORPUS,DB_URL=$DB_URL,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=us-central1,GOOGLE_GENAI_USE_VERTEXAI=TRUE,MCP_TOOLBOX_URL=$MCP_TOOLBOX_URL
+  --set-env-vars=RAG_CORPUS=$RAG_CORPUS,DB_URL=$DB_URL,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=us-central1,GOOGLE_GENAI_USE_VERTEXAI=TRUE,MCP_TOOLBOX_URL=$MCP_TOOLBOX_URL, DJANGO=true
+
+#deploy adk web ui bootstrapped
+gcloud run deploy adk-web-ui \
+   --image=us-central1-docker.pkg.dev/$PROJECT_ID/adk/adk-web-ui-agent-bug-assist:latest \
+   --region=us-central1 \
+   --allow-unauthenticated \
+   --cpu=4 \
+   --memory=2Gi \
+   --network=vpc-demo-rag \
+   --subnet=subnet-psc-ew1 \
+   --vpc-egress=private-ranges-only \
+   --set-env-vars=GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=us-central1,GOOGLE_GENAI_USE_VERTEXAI=TRUE,MCP_TOOLBOX_URL=$MCP_TOOLBOX_URL
 ```
 
 Check log to see that this deployment is successfully.
