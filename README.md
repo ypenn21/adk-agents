@@ -25,6 +25,7 @@ Connects to MCP Toolbox, which in turn interacts with the Bug Ticket Database
 ### Dependencies 
 
 - Python 3.10+
+- [`.pyproject.toml`](pyproject.toml)
 
 Install the python 3.12 locally and confirm it as the default:
 ```shell
