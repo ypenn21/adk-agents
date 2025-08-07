@@ -1,3 +1,4 @@
+import os
 from google.adk.agents import Agent
 from . import system_prompt
 from .tools.tools import get_current_date, search_tool, toolbox_tools
@@ -14,4 +15,7 @@ def get_root_agent():
     return agent
 
 # this is only used by adk web not in the django framework.
-root_agent = get_root_agent()
+if os.environ.get("DJANGO") != "true":
+    root_agent = get_root_agent()
+else:
+    root_agent = None
