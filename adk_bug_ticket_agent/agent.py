@@ -13,7 +13,6 @@ def get_root_agent():
     )
     print("Root agent initialized.") # Added for debugging cold start
     return agent
-# --- End Global Initializations ---
 
 # this is only used by adk web not in the django framework.
 root_agent = get_root_agent()
