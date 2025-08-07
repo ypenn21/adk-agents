@@ -14,6 +14,8 @@ from . import system_prompt
 from .tools.tools import get_current_date, search_tool, toolbox_tools
 from google.adk.tools import load_memory
 from google.adk.memory import VertexAiRagMemoryService
+from .agent import get_agent
+
 
 # --- Global Initializations ---
 # For SQLite, make sure the directory for the DB file is writable by the Django process.
@@ -61,12 +63,7 @@ _root_agent_instance = None
 def get_root_agent():
     global _root_agent_instance
     if _root_agent_instance is None:
-        _root_agent_instance = Agent(
-            model="gemini-2.5-flash",
-            name="it_bug_assistant_agent",
-            instruction=system_prompt.agent_instruction,
-            tools=[load_memory, get_current_date, search_tool, *toolbox_tools],
-        )
+        _root_agent_instance = get_agent()
         print("Root agent initialized.") # Added for debugging cold start
     return _root_agent_instance
 # --- End Global Initializations ---

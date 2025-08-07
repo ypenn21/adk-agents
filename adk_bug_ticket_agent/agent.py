@@ -4,7 +4,7 @@ from . import system_prompt
 from .tools.tools import get_current_date, search_tool, toolbox_tools
 from google.adk.tools import load_memory
 
-def get_root_agent():
+def get_agent():
     agent = Agent(
             model="gemini-2.5-flash",
             name="it_bug_assistant_agent",
@@ -17,6 +17,6 @@ def get_root_agent():
 # this is only used by adk web not in the django framework.
 django_env = os.environ.get("DJANGO")
 if django_env is None or django_env.strip().lower() != "true":
-    root_agent = get_root_agent()
+    root_agent = get_agent()
 else:
     root_agent = None
