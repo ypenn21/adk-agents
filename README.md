@@ -468,6 +468,9 @@ uv sync
 python manage.py runserver 
 gunicorn web_ui.wsgi:application
 #try the ui: http://127.0.0.1:8000/agent/interact/
+
+#run the adk web ui not using django
+uv run adk web
 ```
 
 Here are some example requests you may ask the agent:
