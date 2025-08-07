@@ -479,6 +479,7 @@ uncomment the line _memory_service_instance = InMemoryMemoryService() in views.p
 Once you are done comment the line out again for cloud deployment. 
 
 ```bash
+#in order to download uv https://docs.astral.sh/uv/getting-started/installation/
 rm uv.lock
 uv sync
 python manage.py runserver 
