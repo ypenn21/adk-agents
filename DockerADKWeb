@@ -1,5 +1,5 @@
 # Use a Python image with uv pre-installed
-# Stage 1: Builder - Installs dependencies and collects static files
+# Stage 1: Builder - Installs dependencies
 FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim AS builder
 
 # Install the project into `/app`
@@ -12,12 +12,12 @@ ENV PYTHONUNBUFFERED=1
 # Copy only dependency management files first to leverage Docker cache
 COPY pyproject.toml ./
 
+# Remove django dependency and then install
 RUN sed -i '/django/d' pyproject.toml && \
     uv lock && \
     uv sync --frozen --no-install-project --no-dev
 
 # Copy the rest of the application source code.
-# Ensure you have a .dockerignore file to exclude unnecessary files (e.g., .git, tests, docs).
 COPY . .
 
 # Install the project itself.
@@ -25,8 +25,9 @@ RUN uv sync --frozen --no-dev
 
 # Place executables in the environment at the front of the path
 ENV PATH="/app/.venv/bin:$PATH"
-# Stage 2: Final image - A smaller runtime image
-FROM python:3.13-slim-bookworm
+
+# Stage 2: Final image - A smaller runtime image that includes uv
+FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim
 
 WORKDIR /app
 
@@ -35,7 +36,6 @@ ENV PYTHONUNBUFFERED=1
 # Copy only the necessary artifacts from the builder stage
 COPY --from=builder /app/.venv /app/.venv 
 COPY --from=builder /app/adk_bug_ticket_agent /app/adk_bug_ticket_agent
-# Add any other application-specific directories/files needed at runtime
 
 # Set the PATH to include the virtual environment's bin directory
 ENV PATH="/app/.venv/bin:$PATH"
@@ -49,5 +49,5 @@ USER appuser
 # Expose the port
 EXPOSE 8080
 
-# Run adk web by default, can also run api_server if you choose
+# Run adk web by default
 ENTRYPOINT ["uv", "run", "adk", "web", "--host", "0.0.0.0", "--port", "8080"]
