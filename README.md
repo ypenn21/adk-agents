@@ -22,9 +22,8 @@ Connects to MCP Toolbox, which in turn interacts with the Bug Ticket Database
 
 ## Setup and Installation
 
-### Prerequisites 
+### Dependencies 
 
-- [uv](https://docs.astral.sh/uv/getting-started/installation) (to manage dependencies)
 - Python 3.10+
 
 Install the python 3.12 locally and confirm it as the default:
