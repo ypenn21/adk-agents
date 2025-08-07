@@ -1,4 +1,3 @@
-import os
 from google.adk.agents import Agent
 from . import system_prompt
 from .tools.tools import get_current_date, search_tool, toolbox_tools
