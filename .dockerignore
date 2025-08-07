@@ -13,3 +13,4 @@ htmlcov/
 # or if you prefer to manage it outside the build context for the final image.
 # uv.lock
 # Any other files or directories not needed in the final image
+adk_bug_ticket_agent/agent.py
