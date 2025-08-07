@@ -15,7 +15,8 @@ def get_root_agent():
     return agent
 
 # this is only used by adk web not in the django framework.
-if os.environ.get("DJANGO") != "true":
+django_env = os.environ.get("DJANGO")
+if django_env is None or django_env.strip().lower() != "true":
     root_agent = get_root_agent()
 else:
     root_agent = None
