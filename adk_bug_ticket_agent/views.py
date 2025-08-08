@@ -57,16 +57,6 @@ def get_memory_service():
 
 #_memory_service_instance = InMemoryMemoryService() #uncomment this line to use in-memory storage for local environment testing
 
-# Lazy initialization for root_agent
-_root_agent_instance = None
-
-def get_root_agent():
-    global _root_agent_instance
-    if _root_agent_instance is None:
-        _root_agent_instance = get_agent()
-    return _root_agent_instance
-# --- End Global Initializations ---
-
 @csrf_exempt
 async def interact_with_agent(request): # Removed the initial check for session_service and memory_service
     # Ensure memory_service is initialized (it's lightweight, so global is fine)
@@ -106,7 +96,7 @@ async def interact_with_agent(request): # Removed the initial check for session_
                 print(f"Existing session for app: {app_name}, user: {user_id}, session: {session_id}")
             runner = Runner(
                 app_name=app_name,
-                agent=get_root_agent(), # Use the lazy-loaded agent
+                agent=get_agent(), # Use the lazy-loaded agent
                 session_service=current_session_service,
                 memory_service=get_memory_service(), # Use the lazy-loaded instance
             )
