@@ -3,16 +3,13 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 import json
 import time
-import uuid
 import os
-from google.adk.agents import Agent
 from google.adk.runners import Runner
 from google.adk.memory import InMemoryMemoryService
 from google.adk.sessions import DatabaseSessionService
 from google.genai import types as genai_types  # Aliased to avoid conflict if Django has a 'types'
 from . import system_prompt
 from .tools.tools import get_current_date, search_tool, toolbox_tools
-from google.adk.tools import load_memory
 from google.adk.memory import VertexAiRagMemoryService
 from .agent import get_agent
 
