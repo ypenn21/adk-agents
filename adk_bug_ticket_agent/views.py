@@ -51,8 +51,8 @@ def get_memory_service():
         )
     return _memory_service_instance
 
-
 _memory_service_instance = InMemoryMemoryService() #comment this line out if you hve RAG_CORPUS setup
+
 @csrf_exempt
 async def interact_with_agent(request): # Removed the initial check for session_service and memory_service
     # Ensure memory_service is initialized (it's lightweight, so global is fine)
