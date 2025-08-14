@@ -38,7 +38,7 @@ RAG_CORPUS_RESOURCE_NAME = os.environ.get("RAG_CORPUS", "projects/genai-playgrou
 SIMILARITY_TOP_K = 5
 VECTOR_DISTANCE_THRESHOLD = 0.7
 
-# Lazy initialization for memory_service
+# Lazy initialization for memory_service with RAG_CORPUS setup
 _memory_service_instance = None
 def get_memory_service():
     global _memory_service_instance
