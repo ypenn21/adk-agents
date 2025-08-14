@@ -52,7 +52,7 @@ def get_memory_service():
     return _memory_service_instance
 
 
-#_memory_service_instance = InMemoryMemoryService() #uncomment this line to use in-memory storage for local environment testing
+_memory_service_instance = InMemoryMemoryService() #uncomment this line to use in-memory storage for local environment testing
 
 @csrf_exempt
 async def interact_with_agent(request): # Removed the initial check for session_service and memory_service
