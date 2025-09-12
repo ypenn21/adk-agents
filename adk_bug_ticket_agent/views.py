@@ -67,7 +67,7 @@ async def interact_with_agent(request): # Removed the initial check for session_
             session_id = data.get('sessionId')
             new_message_data = data.get('newMessage')
 
-            if not all([app_name, user_id, session_id, new_message_data, new_message_data.get('parts')]):
+            if not all([app_name, user_id, session_id, new_message_data]) or not new_message_data.get('parts'):
                 return JsonResponse({'error': 'Invalid payload structure.'}, status=400)
 
             user_query = new_message_data['parts'][0].get('text')
