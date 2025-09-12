@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Support Agent</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        :root {
+            --body-bg: #1a1a1a;
+            --chat-bg: #2a2a2a;
+            --text-color: #f0f0f0;
+            --input-bg: #3a3a3a;
+            --user-msg-bg: #0055ff;
+            --agent-msg-bg: #4a4a4a;
+            --button-bg: #0055ff;
+            --button-hover-bg: #0044cc;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            background-color: var(--body-bg);
+            color: var(--text-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        #chat-container {
+            width: 100%;
+            max-width: 600px;
+            height: 80vh;
+            background-color: var(--chat-bg);
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+            display: flex;
+            flex-direction: column;
+        }
+        #message-area {
+            flex-grow: 1;
+            padding: 20px;
+            overflow-y: auto;
+        }
+        .message {
+            margin-bottom: 15px;
+            padding: 10px 15px;
+            border-radius: 15px;
+            max-width: 80%;
+            word-wrap: break-word;
+        }
+        .user-message {
+            background-color: var(--user-msg-bg);
+            align-self: flex-end;
+            margin-left: auto;
+        }
+        .agent-message {
+            background-color: var(--agent-msg-bg);
+            align-self: flex-start;
+        }
+        #input-area {
+            display: flex;
+            padding: 20px;
+            border-top: 1px solid var(--input-bg);
+        }
+        #message-input {
+            flex-grow: 1;
+            padding: 10px;
+            border: none;
+            border-radius: 5px;
+            background-color: var(--input-bg);
+            color: var(--text-color);
+        }
+        #send-button {
+            padding: 10px 20px;
+            margin-left: 10px;
+            border: none;
+            border-radius: 5px;
+            background-color: var(--button-bg);
+            color: white;
+            cursor: pointer;
+        }
+        #send-button:hover {
+            background-color: var(--button-hover-bg);
+        }
+    </style>
+</head>
+<body>
+    <div id="chat-container">
+        <div id="message-area">
+            <div class="message agent-message">Hello! How can I help you today?</div>
+        </div>
+        <div id="input-area">
+            <input type="text" id="message-input" placeholder="Type your message...">
+            <button id="send-button">Send</button>
+        </div>
+    </div>
+    <script>
+        $(document).ready(function() {
+            let sessionId = sessionStorage.getItem('adk_chat_session_id');
+            if (!sessionId) {
+                sessionId = self.crypto.randomUUID();
+                sessionStorage.setItem('adk_chat_session_id', sessionId);
+            }
+
+            function sendMessage() {
+                const messageText = $('#message-input').val().trim();
+                if (!messageText) return;
+
+                $('#message-area').append(`<div class="message user-message">${messageText}</div>`);
+                $('#message-input').val('');
+                $('#message-area').scrollTop($('#message-area')[0].scrollHeight);
+
+                const payload = {
+                    appName: "AgentBugAssistant",
+                    userId: "user_123",
+                    sessionId: sessionId,
+                    newMessage: {
+                        role: "user",
+                        parts: [{ text: messageText }]
+                    },
+                    streaming: false
+                };
+
+                $.ajax({
+                    url: '{% url "interact_with_agent" %}',
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify(payload),
+                    success: function(data) {
+                        const agentMessage = data.content.parts[0].text;
+                        $('#message-area').append(`<div class="message agent-message">${agentMessage}</div>`);
+                        $('#message-area').scrollTop($('#message-area')[0].scrollHeight);
+                    },
+                    error: function(xhr, status, error) {
+                        const errorMessage = xhr.responseJSON ? xhr.responseJSON.error : "An error occurred.";
+                        $('#message-area').append(`<div class="message agent-message">Error: ${errorMessage}</div>`);
+                        $('#message-area').scrollTop($('#message-area')[0].scrollHeight);
+                    }
+                });
+            }
+
+            $('#send-button').on('click', sendMessage);
+            $('#message-input').on('keypress', function(e) {
+                if (e.which === 13) {
+                    sendMessage();
+                }
+            });
+        });
+    </script>
+</body>
+</html>

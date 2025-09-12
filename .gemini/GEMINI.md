@@ -4,91 +4,54 @@ This document provides essential context for AI models interacting with this pro
 
 ## 1. Project Overview & Purpose
 
-*   **Primary Goal:** This project is a Django-based web service that hosts an "IT Bug Assistant Agent". The agent is designed to help IT support and software developers triage, manage, and resolve software issues. It uses the Google Agent Development Kit (ADK) to interact with a Gemini model, leveraging tools like RAG (Retrieval-Augmented Generation) with a PostgreSQL database and Google Search to provide intelligent assistance.
-*   **Business Domain:** IT Service Management (ITSM) and Software Development Support.
+* **Primary Goal:** This project is an "IT Bug Assistant Agent" designed to help IT Support and Software Developers triage, manage, and resolve software issues. It provides a web interface for interaction.
+* **Business Domain:** IT Support, Software Development, and Issue Tracking.
 
-## 2. Getting Started
+## 2. Core Technologies & Stack
 
-To get the project up and running locally, follow these steps:
+* **Languages:** Python 3.12
+* **Frameworks & Runtimes:** Django, Gunicorn
+* **Databases:** PostgreSQL (for production), SQLite (for local development)
+* **Key Libraries/Dependencies:** `google-adk`, `google-generativeai`, `django`, `psycopg2-binary`, `whitenoise`
+* **Package Manager(s):** `uv`
 
-1.  **Set up a Python virtual environment:** This project uses `uv`, so you can create a virtual environment using `python -m venv .venv` and activate it with `source .venv/bin/activate`.
-2.  **Install dependencies:** Install all the required dependencies using `uv sync`.
-3.  **Set up the database:** This project uses PostgreSQL. Make sure you have a local PostgreSQL instance running, and then run the scripts in `/sql/data.sql` to set up the database schema and initial data.
-4.  **Configure environment variables:** Create a `.env` file in the root of the project (you can copy `.env.example` to get started) and fill in the required environment variables, such as your database connection string and Google API key.
-5.  **Run the MCP Toolbox server:** The MCP Toolbox server is used for agent-database interaction. Run it locally using the instructions in the `mcp-servers/mcp-toolbox/README.md` file.
-6.  **Start the Django development server:** Run `python manage.py runserver` to start the Django development server.
+## 3. Architectural Patterns
 
-## 3. Core Technologies & Stack
+* **Overall Architecture:** Monolithic Application using Django's Model-View-Template (MVT) architecture.
+* **Directory Structure Philosophy:**
+    * `/web_ui`: The main Django project directory containing settings and configurations.
+    * `/adk_bug_ticket_agent`: A Django app that contains the core logic for the bug assistant agent.
+    * `/mcp-servers`: Contains the MCP Toolbox for database interactions.
+    * `/sql`: Holds SQL scripts for database schema and data setup.
+    * `/Dockerfile`: Defines the container for the Django application.
+    * `/cloudbuild.yaml`: CI/CD configuration for Google Cloud Build.
 
-*   **Languages:** Python 3.10+ (as specified in `pyproject.toml` and `Dockerfile`).
-*   **Frameworks & Runtimes:**
-    *   **Web Framework:** Django (>=5.0, <5.3)
-    *   **Agent Framework:** Google Agent Development Kit (ADK) (v1.9.0)
-    *   **Application Server:** Gunicorn
-    *   **Containerization:** Docker
-*   **Databases:**
-    *   **Primary:** PostgreSQL (Cloud SQL for production, local instance for development).
-    *   **Development Fallback:** SQLite (default Django configuration in `settings.py`).
-*   **Key Libraries/Dependencies:**
-    *   `google-adk`: Core agent development framework.
-    *   `google-generativeai`: For interacting with Gemini models.
-    *   `psycopg2-binary`: PostgreSQL adapter for Python.
-    *   `whitenoise`: For serving static files efficiently.
-    *   `python-dotenv`: For managing environment variables.
-*   **Package Manager(s):** `uv` (as seen in `uv.lock` and `Dockerfile`). Dependency definitions are in `pyproject.toml`.
+## 4. Coding Conventions & Style Guide
 
-## 4. Architectural Patterns
+* **Formatting:** The code follows the PEP 8 style guide for Python. Indentation is 4 spaces.
+* **Naming Conventions:**
+    * `variables`, `functions`: `snake_case` (`my_variable`)
+    * `classes`: `PascalCase` (`MyClass`)
+    * `files`: `snake_case` (`views.py`)
+* **API Design:** The project exposes a RESTful-like API endpoint at `/agent/interact/` for interacting with the agent, using JSON for request/response bodies.
+* **Error Handling:** Uses standard Python `try...except` blocks for error handling in view functions.
 
-*   **Overall Architecture:** Monolithic Application. The project consists of a single Django application that serves both the web UI and the agent interaction endpoint. It follows Django's Model-View-Template (MVT) pattern.
-*   **Directory Structure Philosophy:**
-    *   `/web_ui`: The main Django project directory containing global settings (`settings.py`) and root URL configuration (`urls.py`).
-    *   `/adk_bug_ticket_agent`: A self-contained Django app that holds the primary application logic.
-        *   `views.py`: Contains the request handling logic, including the main `interact_with_agent` endpoint.
-        *   `agent.py`: Defines the ADK agent, its model (`gemini-2.5-flash`), and its tools.
-        *   `tools/`: Defines the tools available to the agent (e.g., database interactions).
-        *   `templates/`: Contains the HTML template for the web UI.
-    *   `/sql`: Contains SQL scripts for database schema setup and data insertion.
-    *   `/mcp-servers`: Contains configuration and binaries for the Model Context Protocol (MCP) Toolbox, used for agent-database interaction.
-    *   `/plans`: Contains implementation plans for new features.
+## 5. Key Files & Entrypoints
 
-## 5. Coding Conventions & Style Guide
+* **Main Entrypoint(s):** `manage.py` for development server, `web_ui/wsgi.py` for production (used by Gunicorn).
+* **Configuration:** `web_ui/settings.py` (Django settings), `.env` (for environment variables), `pyproject.toml` (project dependencies).
+* **CI/CD Pipeline:** `cloudbuild.yaml` and `cloudbuild-django.yaml` for Google Cloud Build.
 
-*   **Formatting:** While no explicit linter configuration (e.g., `.flake8`, `.pylintrc`) is present, the code generally follows the PEP 8 style guide for Python.
-*   **Naming Conventions:**
-    *   `variables`, `functions`: snake_case (`interact_with_agent`).
-    *   `classes`: PascalCase (e.g., `Runner` from ADK).
-    *   `files`: snake_case (`views.py`).
-*   **API Design:** The primary endpoint `/agent/interact/` is a RESTful-style endpoint that accepts POST requests with a JSON payload for agent interaction and GET requests to serve the HTML interface.
-*   **Error Handling:** The main view `interact_with_agent` in `views.py` uses a `try...except` block to catch and log exceptions, returning a JSON response with a 500 status code on error.
+## 6. Development & Testing Workflow
 
-## 6. Key Files & Entrypoints
+* **Local Development Environment:** The `README.md` provides detailed instructions for setting up a local environment using `pyenv`, a Python virtual environment, `uv`, and a local PostgreSQL database. The development server is run with `python manage.py runserver`.
+* **Testing:** A `/adk_bug_ticket_agent/tests` directory exists, but contains no tests. New code should ideally be accompanied by corresponding tests.
+* **CI/CD Process:** When code is pushed, Google Cloud Build uses `cloudbuild.yaml` to build a Docker image from the `Dockerfile` and push it to Google Artifact Registry.
 
-*   **Main Entrypoint(s):**
-    *   `manage.py`: Standard Django command-line utility for development tasks (e.g., `runserver`).
-    *   `web_ui/wsgi.py`: The WSGI entrypoint for Gunicorn in production.
-*   **Configuration:**
-    *   `.env`: (Not committed) For storing environment variables like API keys and database URLs. An example is provided in `.env.example`.
-    *   `web_ui/settings.py`: Main Django project settings.
-    *   `gunicorn.conf.py`: Configuration for the Gunicorn server.
-    *   `mcp-servers/mcp-toolbox/tools.yaml`: Defines the database tools for the MCP Toolbox server.
+## 7. Specific Instructions for AI Collaboration
 
-## 7. Testing
-
-*   **Current Status:** There is no dedicated `/tests` directory or testing framework specified in the dependencies. Testing appears to be done manually by interacting with the local or deployed service.
-*   **Recommendation:** To improve the quality and reliability of the codebase, it is highly recommended to add automated tests. `pytest` is a good choice for a testing framework, and it integrates well with Django.
-
-## 8. Deployment
-
-*   **CI/CD Process:** When `gcloud builds submit` is run, Google Cloud Build uses `cloudbuild.yaml` or `cloudbuild-django.yaml` to build a Docker image from the corresponding `Dockerfile` and pushes it to Google Artifact Registry. The application is then deployed to Cloud Run.
-*   **Deployment Target:** The application is deployed to Google Cloud Run.
-
-## 9. Specific Instructions for AI Collaboration
-
-*   **Contribution Guidelines:** No `CONTRIBUTING.md` file exists. Follow existing patterns:
-    *   Place new Django views in `adk_bug_ticket_agent/views.py`.
-    *   Register new URL patterns in `adk_bug_ticket_agent/urls.py`.
-    *   Define new agent tools in `adk_bug_ticket_agent/tools/tools.py` and register them in `adk_bug_ticket_agent/agent.py`.
-*   **Infrastructure (IaC):** The project does not use declarative IaC tools like Terraform. Deployment is managed through a series of `gcloud` CLI commands documented in `README.md`. Be cautious when suggesting changes to these commands.
-*   **Security:** The `SECRET_KEY` in `settings.py` is hardcoded and exposed. For production, this should be loaded from a secure source like Secret Manager. The `@csrf_exempt` decorator is used on the main view; ensure any new POST endpoints are also properly secured.
-*   **Dependencies:** To add a new Python dependency, add it to the `[project]` section of `pyproject.toml` and then run `uv sync` to update the `uv.lock` file and the virtual environment.
-*   **Commit Messages:** No formal commit message convention is apparent from the context. It is recommended to adopt a standard like Conventional Commits (e.g., `feat:`, `fix:`, `docs:`) for future work.
+* **Contribution Guidelines:** No formal `CONTRIBUTING.md` was found. Please follow existing patterns in the code.
+* **Infrastructure (IaC):** The `README.md` contains `gcloud` commands for setting up cloud infrastructure. Any changes to these commands must be carefully reviewed.
+* **Security:** Be mindful of security. Do not hardcode secrets or keys. The project uses `.env` files for secrets, which should not be committed to version control.
+* **Dependencies:** To add a new dependency, add it to the `[project.dependencies]` section in `pyproject.toml` and then run `uv sync` to update the environment.
+* **Commit Messages:** The commit history does not show a strict convention. It is recommended to write clear, concise, and imperative-style commit messages (e.g., "feat: Add user authentication").
