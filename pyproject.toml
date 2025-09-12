@@ -5,7 +5,7 @@ description = "ADK Agent"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "google-adk==1.9.0",
+    "google-adk==1.11.0",
     "python-dotenv==1.1.0",
     "toolbox-core==0.1.0",
     "gunicorn",

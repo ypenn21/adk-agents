@@ -10,3 +10,4 @@ __pycache__/
 .venv/
 venv/
 ENV/
+mcp-servers/mcp-toolbox/toolbox
