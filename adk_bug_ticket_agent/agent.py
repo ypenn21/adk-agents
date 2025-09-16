@@ -6,7 +6,7 @@ from google.adk.tools import load_memory
 
 _root_agent = None
 
-
+# a2a root & subagents https://google.github.io/adk-docs/a2a/quickstart-consuming/#start-the-remote-prime-agent-server
 def get_agent():
     global _root_agent
     if _root_agent is None:
