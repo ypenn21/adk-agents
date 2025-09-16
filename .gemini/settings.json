@@ -1,0 +1,51 @@
+{
+  "theme": "Dracula",
+  "telemetry": {
+    "enabled": false,
+    "target": "gcp"
+  },
+  "mcpServers": {
+    "cloud-run": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@google-cloud/cloud-run-mcp"
+      ]
+    },
+    "jira": {
+      "command": "npx",
+        "args": [
+          "mcp-remote",
+          "https://mcp.atlassian.com/v1/sse",
+          "80008",
+          "--debug"
+          //"--jira-url", "https://google-team-coler8gf.atlassian.net",
+          //"--jira-username", "yannipeng@google.com",
+          //"--jira-token", "token"
+       ]
+    },
+    "github": {
+      "command": "/opt/homebrew/bin/go",
+      "args": [
+        "run",
+        "github.com/github/github-mcp-server/cmd/github-mcp-server@latest",
+        "stdio",
+        "--dynamic-toolsets"
+      ],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "github_pat"
+      }
+    },
+    "mcp-tool-box-db": {
+      "command": "npx",
+      "args": [
+        "mcp-remote",
+        "http://127.0.0.1:5000/mcp"
+      ],
+      "transportType": "streamable-http"
+    }
+  },
+  "selectedAuthType": "gemini-api-key",
+  "hasSeenIdeIntegrationNudge": true,
+  "ideMode": true
+}
