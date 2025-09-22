@@ -1,0 +1,96 @@
+openapi: 3.0.0
+info:
+  title: IT Bug Assistant Agent API
+  description: API for interacting with the IT Bug Assistant Agent.
+  version: 1.0.0
+servers:
+  - url: /
+paths:
+  /agent/interact/:
+    get:
+      summary: Get the agent interaction UI
+      description: Renders the HTML page for interacting with the agent.
+      responses:
+        '200':
+          description: HTML content of the agent UI.
+          content:
+            text/html:
+              schema:
+                type: string
+    post:
+      summary: Interact with the agent
+      description: Send a message to the agent and get a response.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentRequest'
+      responses:
+        '200':
+          description: Successful response from the agent.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentResponse'
+        '400':
+          description: Invalid request payload.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+components:
+  schemas:
+    AgentRequest:
+      type: object
+      properties:
+        appName:
+          type: string
+          example: "it_bug_assistant_agent"
+        userId:
+          type: string
+          example: "user123"
+        sessionId:
+          type: string
+          example: "session456"
+        newMessage:
+          type: object
+          properties:
+            parts:
+              type: array
+              items:
+                type: object
+                properties:
+                  text:
+                    type: string
+                    example: "Hello, agent!"
+    AgentResponse:
+      type: object
+      properties:
+        content:
+          type: object
+          properties:
+            parts:
+              type: array
+              items:
+                type: object
+                properties:
+                  text:
+                    type: string
+            role:
+              type: string
+              example: "model"
+        timestamp:
+          type: number
+          example: 1678886400
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
