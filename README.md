@@ -498,3 +498,4 @@ Here are some example requests you may ask the agent:
 
 ### Reference google adk-samples for more samples on adk
 https://github.com/google/adk-samples
+https://medium.com/google-cloud/2-minute-adk-speed-up-your-agent-with-parallel-tools-56450c3edb64
