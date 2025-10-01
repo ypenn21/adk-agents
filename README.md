@@ -500,3 +500,4 @@ Here are some example requests you may ask the agent:
 https://github.com/google/adk-samples
 https://medium.com/google-cloud/2-minute-adk-speed-up-your-agent-with-parallel-tools-56450c3edb64
 https://agents.md
+https://medium.com/google-cloud/using-open-telemetry-otlp-on-cloud-run-72cb8d36e1c4
