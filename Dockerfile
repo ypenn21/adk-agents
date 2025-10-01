@@ -43,7 +43,7 @@ ENV PYTHONUNBUFFERED=1
 # Copy only the necessary artifacts from the builder stage
 COPY --from=builder /app/.venv /app/.venv 
 COPY --from=builder /app/staticfiles /app/staticfiles
-COPY --from=builder /app/web_ui /app/web_ui
+COPY --from=builder /app/web /app/web
 COPY --from=builder /app/adk_bug_ticket_agent /app/adk_bug_ticket_agent
 COPY --from=builder /app/manage.py /app/manage.py
 COPY --from=builder /app/gunicorn.conf.py /app/gunicorn.conf.py
@@ -62,4 +62,4 @@ USER appuser
 EXPOSE 8080
 
 # Run Gunicorn as the production server
-ENTRYPOINT ["gunicorn", "web_ui.wsgi:application", "--bind", "0.0.0.0:8080"]
+ENTRYPOINT ["gunicorn", "web.wsgi:application", "--bind", "0.0.0.0:8080"]
