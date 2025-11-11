@@ -501,3 +501,35 @@ https://github.com/google/adk-samples
 https://medium.com/google-cloud/2-minute-adk-speed-up-your-agent-with-parallel-tools-56450c3edb64
 https://agents.md
 https://medium.com/google-cloud/using-open-telemetry-otlp-on-cloud-run-72cb8d36e1c4
+
+
+### Register agent to Gemini Enterprise aka Agent Space
+
+Placeholder Descriptions:
+
+PROJECT_NUMBER: Your Google Cloud project number.
+LOCATION: The location of your Discovery Engine instance (e.g., global).
+ENGINE_ID: The ID of your Gemini Enterprise engine.
+AGENT_NAME: A unique name for your agent.
+AGENT_DISPLAY_NAME: The name that will be displayed in the Gemini Enterprise UI.
+AGENT_DESCRIPTION: A brief description of your agent's capabilities.
+AGENT_URL: The public URL of your deployed agent.
+
+```bash
+curl -X POST \
+-H "Authorization: Bearer $(gcloud auth print-access-token)" \
+-H "Content-Type: application/json" \
+https://discoveryengine.googleapis.com/v1alpha/projects/PROJECT_NUMBER/locations/LOCATION/collections/default_collection/engines/ENGINE_ID/assistants/default_assistant/agents -d \
+'{
+  "name": "AGENT_NAME",
+  "displayName": "AGENT_DISPLAY_NAME",
+  "description": "AGENT_DESCRIPTION",
+   "icon": {
+    "content": "data:image/png;base64,iVBORw="
+  },
+  "a2aAgentDefinition": {
+    "jsonAgentCard": "{\"provider\":{\"organization\":\"<PROVIDER_ORGANIZATON>\",\"url\":\"AGENT_URL\"},\"name\":\"AGENT_NAME\",\"description\":\"AGENT_DESCRIPTION\",\"capabilities\":{},\"defaultInputModes\":[\"text/plain\"],\"defaultOutputModes\":[\"text/plain\"],\"skills\":[{\"description\":\"Chat with the Gemini agent.\",\"examples\":[\"Hello, world!\"],\"id\":\"chat\",\"name\":\"Chat Skill\",\"tags\":[\"chat\"]}],\"version\":\"1.0.0\"}"
+  }
+}'
+
+```
