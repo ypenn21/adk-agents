@@ -52,4 +52,4 @@ ENV A2A_HOST=0.0.0.0
 EXPOSE 8001
 
 # Run uvicorn for a2a agent card server
-ENTRYPOINT ["/bin/sh", "-c", "uvicorn adk_bug_ticket_agent.agent:a2a_app --host $A2A_HOST --port 8080"]
+ENTRYPOINT ["/bin/sh", "-c", "uvicorn adk_bug_ticket_agent.agent:a2a_app --host $A2A_HOST --port 8001"]
