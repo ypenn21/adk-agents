@@ -32,13 +32,13 @@ class ServiceManager:
     """A centralized manager for agent-related services."""
 
     def __init__(self):
-        """Initializes and holds instances of all services."""
+        """Initializes the manager with lazy-loaded services."""
         print("Initializing ServiceManager...")
-        self.session_service = self._init_session_service()
-        self.memory_service = self._init_memory_service()
-        self.root_agent = self._init_agent()
-        self.agent_executor = self._init_agent_executor()
-        print("ServiceManager initialized.")
+        self._session_service = None
+        self._memory_service = None
+        self._root_agent = None
+        self._agent_executor = None
+        print("ServiceManager initialized (services will be lazy-loaded).")
 
     def _init_session_service(self):
         """Initializes the database session service."""
@@ -74,26 +74,54 @@ class ServiceManager:
         print("Initializing AdkAgentToA2AExecutor...")
         return AdkAgentToA2AExecutor(self.root_agent, self.session_service, self.memory_service)
 
+    @property
+    def session_service(self):
+        """Lazy-loads and returns the session service."""
+        if self._session_service is None:
+            self._session_service = self._init_session_service()
+        return self._session_service
+
+    @property
+    def memory_service(self):
+        """Lazy-loads and returns the memory service."""
+        if self._memory_service is None:
+            self._memory_service = self._init_memory_service()
+        return self._memory_service
+
+    @property
+    def root_agent(self):
+        """Lazy-loads and returns the root agent."""
+        if self._root_agent is None:
+            self._root_agent = self._init_agent()
+        return self._root_agent
+
+    @property
+    def agent_executor(self):
+        """Lazy-loads and returns the agent executor."""
+        if self._agent_executor is None:
+            self._agent_executor = self._init_agent_executor()
+        return self._agent_executor
+
 # Create a single, module-level instance of the service manager.
 # This avoids global variables for each service and centralizes initialization.
 _service_manager = ServiceManager()
 
 def get_session_service():
-    """Returns the session service instance from the manager."""
+    """Returns the session service instance from the manager (lazy-loaded)."""
     return _service_manager.session_service
 
 def get_memory_service():
-    """Returns the memory service instance from the manager."""
+    """Returns the memory service instance from the manager (lazy-loaded)."""
     return _service_manager.memory_service
 
 
 # a2a root & subagents https://google.github.io/adk-docs/a2a/quickstart-consuming/#start-the-remote-prime-agent-server
 def get_agent():
-    """Returns the root agent instance from the manager."""
+    """Returns the root agent instance from the manager (lazy-loaded)."""
     return _service_manager.root_agent
 
 def get_agent_executor():
-    """Returns the agent executor instance from the manager."""
+    """Returns the agent executor instance from the manager (lazy-loaded)."""
     return _service_manager.agent_executor
 
 capabilities = AgentCapabilities(streaming=True)
