@@ -358,8 +358,8 @@ export RAG_CORPUS="projects/project-id/locations/region/ragCorpora/rag-corpus-id
 export DB_URL="postgresql://postgres:pword@internal-ip-address:5432/tickets-db"
 
 #deploy adk custom ui with django
-gcloud run deploy adk-agent-bug-assist \
-  --image=us-central1-docker.pkg.dev/$PROJECT_ID/adk/adk-agent-bug-assist:latest \
+gcloud run deploy adk-a2a-agent-bug-assist \
+  --image=us-central1-docker.pkg.dev/$PROJECT_ID/adk/adk-agent-a2a-bug-assist:latest \
   --region=us-central1 \
   --allow-unauthenticated \
   --cpu=4 \
@@ -367,7 +367,7 @@ gcloud run deploy adk-agent-bug-assist \
   --network=default \
   --subnet=default \
   --vpc-egress=private-ranges-only \
-  --set-env-vars=RAG_CORPUS=$RAG_CORPUS,DB_URL=$DB_URL,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=us-central1,GOOGLE_GENAI_USE_VERTEXAI=TRUE,MCP_TOOLBOX_URL=$MCP_TOOLBOX_URL, DJANGO=true
+  --set-env-vars=GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=us-central1,GOOGLE_GENAI_USE_VERTEXAI=TRUE,MCP_TOOLBOX_URL=$MCP_TOOLBOX_URL, DJANGO=true
 
 #deploy adk web ui bootstrapped
 gcloud run deploy adk-web-ui \
@@ -488,6 +488,10 @@ gunicorn web.wsgi:application
 
 #run the adk web ui not using django
 uv run adk web
+
+#run a2a
+uvicorn adk_bug_ticket_agent.agent:a2a_app --host localhost --port 8001
+#try the ui: http://127.0.0.1:8001/.well-known/agent-card.json
 ```
 
 Here are some example requests you may ask the agent:
@@ -515,15 +519,17 @@ AGENT_DISPLAY_NAME: The name that will be displayed in the Gemini Enterprise UI.
 AGENT_DESCRIPTION: A brief description of your agent's capabilities.
 AGENT_URL: The public URL of your deployed agent.
 
+# IT Bug Assistant Agent
+
 ```bash
 curl -X POST \
 -H "Authorization: Bearer $(gcloud auth print-access-token)" \
 -H "Content-Type: application/json" \
 https://discoveryengine.googleapis.com/v1alpha/projects/PROJECT_NUMBER/locations/LOCATION/collections/default_collection/engines/ENGINE_ID/assistants/default_assistant/agents -d \
 '{
-  "name": "AGENT_NAME",
-  "displayName": "AGENT_DISPLAY_NAME",
-  "description": "AGENT_DESCRIPTION",
+  "name": "IT Bug Assistant Agent",
+  "displayName": "Soft Micro Bug Agent",
+  "description": "The Bug Assistant is a sample agent hosted on django designed to help IT Support and Software Developers triage, manage, and resolve software issues. This agent uses ADK Python, PostgreSQL database, Gemini, MCP server, RAG, and Google Search to assist IT in triaging. ",
    "icon": {
     "content": "data:image/png;base64,iVBORw="
   },

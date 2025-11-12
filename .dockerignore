@@ -1,15 +1,74 @@
-.git
-.gitignore
+# Python virtual environments
 .venv/
+venv/
+env/
+ENV/
+
+# Python cache and compiled files
 __pycache__/
-*.pyc
-*.log
-.DS_Store
-.mypy_cache/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+
+# Testing
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
 htmlcov/
+.coverage
+.tox/
+*.cover
+
+# IDE and editor files
 .vscode/
-# If you generate uv.lock in the builder stage and don't need it in the final image source,
-# or if you prefer to manage it outside the build context for the final image.
-# uv.lock
-# Any other files or directories not needed in the final image
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Environment and secrets
+.env
+.env.*
+*.pem
+*.key
+
+# Documentation and project files
+*.md
+README*
+docs/
+tests/
+.github/
+
+# Docker files (don't need these in the image)
+Dockerfile*
+DockerADKWeb
+DockerAgentCard
+DockerA2A
+docker-compose*.yml
+.dockerignore
+
+# Logs
+*.log
+logs/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# uv lock file (generated during build)
+uv.lock
+
+# Miscellaneous
+.gemini/
+settings.json
+a2a_sample/
