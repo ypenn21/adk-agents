@@ -12,7 +12,7 @@ from google.adk.tools import load_memory
 
 _root_agent = None
 AGENT_PORT = os.environ.get("AGENT_PORT", "8000")
-AGENT_URL = os.environ.get("AGENT_URL", f"http://127.0.0.1")
+AGENT_URL = os.environ.get("AGENT_URL", f"http://127.0.0.1:{AGENT_PORT}")
 SUPPORTED_CONTENT_TYPES = ["text", "text/plain"]
 
 # a2a root & subagents https://google.github.io/adk-docs/a2a/quickstart-consuming/#start-the-remote-prime-agent-server
@@ -59,7 +59,7 @@ if django_env is None or django_env.strip().lower() != "true":
     # The agent card uses the agent's name and description properties
     # Skills are auto-generated from the agent's tools
     root_agent = get_agent()
-    a2a_app = to_a2a(root_agent, port=AGENT_PORT)
+    # a2a_app = to_a2a(root_agent, port=AGENT_PORT)
 
     request_handler = DefaultRequestHandler(
         agent_executor=AdkAgentToA2AExecutor(root_agent),
