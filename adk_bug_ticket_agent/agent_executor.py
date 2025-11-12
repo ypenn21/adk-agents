@@ -28,16 +28,23 @@ class AdkAgentToA2AExecutor(AgentExecutor):
     _runner: Runner
 
     def __init__(
-        self, agent: BaseAgent = None
+        self,
+        agent: BaseAgent = None,
+        session_service=InMemorySessionService(),
+        memory_service=InMemoryMemoryService(),
+        runner: Runner = None
     ):
         self.name = "IT Bug Assistant Agent"
-        self._runner = Runner(
-            app_name=self.name,
-            agent=agent,
-            session_service=InMemorySessionService(),
-            artifact_service=InMemoryArtifactService(),
-            memory_service=InMemoryMemoryService(),
-        )
+        if runner is not None:
+            self._runner = runner
+        else:
+            self._runner = Runner(
+                app_name=self.name,
+                agent=agent,
+                session_service=session_service,
+                artifact_service=InMemoryArtifactService(),
+                memory_service=memory_service,
+            )
         self.agent = agent
         self._user_id = "remote_agent"
 

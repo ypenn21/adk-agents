@@ -5,54 +5,19 @@ import json
 import time
 import os
 from google.adk.runners import Runner
-from google.adk.memory import InMemoryMemoryService
-from google.adk.sessions import DatabaseSessionService
 from google.genai import types as genai_types  # Aliased to avoid conflict if Django has a 'types'
 from . import system_prompt
 from .tools.tools import get_current_date, search_tool, toolbox_tools
-from google.adk.memory import VertexAiRagMemoryService
-from .agent import get_agent
+from .agent import get_agent, get_memory_service, get_session_service
 
 
 # --- Global Initializations ---
 # For SQLite, make sure the directory for the DB file is writable by the Django process.
 # Using an absolute path or ensuring BASE_DIR is correctly set for Django is important.
-# For simplicity, placing it in the project root. For local PostgreSQL, use the following format.
-DB_URL = os.environ.get("DB_URL", "postgresql://postgres:admin@localhost:5432/tickets-db")
 # Explore using VertexAiSessionService or InMemorySessionService for production https://google.github.io/adk-docs/sessions/session/#managing-sessions-with-a-sessionservice
 # Lazy initialization for session_service
 _session_service_instance = None
-def get_session_service():
-    global _session_service_instance
-    if _session_service_instance is None:
-        print("set _session_service_instance to a new DatabaseSessionService instance")
-        _session_service_instance = DatabaseSessionService(db_url=DB_URL)
-        print(f"ADK Database URL: {DB_URL}")
-    return _session_service_instance
-
-# adding memory https://google.github.io/adk-docs/sessions/memory/#how-memory-works-in-practice
-
-# The RAG Corpus name or ID
-RAG_CORPUS_RESOURCE_NAME = os.environ.get("RAG_CORPUS", "projects/genai-playground/locations/us-central1/ragCorpora/rag-corpus-id")
-# Optional configuration for retrieval
-SIMILARITY_TOP_K = 5
-VECTOR_DISTANCE_THRESHOLD = 0.7
-
-# Lazy initialization for memory_service with RAG_CORPUS setup
 _memory_service_instance = None
-def get_memory_service():
-    global _memory_service_instance
-    if _memory_service_instance is None:
-        print("set _memory_service_instance to a new VertexAiRagMemoryService instance")
-        _memory_service_instance = VertexAiRagMemoryService(
-            rag_corpus=RAG_CORPUS_RESOURCE_NAME,
-            similarity_top_k=SIMILARITY_TOP_K,
-            vector_distance_threshold=VECTOR_DISTANCE_THRESHOLD
-        )
-    return _memory_service_instance
-
-_memory_service_instance = InMemoryMemoryService() #comment this line out if you hve RAG_CORPUS setup
-
 @csrf_exempt
 async def interact_with_agent(request): # Removed the initial check for session_service and memory_service
     # Ensure memory_service is initialized (it's lightweight, so global is fine)

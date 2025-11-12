@@ -9,25 +9,92 @@ from . import system_prompt
 from .agent_executor import AdkAgentToA2AExecutor
 from .tools.tools import get_current_date, search_tool, toolbox_tools
 from google.adk.tools import load_memory
+from google.adk.sessions import DatabaseSessionService
+from google.adk.memory import InMemoryMemoryService
+# from google.adk.memory import VertexAiRagMemoryService
 
-_root_agent = None
 AGENT_PORT = os.environ.get("AGENT_PORT", "8000")
 AGENT_URL = os.environ.get("AGENT_URL", f"http://127.0.0.1:{AGENT_PORT}")
 SUPPORTED_CONTENT_TYPES = ["text", "text/plain"]
+DB_URL = os.environ.get("DB_URL", "postgresql://postgres:admin@localhost:5432/tickets-db")
 
-# a2a root & subagents https://google.github.io/adk-docs/a2a/quickstart-consuming/#start-the-remote-prime-agent-server
-def get_agent():
-    global _root_agent
-    if _root_agent is None:
-        _root_agent = Agent(
+
+# adding memory https://google.github.io/adk-docs/sessions/memory/#how-memory-works-in-practice
+
+# The RAG Corpus name or ID
+RAG_CORPUS_RESOURCE_NAME = os.environ.get("RAG_CORPUS", "projects/genai-playground/locations/us-central1/ragCorpora/rag-corpus-id")
+# Optional configuration for retrieval
+SIMILARITY_TOP_K = 5
+VECTOR_DISTANCE_THRESHOLD = 0.7
+
+
+class ServiceManager:
+    """A centralized manager for agent-related services."""
+
+    def __init__(self):
+        """Initializes and holds instances of all services."""
+        print("Initializing ServiceManager...")
+        self.session_service = self._init_session_service()
+        self.memory_service = self._init_memory_service()
+        self.root_agent = self._init_agent()
+        self.agent_executor = self._init_agent_executor()
+        print("ServiceManager initialized.")
+
+    def _init_session_service(self):
+        """Initializes the database session service."""
+        print("Initializing DatabaseSessionService...")
+        service = DatabaseSessionService(db_url=DB_URL)
+        print(f"ADK Database URL: {DB_URL}")
+        return service
+
+    def _init_memory_service(self):
+        """Initializes the memory service."""
+        print("Initializing InMemoryMemoryService...")
+        # For RAG-based memory, you would use VertexAiRagMemoryService
+        # return VertexAiRagMemoryService(
+        #     rag_corpus=RAG_CORPUS_RESOURCE_NAME,
+        #     similarity_top_k=SIMILARITY_TOP_K,
+        #     vector_distance_threshold=VECTOR_DISTANCE_THRESHOLD
+        # )
+        return InMemoryMemoryService()
+
+    def _init_agent(self):
+        """Initializes the root agent."""
+        print("Initializing Root Agent...")
+        return Agent(
             model="gemini-2.5-flash",
             name="it_bug_assistant_agent",
             description="An agent to help users with bug tickets, including searching, creating, and updating them.",
             instruction=system_prompt.agent_instruction,
             tools=[load_memory, get_current_date, search_tool, *toolbox_tools],
         )
-        print("Root agent initialized.")  # Added for debugging cold start
-    return _root_agent
+
+    def _init_agent_executor(self):
+        """Initializes the agent executor."""
+        print("Initializing AdkAgentToA2AExecutor...")
+        return AdkAgentToA2AExecutor(self.root_agent, self.session_service, self.memory_service)
+
+# Create a single, module-level instance of the service manager.
+# This avoids global variables for each service and centralizes initialization.
+_service_manager = ServiceManager()
+
+def get_session_service():
+    """Returns the session service instance from the manager."""
+    return _service_manager.session_service
+
+def get_memory_service():
+    """Returns the memory service instance from the manager."""
+    return _service_manager.memory_service
+
+
+# a2a root & subagents https://google.github.io/adk-docs/a2a/quickstart-consuming/#start-the-remote-prime-agent-server
+def get_agent():
+    """Returns the root agent instance from the manager."""
+    return _service_manager.root_agent
+
+def get_agent_executor():
+    """Returns the agent executor instance from the manager."""
+    return _service_manager.agent_executor
 
 capabilities = AgentCapabilities(streaming=True)
 skill = AgentSkill(
@@ -60,7 +127,6 @@ if django_env is None or django_env.strip().lower() != "true":
     # Skills are auto-generated from the agent's tools
     root_agent = get_agent()
     # a2a_app = to_a2a(root_agent, port=AGENT_PORT)
-
     request_handler = DefaultRequestHandler(
         agent_executor=AdkAgentToA2AExecutor(root_agent),
         task_store=InMemoryTaskStore(),

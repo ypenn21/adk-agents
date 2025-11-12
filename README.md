@@ -490,7 +490,7 @@ gunicorn web.wsgi:application
 uv run adk web
 
 #run a2a
-uvicorn adk_bug_ticket_agent.agent:a2a_app --host localhost --port 8001
+uvicorn adk_bug_ticket_agent.agent:app --host localhost --port 8001
 #try the ui: http://127.0.0.1:8001/.well-known/agent-card.json
 ```
 
@@ -525,16 +525,16 @@ AGENT_URL: The public URL of your deployed agent.
 curl -X POST \
 -H "Authorization: Bearer $(gcloud auth print-access-token)" \
 -H "Content-Type: application/json" \
-https://discoveryengine.googleapis.com/v1alpha/projects/PROJECT_NUMBER/locations/LOCATION/collections/default_collection/engines/ENGINE_ID/assistants/default_assistant/agents -d \
+https://discoveryengine.googleapis.com/v1alpha/projects/genai-apps-25/locations/global/collections/default_collection/engines/gemini-enterprise-17628189_1762818964034/assistants/default_assistant/agents -d \
 '{
-  "name": "IT Bug Assistant Agent",
+  "name": "adk-a2a-agent-bug-assist",
   "displayName": "Soft Micro Bug Agent",
-  "description": "The Bug Assistant is a sample agent hosted on django designed to help IT Support and Software Developers triage, manage, and resolve software issues. This agent uses ADK Python, PostgreSQL database, Gemini, MCP server, RAG, and Google Search to assist IT in triaging. ",
+  "description": "The Bug Assistant is a sample agent hosted on django designed to help IT Support and Software Developers triage, manage, and resolve software issues. This agent uses ADK Python, PostgreSQL database, Gemini, MCP server, RAG, and Google Search to assist IT in triaging.",
    "icon": {
     "content": "data:image/png;base64,iVBORw="
   },
   "a2aAgentDefinition": {
-    "jsonAgentCard": "{\"provider\":{\"organization\":\"<PROVIDER_ORGANIZATON>\",\"url\":\"AGENT_URL\"},\"name\":\"AGENT_NAME\",\"description\":\"AGENT_DESCRIPTION\",\"capabilities\":{},\"defaultInputModes\":[\"text/plain\"],\"defaultOutputModes\":[\"text/plain\"],\"skills\":[{\"description\":\"Chat with the Gemini agent.\",\"examples\":[\"Hello, world!\"],\"id\":\"chat\",\"name\":\"Chat Skill\",\"tags\":[\"chat\"]}],\"version\":\"1.0.0\"}"
+    "jsonAgentCard": "{\"provider\":{\"organization\":\"<PROVIDER_ORGANIZATON>\",\"url\":\"AGENT_URL\"},\"name\":\"it_bug_assistant_agent\",\"description\":\"AGENT_DESCRIPTION\",\"capabilities\":{},\"defaultInputModes\":[\"text/plain\"],\"defaultOutputModes\":[\"text/plain\"],\"skills\":[{\"description\":\"Chat with the Gemini agent.\",\"examples\":[\"Hello, world!\"],\"id\":\"chat\",\"name\":\"Chat Skill\",\"tags\":[\"chat\"]}],\"version\":\"1.0.0\"}"
   }
 }'
 
