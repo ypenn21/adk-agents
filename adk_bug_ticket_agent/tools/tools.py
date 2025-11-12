@@ -1,5 +1,6 @@
 from datetime import datetime
 import os
+import sys
 
 from google.adk.agents import Agent
 from google.adk.tools import google_search
@@ -15,7 +16,7 @@ load_dotenv()
 # ----- Example of a Function tool -----
 def get_current_date() -> dict:
     """
-    Get the current date in the format YYYY-MM-DD
+    Get the current date in the format YYY-MM-DD
     """
     return {"current_date": datetime.now().strftime("%Y-%m-%d")}
 
@@ -39,4 +40,7 @@ TOOLBOX_URL = os.getenv("MCP_TOOLBOX_URL", "http://127.0.0.1:5000")
 # Initialize Toolbox client
 toolbox = ToolboxSyncClient(TOOLBOX_URL)
 # Load all the tools from toolset
-toolbox_tools = toolbox.load_toolset("tickets_toolset")
+toolbox_tools = []
+if "collectstatic" not in sys.argv:
+    toolbox_tools = toolbox.load_toolset("tickets_toolset")
+
