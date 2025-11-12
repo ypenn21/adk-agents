@@ -50,4 +50,4 @@ USER appuser
 EXPOSE 8001
 
 # Run uvicorn for a2a agent card server
-ENTRYPOINT ["uvicorn", "adk_bug_ticket_agent.agent:a2a_app", "--host", "0.0.0.0", "--port", "8001"]
+ENTRYPOINT ["uvicorn", "adk_bug_ticket_agent.agent:a2a_app", "--host", "0.0.0.0", "--port", "8080"]
