@@ -12,7 +12,7 @@ from google.adk.tools import load_memory
 
 _root_agent = None
 AGENT_PORT = os.environ.get("AGENT_PORT", "8000")
-AGENT_URL = os.environ.get("AGENT_URL", f"http://127.0.0.1:{AGENT_PORT}")
+AGENT_URL = os.environ.get("AGENT_URL", f"http://127.0.0.1")
 SUPPORTED_CONTENT_TYPES = ["text", "text/plain"]
 
 # a2a root & subagents https://google.github.io/adk-docs/a2a/quickstart-consuming/#start-the-remote-prime-agent-server
