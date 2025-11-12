@@ -533,7 +533,13 @@ AGENT_DISPLAY_NAME: The name that will be displayed in the Gemini Enterprise UI.
 AGENT_DESCRIPTION: A brief description of your agent's capabilities.
 AGENT_URL: The public URL of your deployed agent.
 
-# IT Bug Assistant Agent
+# IT Bug Assistant Agent Register command
+
+jsonAgentCard: {"capabilities":{"streaming":true},"defaultInputModes":["text","text/plain"],"defaultOutputModes":["text","text/plain"],"description":"An agent to help users with bug tickets, including searching, creating, and updating them.","name":"IT Bug Assistant Agent","preferredTransport":"JSONRPC","protocolVersion":"0.3.0","skills":[{"description":"Assists in triaging and debugging software issues by searching, creating, and updating bug tickets.","examples":["Create a new ticket for a login issue.","Search for tickets related to 'database connection error'"],"id":"bug_triage_assistant","name":"Bug Triage Assistant","tags":["bug-tracking","triage"]}],"url":"https://adk-a2a-agent-bug-assist-803095609412.us-central1.run.app","version":"1.0.0"}
+
+sample of the result of transformed jsonAgentCard with escaped json String:
+
+ "{\"provider\":{\"organization\":\"<PROVIDER_ORGANIZATON>\",\"url\":\"AGENT_URL\"},\"name\":\"it_bug_assistant_agent\",\"description\":\"AGENT_DESCRIPTION\",\"capabilities\":{},\"defaultInputModes\":[\"text/plain\"],\"defaultOutputModes\":[\"text/plain\"],\"skills\":[{\"description\":\"Chat with the Gemini agent.\",\"examples\":[\"Hello, world!\"],\"id\":\"chat\",\"name\":\"Chat Skill\",\"tags\":[\"chat\"]}],\"version\":\"1.0.0\"}"
 
 ```bash
 curl -X POST \
@@ -548,7 +554,7 @@ https://discoveryengine.googleapis.com/v1alpha/projects/genai-apps-25/locations/
     "content": "data:image/png;base64,iVBORw="
   },
   "a2aAgentDefinition": {
-    "jsonAgentCard": "{\"provider\":{\"organization\":\"<PROVIDER_ORGANIZATON>\",\"url\":\"AGENT_URL\"},\"name\":\"it_bug_assistant_agent\",\"description\":\"AGENT_DESCRIPTION\",\"capabilities\":{},\"defaultInputModes\":[\"text/plain\"],\"defaultOutputModes\":[\"text/plain\"],\"skills\":[{\"description\":\"Chat with the Gemini agent.\",\"examples\":[\"Hello, world!\"],\"id\":\"chat\",\"name\":\"Chat Skill\",\"tags\":[\"chat\"]}],\"version\":\"1.0.0\"}"
+    "jsonAgentCard": "Replace_With_Your_Agent_Card_JSON"
   }
 }'
 
