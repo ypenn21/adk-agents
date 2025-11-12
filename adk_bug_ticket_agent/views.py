@@ -8,16 +8,9 @@ from google.adk.runners import Runner
 from google.genai import types as genai_types  # Aliased to avoid conflict if Django has a 'types'
 from . import system_prompt
 from .tools.tools import get_current_date, search_tool, toolbox_tools
-from .agent import get_agent, get_memory_service, get_session_service
+from .agent import _service_manager
 
-
-# --- Global Initializations ---
-# For SQLite, make sure the directory for the DB file is writable by the Django process.
 # Using an absolute path or ensuring BASE_DIR is correctly set for Django is important.
-# Explore using VertexAiSessionService or InMemorySessionService for production https://google.github.io/adk-docs/sessions/session/#managing-sessions-with-a-sessionservice
-# Lazy initialization for session_service
-_session_service_instance = None
-_memory_service_instance = None
 @csrf_exempt
 async def interact_with_agent(request): # Removed the initial check for session_service and memory_service
     # Ensure memory_service is initialized (it's lightweight, so global is fine)
@@ -43,7 +36,7 @@ async def interact_with_agent(request): # Removed the initial check for session_
             # The client now manages the session ID. We get the session if it
             # exists, or create a new one. This allows for a persistent
             # conversation history within a single browser session.
-            current_session_service = get_session_service() # Get the lazy-loaded instance
+            current_session_service = _service_manager.session_service # Get the lazy-loaded instance
             current_session = await current_session_service.get_session(
                 app_name=app_name, user_id=user_id, session_id=session_id
             )
@@ -57,9 +50,9 @@ async def interact_with_agent(request): # Removed the initial check for session_
                 print(f"Existing session for app: {app_name}, user: {user_id}, session: {session_id}")
             runner = Runner(
                 app_name=app_name,
-                agent=get_agent(), # Use the lazy-loaded agent
+                agent=_service_manager.root_agent, # Use the lazy-loaded agent
                 session_service=current_session_service,
-                memory_service=get_memory_service(), # Use the lazy-loaded instance
+                memory_service=_service_manager.memory_service, # Use the lazy-loaded instance
             )
 
             user_message_content = genai_types.Content(

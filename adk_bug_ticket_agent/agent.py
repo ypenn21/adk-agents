@@ -13,6 +13,10 @@ from google.adk.sessions import DatabaseSessionService
 from google.adk.memory import InMemoryMemoryService
 # from google.adk.memory import VertexAiRagMemoryService
 
+# --- Global Initializations ---
+# For SQLite, make sure the directory for the DB file is writable by the Django process.
+# Explore using VertexAiSessionService or InMemorySessionService for production https://google.github.io/adk-docs/sessions/session/#managing-sessions-with-a-sessionservice
+
 AGENT_PORT = os.environ.get("AGENT_PORT", "8000")
 AGENT_URL = os.environ.get("AGENT_URL", f"http://127.0.0.1:{AGENT_PORT}")
 SUPPORTED_CONTENT_TYPES = ["text", "text/plain"]
