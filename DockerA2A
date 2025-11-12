@@ -1,0 +1,53 @@
+# Use a Python image with uv pre-installed
+# Stage 1: Builder - Installs dependencies
+FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim AS builder
+
+# Install the project into `/app`
+WORKDIR /app
+
+# Set environment variables for uv and Python
+ENV UV_LINK_MODE=copy
+ENV PYTHONUNBUFFERED=1
+
+# Copy only dependency management files first to leverage Docker cache
+COPY pyproject.toml ./
+
+# Remove django dependency and then install
+RUN sed -i '/django/d' pyproject.toml && \
+    uv lock && \
+    uv sync --frozen --no-install-project --no-dev
+
+# Copy the rest of the application source code.
+COPY . .
+
+# Install the project itself.
+RUN uv sync --frozen --no-dev
+
+# Place executables in the environment at the front of the path
+ENV PATH="/app/.venv/bin:$PATH"
+
+# Stage 2: Final image - A smaller runtime image that includes uv
+FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim
+
+WORKDIR /app
+
+ENV PYTHONUNBUFFERED=1
+
+# Copy only the necessary artifacts from the builder stage
+COPY --from=builder /app/.venv /app/.venv
+COPY --from=builder /app/adk_bug_ticket_agent /app/adk_bug_ticket_agent
+
+# Set the PATH to include the virtual environment's bin directory
+ENV PATH="/app/.venv/bin:$PATH"
+
+# Create a non-root user and group for security best practices
+RUN groupadd -r appgroup && useradd --no-log-init -r -m -g appgroup appuser && chown -R appuser:appgroup /app
+
+# Switch to the non-root user
+USER appuser
+
+# Expose the port
+EXPOSE 8001
+
+# Run uvicorn for a2a agent card server
+ENTRYPOINT ["uvicorn", "adk_bug_ticket_agent.agent:a2a_app", "--host", "0.0.0.0", "--port", "8001"]
