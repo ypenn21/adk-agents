@@ -1,28 +1,3 @@
-DO $$
-BEGIN
-    -- Add usage_metadata column if it doesn't exist
-    IF NOT EXISTS (
-        SELECT FROM information_schema.columns
-        WHERE table_name = 'events' AND column_name = 'usage_metadata'
-    ) THEN
-        ALTER TABLE events ADD COLUMN usage_metadata JSONB;
-        RAISE NOTICE 'Added usage_metadata column';
-    ELSE
-        RAISE NOTICE 'usage_metadata column already exists';
-    END IF;
-
-    -- Add citation_metadata column if it doesn't exist
-    IF NOT EXISTS (
-        SELECT FROM information_schema.columns
-        WHERE table_name = 'events' AND column_name = 'citation_metadata'
-    ) THEN
-        ALTER TABLE events ADD COLUMN citation_metadata JSONB;
-        RAISE NOTICE 'Added citation_metadata column';
-    ELSE
-        RAISE NOTICE 'citation_metadata column already exists';
-    END IF;
-END $$;
-
 CREATE EXTENSION IF NOT EXISTS google_ml_integration CASCADE;
 CREATE EXTENSION IF NOT EXISTS vector CASCADE;
 GRANT EXECUTE ON FUNCTION embedding TO postgres;
