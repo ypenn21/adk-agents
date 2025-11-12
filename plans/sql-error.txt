@@ -1,0 +1,68 @@
+(Background on this error at: https://sqlalche.me/e/20/f405)
+----------------------------------------------------
+interact_with_agent POST request received.
+---------- EXCEPTION IN interact_with_agent ----------
+Traceback (most recent call last):
+  File "/Users/yannipeng/git-projects/adk-agents/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 1967, in _exec_single_context
+    self.dialect.do_execute(
+  File "/Users/yannipeng/git-projects/adk-agents/.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py", line 951, in do_execute
+    cursor.execute(statement, parameters)
+psycopg2.errors.UndefinedColumn: column events.custom_metadata does not exist
+LINE 1: ....grounding_metadata AS events_grounding_metadata, events.cus...
+                                                             ^
+
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/yannipeng/git-projects/adk-agents/adk_bug_ticket_agent/views.py", line 40, in interact_with_agent
+    current_session = await current_session_service.get_session(
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/yannipeng/git-projects/adk-agents/.venv/lib/python3.12/site-packages/google/adk/sessions/database_session_service.py", line 557, in get_session
+    .all()
+     ^^^^^
+  File "/Users/yannipeng/git-projects/adk-agents/.venv/lib/python3.12/site-packages/sqlalchemy/orm/query.py", line 2704, in all
+    return self._iter().all()  # type: ignore
+           ^^^^^^^^^^^^
+  File "/Users/yannipeng/git-projects/adk-agents/.venv/lib/python3.12/site-packages/sqlalchemy/orm/query.py", line 2857, in _iter
+    result: Union[ScalarResult[_T], Result[_T]] = self.session.execute(
+                                                  ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/yannipeng/git-projects/adk-agents/.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py", line 2351, in execute
+    return self._execute_internal(
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/yannipeng/git-projects/adk-agents/.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py", line 2249, in _execute_internal
+    result: Result[Any] = compile_state_cls.orm_execute_statement(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/yannipeng/git-projects/adk-agents/.venv/lib/python3.12/site-packages/sqlalchemy/orm/context.py", line 306, in orm_execute_statement
+    result = conn.execute(
+             ^^^^^^^^^^^^^
+  File "/Users/yannipeng/git-projects/adk-agents/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 1419, in execute
+    return meth(
+           ^^^^^
+  File "/Users/yannipeng/git-projects/adk-agents/.venv/lib/python3.12/site-packages/sqlalchemy/sql/elements.py", line 526, in _execute_on_connection
+    return connection._execute_clauseelement(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/yannipeng/git-projects/adk-agents/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 1641, in _execute_clauseelement
+    ret = self._execute_context(
+          ^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/yannipeng/git-projects/adk-agents/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 1846, in _execute_context
+    return self._exec_single_context(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/yannipeng/git-projects/adk-agents/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 1986, in _exec_single_context
+    self._handle_dbapi_exception(
+  File "/Users/yannipeng/git-projects/adk-agents/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 2355, in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+  File "/Users/yannipeng/git-projects/adk-agents/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 1967, in _exec_single_context
+    self.dialect.do_execute(
+  File "/Users/yannipeng/git-projects/adk-agents/.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py", line 951, in do_execute
+    cursor.execute(statement, parameters)
+sqlalchemy.exc.ProgrammingError: (psycopg2.errors.UndefinedColumn) column events.custom_metadata does not exist
+LINE 1: ....grounding_metadata AS events_grounding_metadata, events.cus...
+                                                             ^
+
+[SQL: SELECT events.id AS events_id, events.app_name AS events_app_name, events.user_id AS events_user_id, events.session_id AS events_session_id, events.invocation_id AS events_invocation_id, events.author AS events_author, events.actions AS events_actions, events.long_running_tool_ids_json AS events_long_running_tool_ids_json, events.branch AS events_branch, events.timestamp AS events_timestamp, events.content AS events_content, events.grounding_metadata AS events_grounding_metadata, events.custom_metadata AS events_custom_metadata, events.usage_metadata AS events_usage_metadata, events.citation_metadata AS events_citation_metadata, events.partial AS events_partial, events.turn_complete AS events_turn_complete, events.error_code AS events_error_code, events.error_message AS events_error_message, events.interrupted AS events_interrupted 
+FROM events 
+WHERE events.app_name = %(app_name_1)s AND events.user_id = %(user_id_1)s AND events.session_id = %(session_id_1)s ORDER BY events.timestamp DESC]
+[parameters: {'app_name_1': 'AgentBugAssistant', 'user_id_1': 'user_123', 'session_id_1': '259299cc-f3f5-41f5-8fa9-c0c231278083'}]
+(Background on this error at: https://sqlalche.me/e/20/f405)
+----------------------------------------------------
