@@ -27,7 +27,7 @@ class AgentMode(Enum):
 
 AGENT_PORT = os.environ.get("AGENT_PORT", "8000")
 AGENT_URL = os.environ.get("AGENT_URL", f"http://127.0.0.1:{AGENT_PORT}")
-AGENT_MODE = os.environ.get("AGENT_MODE", "Gemini")
+AGENT_MODE = os.environ.get("AGENT_MODE", "{AgentMode.GEMINI.value}")
 SUPPORTED_CONTENT_TYPES = ["text", "text/plain"]
 DB_URL = os.environ.get("DB_URL", "postgresql://postgres:admin@localhost:5432/tickets-db")
 
