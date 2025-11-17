@@ -1,4 +1,5 @@
 import os
+from enum import Enum
 from google.adk.agents import Agent
 from google.adk.models.lite_llm import LiteLlm
 from a2a.types import AgentCard, AgentCapabilities, AgentSkill
@@ -13,6 +14,12 @@ from google.adk.tools import load_memory
 from google.adk.sessions import DatabaseSessionService
 from google.adk.memory import InMemoryMemoryService
 # from google.adk.memory import VertexAiRagMemoryService
+
+class AgentMode(Enum):
+    """Represents the different modes the agent can run in."""
+    GEMINI = "Gemini"
+    VERTEXAI = "VertexAI"
+    GKE = "GKE"
 
 # --- Global Initializations ---
 # For SQLite, make sure the directory for the DB file is writable by the Django process.
@@ -111,11 +118,11 @@ class ServiceManager:
         """Lazy-loads and returns the root agent."""
         if self._root_agent is not None:
             self._root_agent = self._root_agent
-        elif AGENT_MODE == "Gemini":
+        elif AGENT_MODE == AgentMode.GEMINI.value:
             self._root_agent = self._init_agent()
-        elif AGENT_MODE == "VertexAI":
+        elif AGENT_MODE == AgentMode.VERTEXAI.value:
             self._root_agent = self._init_vertexai_agent()
-        elif AGENT_MODE == "GKE":
+        elif AGENT_MODE == AgentMode.GKE.value:
             self._root_agent = self._init_vertexai_agent()
         else:
             raise ValueError(f"Unsupported AGENT_MODE: {AGENT_MODE}")   
