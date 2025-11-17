@@ -1,5 +1,6 @@
 import os
 from google.adk.agents import Agent
+from google.adk.models.lite_llm import LiteLlm
 from a2a.types import AgentCard, AgentCapabilities, AgentSkill
 from a2a.server.apps.jsonrpc.starlette_app import A2AStarletteApplication
 from a2a.server.request_handlers import DefaultRequestHandler
@@ -19,6 +20,7 @@ from google.adk.memory import InMemoryMemoryService
 
 AGENT_PORT = os.environ.get("AGENT_PORT", "8000")
 AGENT_URL = os.environ.get("AGENT_URL", f"http://127.0.0.1:{AGENT_PORT}")
+AGENT_MODE = os.environ.get("AGENT_MODE", "Gemini")
 SUPPORTED_CONTENT_TYPES = ["text", "text/plain"]
 DB_URL = os.environ.get("DB_URL", "postgresql://postgres:admin@localhost:5432/tickets-db")
 
@@ -73,6 +75,18 @@ class ServiceManager:
             tools=[load_memory, get_current_date, search_tool, *toolbox_tools],
         )
 
+    def _init_vertexai_agent(self):
+        """Initializes the Vertex AI agent."""
+        print("Initializing Vertex AI Agent...")
+        endpoint_id = os.getenv("VERTEX_AI_ENDPOINT_ID")
+        return Agent(
+            model=LiteLlm(model=f"vertex_ai/openai/{endpoint_id}"),
+            name="it_bug_assistant_agent",
+            description="An agent to help users with bug tickets, including searching, creating, and updating them.",
+            instruction=system_prompt.agent_instruction,
+            tools=[load_memory, get_current_date, search_tool, *toolbox_tools],
+        )
+
     def _init_agent_executor(self):
         """Initializes the agent executor."""
         print("Initializing AdkAgentToA2AExecutor...")
@@ -95,8 +109,16 @@ class ServiceManager:
     @property
     def root_agent(self):
         """Lazy-loads and returns the root agent."""
-        if self._root_agent is None:
+        if self._root_agent is not None:
+            self._root_agent = self._root_agent
+        elif AGENT_MODE == "Gemini":
             self._root_agent = self._init_agent()
+        elif AGENT_MODE == "VertexAI":
+            self._root_agent = self._init_vertexai_agent()
+        elif AGENT_MODE == "GKE":
+            self._root_agent = self._init_vertexai_agent()
+        else:
+            raise ValueError(f"Unsupported AGENT_MODE: {AGENT_MODE}")   
         return self._root_agent
 
     @property
