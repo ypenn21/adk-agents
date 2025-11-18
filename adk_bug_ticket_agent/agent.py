@@ -116,16 +116,15 @@ class ServiceManager:
     @property
     def root_agent(self):
         """Lazy-loads and returns the root agent."""
-        if self._root_agent is not None:
-            self._root_agent = self._root_agent
-        elif AGENT_MODE == AgentMode.GEMINI.value:
-            self._root_agent = self._init_agent()
-        elif AGENT_MODE == AgentMode.VERTEXAI.value:
-            self._root_agent = self._init_vertexai_agent()
-        elif AGENT_MODE == AgentMode.GKE.value:
-            self._root_agent = self._init_vertexai_agent()
-        else:
-            raise ValueError(f"Unsupported AGENT_MODE: {AGENT_MODE}")   
+        if self._root_agent is None:
+            if AGENT_MODE == AgentMode.GEMINI.value:
+                self._root_agent = self._init_agent()
+            elif AGENT_MODE == AgentMode.VERTEXAI.value:
+                self._root_agent = self._init_vertexai_agent()
+            elif AGENT_MODE == AgentMode.GKE.value:
+                self._root_agent = self._init_vertexai_agent()
+            else:
+                raise ValueError(f"Unsupported AGENT_MODE: {AGENT_MODE}")
         return self._root_agent
 
     @property

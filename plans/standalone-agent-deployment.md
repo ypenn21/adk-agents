@@ -6,8 +6,8 @@
 - [x] ~~Refactor `deploy_agent_engine.py` to be a standalone script.~~ ✅ Implemented
 - [x] ~~Implement `LazyToolboxTool` wrapper to fix pickling issues.~~ ✅ Implemented
 - [x] ~~Run the deployment script and verify its success.~~ ✅ Completed
-- [ ] Implement a testing strategy for the deployed agent.
-- [ ] Final Review and Testing
+- [x] ~~Implement a testing strategy for the deployed agent.~~ ✅ Completed
+- [x] ~~Final Review and Testing~~ ✅ Completed
 
 ## 🔍 Analysis & Investigation
 
@@ -109,7 +109,7 @@ The project is a Django web application that also serves as a host for an ADK ag
 
 3.  **Successful Deployment**:
     - Ran `deploy_agent_engine.py` successfully.
-    - **Agent Engine Resource Name**: `projects/803095609412/locations/us-central1/reasoningEngines/7116122817849982976`
+    - **Agent Engine Resource Name**: `projects/803095609412/locations/us-central1/reasoningEngines/RESOURCE_NAME = "projects/803095609412/locations/us-central1/reasoningEngines/3407408524710379520"`
 
 4.  **Testing & Troubleshooting**:
     - Created `test_agent_engine.py` to verify the deployed agent.
@@ -123,3 +123,85 @@ The project is a Django web application that also serves as a host for an ADK ag
 - Investigate the remote logs for the Reasoning Engine to understand the cause of the `400` error.
 - Verify if the `LazyToolboxTool` is correctly re-initializing the `ToolboxSyncClient` in the remote environment.
 - Ensure all environment variables (like `MCP_TOOLBOX_URL`) are correctly propagated and accessible in the remote environment.
+
+## 📅 Session Summary (2025-11-18)
+
+### Problem Identified
+The `400 Reasoning Engine Execution failed` error was caused by **incorrect API usage in the test script**, not deployment issues. Cloud logs revealed:
+```
+TypeError: AdkApp.stream_query() missing 2 required keyword-only arguments: 'message' and 'user_id'
+```
+
+### Root Cause Analysis
+1. **Test script was using wrong method**: `stream_query()` instead of `async_stream_query()`
+2. **Incorrect parameters**:
+   - Used `input=query` instead of `message=query`
+   - Missing required `user_id` parameter
+   - `session_id` is optional (only needed for multi-turn conversations)
+3. **Not using async/await**: The agent engine API requires async operations
+
+### Actions Taken
+
+1. **Fixed bug in `adk_bug_ticket_agent/agent.py`** (line 119):
+   - **Before**: `if self._root_agent is not None: self._root_agent = self._root_agent` (no-op)
+   - **After**: `if self._root_agent is None:` (correct lazy loading logic)
+
+2. **Updated `test_agent_engine.py` with correct API usage**:
+   ```python
+   # Changed from:
+   response_generator = agent_engine.stream_query(session_id=session_id, input=query)
+
+   # To:
+   async for event in agent_engine.async_stream_query(
+       user_id=user_id,
+       session_id=session_id,  # optional
+       message=query
+   ):
+       print(event, end="")
+   ```
+   - Made the `main()` function async
+   - Used `asyncio.run(main())` to execute
+   - Fixed all API parameters to match AdkApp requirements
+
+3. **Redeployed agent with fixes**:
+   - New deployment created successfully
+   - **Resource Name**: `projects/803095609412/locations/us-central1/reasoningEngines/344960778098442240`
+
+### Test Results ✅
+
+**Query 1**: "Hello, who are you?"
+- ✅ Successfully responded as Gemini agent for bug ticket assistance
+
+**Query 2**: "Show me all the tickets with status Open"
+- ✅ Tool call executed: `get-tickets-by-status(status='Open')`
+- ✅ Retrieved 3 open tickets from database:
+  - Ticket #1: User Profile Update Fails Silently
+  - Ticket #2: Incorrect Currency Conversion for International Orders
+  - Ticket #3: Password Reset Email Not Received
+
+### Key Learnings
+
+1. **Correct ADK Agent Engine API Usage**:
+   - Use `async_stream_query()` for streaming responses
+   - Required parameters: `user_id`, `message`
+   - Optional parameter: `session_id` (for multi-turn conversations)
+   - All operations are async and require `async/await`
+
+2. **LazyToolboxTool is working correctly**:
+   - Tools are successfully re-initialized in the remote environment
+   - MCP toolbox connection works in deployed environment
+   - Environment variable `MCP_TOOLBOX_URL` is correctly propagated
+
+3. **Deployment creates new resources**:
+   - Vertex AI Agent Engine doesn't support in-place updates
+   - Each deployment creates a new reasoning engine resource
+   - Old deployments remain active until explicitly deleted
+
+## 🎯 Final Status: **COMPLETED** ✅
+
+All objectives achieved:
+- ✅ Standalone deployment script working without Django dependencies
+- ✅ Lazy loading prevents pickling errors
+- ✅ Agent successfully deployed to Vertex AI Agent Engine
+- ✅ Remote agent fully functional with toolbox integration
+- ✅ Test script successfully queries deployed agent
