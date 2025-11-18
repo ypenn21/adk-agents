@@ -84,8 +84,8 @@ class ServiceManager:
 
     def _init_vertexai_agent(self):
         """Initializes the Vertex AI agent."""
-        print("Initializing Vertex AI Agent...")
         endpoint_id = os.getenv("VERTEX_AI_ENDPOINT_ID")
+        print(f"Initializing Vertex AI Agent...{endpoint_id}")
         return Agent(
             model=LiteLlm(model=f"vertex_ai/openai/{endpoint_id}"),
             name="it_bug_assistant_agent",
