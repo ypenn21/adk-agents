@@ -8,7 +8,7 @@ from vertexai.preview.reasoning_engines import AdkApp
 # This assumes deploy_agent_engine.py is at the project root.
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from adk_bug_ticket_agent.agent import get_agent # Keep using get_agent as per user feedback
+from adk_bug_ticket_agent.agent import get_agent
 from adk_bug_ticket_agent.agent import ServiceManager
 
 def main():
@@ -29,9 +29,9 @@ def main():
         "GOOGLE_GENAI_USE_VERTEXAI": "TRUE",
         "MCP_TOOLBOX_URL": "https://toolbox-ttjkms4frq-uc.a.run.app",
     }
-    _service_manager = ServiceManager()
+    #_service_manager = ServiceManager()
     adk_app = AdkApp(
-        agent=_service_manager._init_vertexai_agent, # Use get_agent() as per user feedback
+        agent=get_agent(), # Use get_agent() as per user feedback
         enable_tracing=False,
     )
 
