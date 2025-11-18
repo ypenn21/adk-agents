@@ -9,6 +9,7 @@ from vertexai.preview.reasoning_engines import AdkApp
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from adk_bug_ticket_agent.agent import get_agent # Keep using get_agent as per user feedback
+from adk_bug_ticket_agent.agent import ServiceManager
 
 def main():
     project_id = os.environ.get("PROJECT_ID", "genai-apps-25")
@@ -24,13 +25,13 @@ def main():
     print("Attempting to create/get Agent Engine Remote App...")
     environment_variables = {
         "VERTEX_AI_ENDPOINT_ID": "2527670579629129728",
-        "AGENT_MODE": "VertexAI",
+        "AGENT_MODE": "Gemini",
         "GOOGLE_GENAI_USE_VERTEXAI": "TRUE",
         "MCP_TOOLBOX_URL": "https://toolbox-ttjkms4frq-uc.a.run.app",
     }
-    
+    _service_manager = ServiceManager()
     adk_app = AdkApp(
-        agent=get_agent(), # Use get_agent() as per user feedback
+        agent=_service_manager._init_vertexai_agent, # Use get_agent() as per user feedback
         enable_tracing=False,
     )
 
