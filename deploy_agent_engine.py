@@ -53,8 +53,8 @@ def main():
             "pydantic==2.12.4",
         ],
         extra_packages=["adk_bug_ticket_agent"],
-        display_name="Software Bug Assistant Agent Engine",
-        description="Remote Agent Engine for the Software Bug Assistant Django App",
+        display_name="Software Bug Assistant ADK CR Open Gemma Model",
+        description="Remote Agent for the Software Bug Assistant build with adk, and fintuned gemma model running on managed vertexai endpoint",
         env_vars=environment_variables,
     )
     print(f"Agent Engine Remote App created: {remote_app.resource_name}")
