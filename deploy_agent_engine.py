@@ -34,18 +34,24 @@ def main():
         enable_tracing=False,
     )
 
+    # Create the agent engine
+    # We need to pass the adk_bug_ticket_agent package so that the remote environment
+    # has access to the LazyToolboxTool class definition.
     remote_app = agent_engines.create(
         adk_app,
         requirements=[
             "google-cloud-aiplatform[adk,agent_engines]",
-            "google-adk==1.17.0", # Pinning to current version, consider updating if issues persist
+            "google-adk==1.17.0",
             "a2a-sdk>=0.3.11",
             "python-dotenv==1.1.0",
-            "toolbox-core==0.1.0",
+            "toolbox-core==0.5.2",
             "google-generativeai>=0.8.5",
             "psycopg2-binary",
             "litellm>=1.74.8",
+            "cloudpickle==3.1.2",
+            "pydantic==2.12.4",
         ],
+        extra_packages=["adk_bug_ticket_agent"],
         display_name="Software Bug Assistant Agent Engine",
         description="Remote Agent Engine for the Software Bug Assistant Django App",
         env_vars=environment_variables,
