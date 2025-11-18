@@ -9,7 +9,7 @@ from a2a.server.tasks import InMemoryTaskStore
 from google.adk.a2a.utils.agent_to_a2a import to_a2a
 from . import system_prompt
 from .agent_executor import AdkAgentToA2AExecutor
-from .tools.tools import get_current_date, search_tool, toolbox_tools
+from .tools.tools import get_current_date, search_tool, get_toolbox_tools
 from google.adk.tools import load_memory
 from google.adk.sessions import DatabaseSessionService
 from google.adk.memory import InMemoryMemoryService
@@ -79,7 +79,7 @@ class ServiceManager:
             name="it_bug_assistant_agent",
             description="An agent to help users with bug tickets, including searching, creating, and updating them.",
             instruction=system_prompt.agent_instruction,
-            tools=[load_memory, get_current_date, search_tool, *toolbox_tools],
+            tools=[load_memory, get_current_date, search_tool, *get_toolbox_tools()],
         )
 
     def _init_vertexai_agent(self):
@@ -91,7 +91,7 @@ class ServiceManager:
             name="it_bug_assistant_agent",
             description="An agent to help users with bug tickets, including searching, creating, and updating them.",
             instruction=system_prompt.agent_instruction,
-            tools=[load_memory, get_current_date, search_tool, *toolbox_tools],
+            tools=[load_memory, get_current_date, search_tool, *get_toolbox_tools()],
         )
 
     def _init_agent_executor(self):

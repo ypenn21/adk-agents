@@ -1,39 +1,56 @@
-# from django.apps import AppConfig
+import os
+import sys
+import vertexai
+from vertexai import agent_engines
+from vertexai.preview.reasoning_engines import AdkApp
 
-# from vertexai import agent_engines
-# from .views import get_root_agent
+# Add the project root to the Python path to allow for absolute imports
+# This assumes deploy_agent_engine.py is at the project root.
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-# REMOTE_AGENT_ENGINE_RESOURCE_NAME = None
-# LOCATION = "us-central1"
-# PROJECT_NUMBER = "genai-playground24"  # Replace with your actual project number
+from adk_bug_ticket_agent.agent import get_agent # Keep using get_agent as per user feedback
 
+def main():
+    project_id = os.environ.get("PROJECT_ID", "genai-apps-25")
+    location = "us-central1" # Assuming this is the desired location
+    staging_bucket = os.environ.get("STAGING_BUCKET", f"gs://{project_id}-adk-staging")
 
-# class AdkAgentConfig(AppConfig):
-#     default_auto_field = "django.db.models.BigAutoField"
-#     name = "adk_bug_ticket_agent"
+    if not project_id:
+        print("Error: PROJECT_ID environment variable not set.")
+        sys.exit(1)
 
+    vertexai.init(project=project_id, location=location, staging_bucket=staging_bucket)
 
-# def create_agent_engine_remote_app():
-#     """
-#     Creates and initializes a remote agent engine application.
+    print("Attempting to create/get Agent Engine Remote App...")
+    environment_variables = {
+        "VERTEX_AI_ENDPOINT_ID": "2527670579629129728",
+        "AGENT_MODE": "VertexAI",
+        "GOOGLE_GENAI_USE_VERTEXAI": "TRUE",
+        "MCP_TOOLBOX_URL": "https://toolbox-ttjkms4frq-uc.a.run.app",
+    }
+    
+    adk_app = AdkApp(
+        agent=get_agent(), # Use get_agent() as per user feedback
+        enable_tracing=False,
+    )
 
-#     Args:
-#         agent_instance: The agent object (e.g., google.adk.agents.Agent instance)
-#                         to be used as the agent_engine for the remote app.
+    remote_app = agent_engines.create(
+        adk_app,
+        requirements=[
+            "google-cloud-aiplatform[adk,agent_engines]",
+            "google-adk==1.17.0", # Pinning to current version, consider updating if issues persist
+            "a2a-sdk>=0.3.11",
+            "python-dotenv==1.1.0",
+            "toolbox-core==0.1.0",
+            "google-generativeai>=0.8.5",
+            "psycopg2-binary",
+            "litellm>=1.74.8",
+        ],
+        display_name="Software Bug Assistant Agent Engine",
+        description="Remote Agent Engine for the Software Bug Assistant Django App",
+        env_vars=environment_variables,
+    )
+    print(f"Agent Engine Remote App created: {remote_app.resource_name}")
 
-#     Returns:
-#         The created remote_app instance.
-#     """
-#     print("Attempting to create/get Agent Engine Remote App...")
-#     remote_app = agent_engines.create(
-#         agent_engine=get_root_agent(),
-#         requirements=[
-#             "google-cloud-aiplatform[adk,agent_engines]",
-#         ],
-#         display_name="Software Bug Assistant Agent Engine",  # Give it a descriptive name
-#         description="Remote Agent Engine for the Software Bug Assistant Django App",
-#     )
-#     global REMOTE_AGENT_ENGINE_RESOURCE_NAME
-#     REMOTE_AGENT_ENGINE_RESOURCE_NAME = remote_app.resource_name
-#     print(f"Agent Engine Remote App created: {REMOTE_AGENT_ENGINE_RESOURCE_NAME}")
-#     return remote_app
+if __name__ == "__main__":
+    main()

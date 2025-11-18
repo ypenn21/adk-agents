@@ -7,7 +7,6 @@ import os
 from google.adk.runners import Runner
 from google.genai import types as genai_types  # Aliased to avoid conflict if Django has a 'types'
 from . import system_prompt
-from .tools.tools import get_current_date, search_tool, toolbox_tools
 from .agent import _service_manager
 
 # Using an absolute path or ensuring BASE_DIR is correctly set for Django is important.
