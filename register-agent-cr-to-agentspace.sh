@@ -1,0 +1,38 @@
+#!/bin/bash
+
+# Source .env file if it exists
+if [ -f .env ]; then
+  source .env
+fi
+
+PAYLOAD=$(cat <<EOF
+{
+  "name": "$AGENT_NAME",
+  "displayName": "$DISPLAY_NAME",
+  "description": "$DESCRIPTION",
+  "icon": {
+    "content": "$ICON_URI"
+  },
+  "a2aAgentDefinition": {
+    "jsonAgentCard": "{\"capabilities\":{\"streaming\":true},\"defaultInputModes\":[\"text\",\"text/plain\"],\"defaultOutputModes\":[\"text\",\"text/plain\"],\"description\":\"$TOOL_DESCRIPTION\",\"name\":\"$DISPLAY_NAME\",\"preferredTransport\":\"JSONRPC\",\"protocolVersion\":\"0.3.0\",\"skills\":[{\"description\":\"Assists in triaging and debugging software issues by searching, creating, and updating bug tickets.\",\"examples\":[\"Create a new ticket for a login issue.\",\"Search for tickets related to 'database connection error'\"],\"id\":\"bug_triage_assistant\",\"name\":\"Bug Triage Assistant\",\"tags\":[\"bug-tracking\",\"triage\"]}],\"url\":\"$AGENT_SERVICE_URL\",\"version\":\"1.0.0\"}"
+  }
+}
+EOF
+)
+
+curl -X POST \
+  -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+  -H "Content-Type: application/json" \
+  -d "$PAYLOAD" \
+  "https://discoveryengine.googleapis.com/v1alpha/projects/$PROJECT_ID/locations/global/collections/default_collection/engines/gemini-enterprise-17628189_1762818964034/assistants/default_assistant/agents"
+
+  # Please note that the "authorizations" tag is optional; it is only needed if the Agent needs to act on behalf of the users (when it needs OAuth 2.0 support, see Authorize your agents). 
+# PROJECT_ID: the ID of your Google Cloud project.
+# APP_ID: the ID of the Gemini EnterpriseAgentspace app.
+# DISPLAY_NAME: the display name of the agent.
+# DESCRIPTION: the description of the agent, displayed on the frontend; it is only for the user’s benefit. 
+# ICON_URI: The public URI of the icon to display near the name of the agent. Alternatively you can pass Base64-encoded image file contents, but in that case you have to use icon.content instead of icon.uri.
+# TOOL_DESCRIPTION: the description / prompt of the agent used by the LLM to route requests to the agent. Must properly describe what the agent does. Never shown to the user.
+# ADK_DEPLOYMENT_ID: the ID of the reasoning engine endpoint where the ADK agent is deployed.
+# REASONING_ENGINE_LOCATION: The cloud location of the reasoning engine depending on which location you are creating an agent at. See Reasoning Engine Location
+# AUTH_ID: the IDs of the authorization resources; can be omitted, can be one or can be more than one. See Authorize your agents on how to create such a resource.
