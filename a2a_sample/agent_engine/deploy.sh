@@ -1,0 +1,1 @@
+adk deploy agent_engine --project=$PROJECT_ID --region=us-central1 sample_agent --agent_engine_config_file=sample_agent/.agent_engine_config.json
