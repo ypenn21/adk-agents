@@ -29,10 +29,12 @@ def main():
         "GOOGLE_GENAI_USE_VERTEXAI": "TRUE",
         "MCP_TOOLBOX_URL": "https://toolbox-ttjkms4frq-uc.a.run.app",
     }
-    #_service_manager = ServiceManager()
+    _service_manager = ServiceManager()
+    root_agent = _service_manager._init_vertexai_agent
+
     adk_app = AdkApp(
-        agent=get_agent(), # Use get_agent() as per user feedback
-        enable_tracing=False,
+        agent=root_agent, # Use get_agent() as per user feedback
+        enable_tracing=True,
     )
 
     # Create the agent engine

@@ -559,3 +559,7 @@ https://discoveryengine.googleapis.com/v1alpha/projects/genai-apps-25/locations/
 }'
 
 ```
+
+IAM Support for Agents Running on Cloud Run: When the agent is deployed on Cloud Run (when the AGENT_URL ends with "run.app"), Gemini Enterprise attempts IAM authentication when talking to the agent. For this to work, you should grant the "Cloud Run Invoker" role to the following principal in the project where Cloud Run is running:
+
+service-PROJECT_NUMBER@gcp-sa-discoveryengine.iam.gserviceaccount.com
