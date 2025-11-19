@@ -5,7 +5,7 @@ import asyncio
 from vertexai import agent_engines
 
 # Resource name from the deployment output (newly deployed with fixes)
-RESOURCE_NAME = "projects/803095609412/locations/us-central1/reasoningEngines/344960778098442240"
+RESOURCE_NAME = "projects/803095609412/locations/us-central1/reasoningEngines/2354129161859104768"
 
 async def main():
     project_id = os.environ.get("PROJECT_ID", "genai-apps-25")
