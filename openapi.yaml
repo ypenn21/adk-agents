@@ -1,104 +1,97 @@
 openapi: 3.0.0
 info:
-  title: IT Bug Assistant Agent API
-  description: API for interacting with the IT Bug Assistant Agent.
+  title: ADK Agent API
   version: 1.0.0
-servers:
-  - url: /
 paths:
   /agent/interact/:
     get:
-      summary: Get the agent interaction UI
-      description: Renders the HTML page for interacting with the agent.
+      summary: Get the agent interaction interface
+      description: Returns the HTML page for interacting with the agent.
       responses:
         '200':
-          description: HTML content of the agent UI.
+          description: HTML interaction page
           content:
             text/html:
               schema:
                 type: string
     post:
       summary: Interact with the agent
-      description: Send a message to the agent and get a response.
+      description: Sends a user message to the agent and receives a response.
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/AgentRequest'
+              type: object
+              required:
+                - appName
+                - userId
+                - sessionId
+                - newMessage
+              properties:
+                appName:
+                  type: string
+                  example: "my-agent-app"
+                userId:
+                  type: string
+                  example: "user123"
+                sessionId:
+                  type: string
+                  example: "session-abc-123"
+                newMessage:
+                  type: object
+                  required:
+                    - parts
+                  properties:
+                    parts:
+                      type: array
+                      items:
+                        type: object
+                        required:
+                          - text
+                        properties:
+                          text:
+                            type: string
+                            example: "Hello, how can you help me?"
       responses:
         '200':
-          description: Successful response from the agent.
+          description: Successful response from the agent
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AgentResponse'
+                type: object
+                properties:
+                  content:
+                    type: object
+                    properties:
+                      parts:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            text:
+                              type: string
+                      role:
+                        type: string
+                  timestamp:
+                    type: number
         '400':
-          description: Invalid request payload.
+          description: Bad Request (Invalid payload or missing fields)
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                type: object
+                properties:
+                  error:
+                    type: string
         '500':
-          description: Internal server error.
+          description: Internal Server Error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '405':
-          description: Method not allowed.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-components:
-  schemas:
-    AgentRequest:
-      type: object
-      properties:
-        appName:
-          type: string
-          example: "it_bug_assistant_agent"
-        userId:
-          type: string
-          example: "user123"
-        sessionId:
-          type: string
-          example: "session456"
-        newMessage:
-          type: object
-          properties:
-            parts:
-              type: array
-              items:
                 type: object
                 properties:
-                  text:
+                  error:
                     type: string
-                    example: "Hello, agent!"
-    AgentResponse:
-      type: object
-      properties:
-        content:
-          type: object
-          properties:
-            parts:
-              type: array
-              items:
-                type: object
-                properties:
-                  text:
+                  traceback:
                     type: string
-            role:
-              type: string
-              example: "model"
-        timestamp:
-          type: number
-          example: 1678886400
-    ErrorResponse:
-      type: object
-      properties:
-        error:
-          type: string
-        traceback:
-          type: string
