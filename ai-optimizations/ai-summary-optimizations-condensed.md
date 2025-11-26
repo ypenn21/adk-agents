@@ -14,7 +14,8 @@
 11. [**Cross-Customer Learning**](): Apply patterns ("the usual") from global data to new customer interactions.
 12. [**Model Fallback Chain**](): Try cheap model -> fallback to strong model on low confidence (99% reliability).
 13. [**Partial Success Handling**](): Return valid parts of an order even if some fields fail; flag for review.
-13. [**Role-Based Prompting**](): Assign specific personas (e.g., "Experienced Manager") to improve precision.
+14. [**Role-Based Prompting**](): Assign specific personas (e.g., "Experienced Manager") to improve precision.
+15. [**Utilize a Orchestrator**](): Broke out the one shot prompting and serve the agent like a microservice (e.g. utilize framework adk, or langchain). Any LLM configurations should live here. 
 
 ## Key Takeaways from Real-World Analysis
 *   **Balance of Application Logic vs LLM**: You want to have a healthy balance of code vs LLM operations. (LLM is non-deterministic and should leverage Application code as much as possible for determinism) 
