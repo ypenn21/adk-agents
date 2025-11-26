@@ -53,12 +53,12 @@ Note* High impact low lift
 
 ## Model Strategy & Cost Analysis
 **Recommendation: [Hybrid Strategy](ai-summary-optimizations.md#model-switching-strategy)**
-*   Use **GPT-4o-mini** (or Gemini 2.0 Flash) for 80% of simple orders.
-*   Fallback to **Gemini 2.0 Pro** / **GPT-4o** only for complex/low-confidence cases (20%).
-*   *Result*: ~90% accuracy at ~$150/mo (vs $750/mo for all-premium).
+*   Use Gemini 2.5 Flash for 80% of simple orders.
+*   Fallback to **Gemini 2.5 Pro** / **Gemini 2.5 Flash** only for complex/low-confidence cases (20%).
+*   *Result*: Better accuracy at reduced costs.
 
 **When to Switch:**
-*   Stick to Mini if accuracy >90%.
+*   Stick to Flash if accuracy > 90%.
 *   Use Flash for larger context/better reasoning at low cost.
 *   Use Pro/Sonnet only for critical failures or complex edge cases.
 
