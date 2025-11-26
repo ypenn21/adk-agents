@@ -17,11 +17,14 @@
 13. [**Role-Based Prompting**](ai-summary-optimizations.md#role-based-prompting): Assign specific personas (e.g., "Experienced Manager") to improve precision.
 
 ## Key Takeaways from Real-World Analysis
+*   **Balance of Application Logic vs LLM**: You want to have a health balance of code vs LLM operations. (LLM is non-deterministic and should leverage Application code as much as possible for determinism) 
 *   **Structured Outputs**: consistent JSON is critical for reliable parsing.
 *   **Multi-Shot Prompting**: real examples in prompts prevent specific failures (e.g., "half sandwich" rejection).
 *   **Confidence Scoring**: flagging low-confidence outputs prevents bad orders from automatic processing.
 *   **Chain-of-Thought**: requiring reasoning before JSON output improves accuracy on complex logic.
 *   **Business Validators**: code-based checks are essential to catch hallucinations explicitly.
+*   **Retry Logic**: Retry LLM if accuracy conditions is not met.
+*   **Leverage top Foundational Models**: LLM are at the center of it all. [Choose your model wisely] (https://artificialanalysis.ai/). Consider cost, speed, intelligence, accuracy, and benchmarks.
 
 ## Implementation Roadmap
 ### Phase 1: Quick Wins (Week 1-2) - **High Priority**
