@@ -24,7 +24,7 @@
 *   **Chain-of-Thought**: requiring reasoning before JSON output improves accuracy on complex logic.
 *   **Business Validators**: code-based checks are essential to catch hallucinations explicitly.
 *   **Retry Logic**: Retry LLM if accuracy conditions is not met.
-*   **Leverage top Foundational Models**: LLM are at the center of it all. [Choose your model wisely] (https://artificialanalysis.ai/). Consider cost, speed, intelligence, accuracy, and benchmarks.
+*   **Leverage top Foundational Models**: LLM are at the center of it all. [Choose your model wisely](https://artificialanalysis.ai/). Consider cost, speed, intelligence, accuracy, and benchmarks.
 
 ## Implementation Roadmap
 ### Phase 1: Quick Wins (Week 1-2) - **High Priority**
