@@ -1,0 +1,333 @@
+﻿Sample Conversations
+Conversation 1: Customer called in, the call was dropped and the restaurant sent the first message. The restaurant did not ‘confirm’ the order[a][b][c][d][e].
+
+
+Restaurant
+	QSR: Corn On The Corner, This is our storefront location: 1041 Howard st, Dearborn, MI 48124. Please text your order including a name and confirm the given pick up time. Thank you.  
+	Customer
+	1 Nashville Chicken
+Azer Khan
+845 pm
+	Restaurant
+	Got it does 8:55 work
+	Customer
+	does it come w fries?
+	Customer
+	and yes works
+	Restaurant
+	Yes
+	Restaurant
+	Grilled cheese or sliders?
+	Restaurant
+	The grilled cheese does not come with fries.
+	Customer
+	grilled cheese
+	Customer
+	add fries please
+	Restaurant
+	No problem
+	Customer
+	thanks
+	
+
+
+
+Conversation 2: The customer messaged the restaurant directly without calling in. The number was saved in the customer’s history or contacts.
+
+
+Customer
+	Hey
+	Customer
+	1 Nashville grilled chicken spicy
+1 fries
+Azer Khan
+810 pm
+	Restaurant
+	Does 8:40 work?
+	Customer
+	Ya
+	
+
+
+
+Conversation 3: The customer messaged the restaurant directly without calling in. The number was saved in the customer’s history or contacts. However, the restaurant did not answer so the customer called in to encourage a text. The restaurant concluded by ‘liking’ the customer message.[f][g]
+
+
+
+
+Customer
+	Hello
+	Customer
+	1 Nashville grilled chicken spicy
+1 fries
+Azer Khan
+320PM
+	Customer
+	Would like to apply the lunch special please
+	Restaurant
+	Corn On The Corner, This is our storefront location: 1041 Howard st, Dearborn, MI 48124. Please text your order including a name and confirm the given pick up time. Thank you. [h] 
+	Customer
+	1 Nashville grilled chicken spicy
+1 fries
+Azer Khan
+320PM
+	Customer
+	Would like to apply the lunch special please
+	Restaurant
+	Hey got it does 3:25 work?
+	Customer
+	Can u do 340 
+	Restaurant
+	Restaurant ‘liked’ Customer message ‘Can u do 340’
+	
+
+
+
+Conversation 3: The customer called the restaurant’s Google Maps number and started to place an order via text. The customer never completed the order. The restaurant did not follow up[i].
+
+
+
+
+Restaurant
+	Corn On The Corner, This is our storefront location: 1041 Howard st, Dearborn, MI 48124. Please text your order including a name and confirm the given pick up time. Thank you.  
+	Customer
+	1/2 Nashville grilled chicken spicy
+Azer Khan
+630 pm
+	Customer
+	does it come with fries?
+	Restaurant
+	Hey sorry about that we can’t do half grilled cheeses!
+	
+
+
+
+Conversation 4: The customer called the Google Maps number and received a text from the restaurant. The customer inquired about wait time but did not place an order.
+
+
+Restaurant
+	Corn On The Corner, This is our storefront location: 1041 Howard st, Dearborn, MI 48124. Please text your order including a name and confirm the given pick up time. Thank you.  
+	Customer
+	Wait time on chicken caesar wrap?
+	Restaurant
+	An hour currently
+	
+
+Conversation 5: The customer called the Google Maps number and received a text from the restaurant. The customer placed an order and agreed on a pickup time. The customer then added an item. The restaurant ‘loved’ the customer message to confirm the order.
+
+
+
+
+Restaurant
+	Corn On The Corner, This is our storefront location: 1041 Howard st, Dearborn, MI 48124. Please text your order including a name and confirm the given pick up time. Thank you.  
+	Customer
+	Nashville grilled cheese spicy
+Azer khan 
+asap
+	Restaurant
+	Got you does 5:10 work?
+	Customer
+	Yea
+	Customer
+	Hey
+	Customer
+	can you add
+Crispy Cancun
+	Restaurant
+	Restaurant ‘loved’ Customer message ‘can you add
+Crispy Cancun’
+	
+
+Conversation 6: The customer called the Google Maps number and placed an order. The customer went back and forth on the pickup time and the order was confirmed without a confirmation message or reaction.
+
+
+Restaurant
+	Corn On The Corner, This is our storefront location: 1041 Howard st, Dearborn, MI 48124. Please text your order including a name and confirm the given pick up time. Thank you.  
+	Customer
+	2 Nashville grilled cheese spicy (1 of them a combo)
+Azer khan 
+asap
+	Restaurant
+	Does 6:45 pickup work?
+	Restaurant
+	I can do 6:15
+	Customer
+	615 is good
+	Customer
+	thanks
+	
+
+Conversation 7: The customer sent a text directly to the restaurant number to send an order. The restaurant pre-emptively messaged the customer that the order was prepared earlier than agreed upon.
+
+
+Customer
+	3 Nashville grilled cheese spicy (2 combo)
+1 cheese steak sandwich
+Azer khan 
+asap
+	Restaurant
+	Got it does 9:15 work?
+	Customer
+	Yes thx
+	Restaurant
+	Restaurant ‘loved’ Customer message ‘Yes thx’
+	Restaurant
+	You can come now if you’d like
+	
+
+Conversation 8: Customer called into the restaurant but did not order anything or reply to the message.
+
+
+Customer
+	Corn On The Corner, This is our storefront location: 1041 Howard st, Dearborn, MI 48124. Please text your order including a name and confirm the given pick up time. Thank you.  
+	
+
+
+
+
+
+System Output Based on Conversations
+
+
+Conversation 1
+
+
+  
+
+
+
+* Call cancelled
+
+
+
+
+  
+
+
+
+* Auto message
+
+
+  
+
+  
+
+
+
+* Pickup Time changing
+
+
+  
+
+
+
+* New order capture
+
+
+Conversation 2
+
+
+  
+
+  
+
+
+
+  
+
+
+
+
+
+
+
+Conversation 3
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+Conversation 3.5
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Conversation 4
+  
+
+
+
+Conversation 5
+
+
+Order moved to pickup stage and user asked for another thing and order updated, note to self will have to add POS update for this case
+
+  
+
+
+Conversation 6
+
+
+Auto message handles that case
+
+
+Conversation 7
+
+
+Auto message handles that case
+
+
+Conversation 8
+
+
+Text does not show on app but is sent to the user
+
+
+
+
+[a]Is there any desired action to happen if the restaurant did not confirm the order
+[b]Yes, with our solution, the order will be marked confirmed and the customer will get a 'your order is confirmed' message
+[c]I meant in the sense if the cashier himself did not approve it, when he approves it will send the message
+[d]i dont think we should auto send sent to preparation if he didnt confirm it
+[e]that’s right
+[f]Would AI suggested reply be a suitable alternative for liking it
+[g]Also i dont have specials built into the system right now
+[h]Is there a need to send this message if the customer already gave his order feels a bit annoying to the customer
+[i]Follow up system for the future?
