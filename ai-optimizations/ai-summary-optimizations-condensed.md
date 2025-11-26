@@ -1,7 +1,7 @@
 # Condensed AI Optimization Plan
 
 ## Advanced Strategies (Long-Term)
-1. [**A/B Testing Framework**](ai-summary-optimizations.md#ab-testing-framework): Test multiple prompts (standard, CoT) to optimize accuracy systematically.
+1. [**A/B Testing Framework**](): Test multiple prompts (standard, CoT) to optimize accuracy systematically.
 2. [**Conversation Stage Detection**](ai-summary-optimizations.md#conversation-stage-detection): Tailor prompts to stages (greeting, ordering, modifying) for relevance.
 3. [**Ambiguity Detection**](ai-summary-optimizations.md#ambiguity-detection): Explicitly flag unclear inputs (e.g., "5:30" AM vs PM) for clarification.
 4. [**Vector Database Semantic Memory**](ai-summary-optimizations.md#vector-database-semantic-memory): Store/search past conversations (pgvector) to handle edge cases (20-25% gain).
