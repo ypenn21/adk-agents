@@ -17,7 +17,7 @@
 13. [**Role-Based Prompting**](): Assign specific personas (e.g., "Experienced Manager") to improve precision.
 
 ## Key Takeaways from Real-World Analysis
-*   **Balance of Application Logic vs LLM**: You want to have a health balance of code vs LLM operations. (LLM is non-deterministic and should leverage Application code as much as possible for determinism) 
+*   **Balance of Application Logic vs LLM**: You want to have a healthy balance of code vs LLM operations. (LLM is non-deterministic and should leverage Application code as much as possible for determinism) 
 *   **Structured Outputs**: consistent JSON is critical for reliable parsing.
 *   **Multi-Shot Prompting**: real examples in prompts prevent specific failures (e.g., "half sandwich" rejection).
 *   **Confidence Scoring**: flagging low-confidence outputs prevents bad orders from automatic processing.
