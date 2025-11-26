@@ -2,19 +2,19 @@
 
 ## Advanced Strategies (Long-Term)
 1. [**A/B Testing Framework**](): Test multiple prompts (standard, CoT) to optimize accuracy systematically.
-2. [**Conversation Stage Detection**](ai-summary-optimizations.md#conversation-stage-detection): Tailor prompts to stages (greeting, ordering, modifying) for relevance.
-3. [**Ambiguity Detection**](ai-summary-optimizations.md#ambiguity-detection): Explicitly flag unclear inputs (e.g., "5:30" AM vs PM) for clarification.
-4. [**Vector Database Semantic Memory**](ai-summary-optimizations.md#vector-database-semantic-memory): Store/search past conversations (pgvector) to handle edge cases (20-25% gain).
-5. [**RAG for Menu Context**](ai-summary-optimizations.md#rag-for-menu-context): Vector search menu items to reduce token usage by 40-60% for large menus.
-6. [**Fine-Tuning Custom Model**](ai-summary-optimizations.md#fine-tuning-custom-model): Train GPT-4o-mini on 500+ real orders for 30-40% accuracy gain & lower costs.
-7. [**Ensemble Voting**](ai-summary-optimizations.md#ensemble-voting): Call AI 3x with different temps for critical orders; use majority vote.
-8. [**Entity Extraction Preprocessing**](ai-summary-optimizations.md#entity-extraction-preprocessing): Use NER to pre-identify items/times, speeding up AI processing.
-9. [**Constrained Generation (Logit Bias)**](ai-summary-optimizations.md#constrained-generation-logit-bias): Bias tokens towards valid menu items to reduce hallucinations.
-10. [**Incremental Summarization**](ai-summary-optimizations.md#incremental-conversation-summarization): Update summaries per message rather than reprocessing the full history.
-11. [**Cross-Customer Learning**](ai-summary-optimizations.md#cross-customer-learning): Apply patterns ("the usual") from global data to new customer interactions.
-12. [**Model Fallback Chain**](ai-summary-optimizations.md#model-fallback-chain): Try cheap model -> fallback to strong model on low confidence (99% reliability).
-13. [**Partial Success Handling**](ai-summary-optimizations.md#partial-success-handling): Return valid parts of an order even if some fields fail; flag for review.
-13. [**Role-Based Prompting**](ai-summary-optimizations.md#role-based-prompting): Assign specific personas (e.g., "Experienced Manager") to improve precision.
+2. [**Conversation Stage Detection**](): Tailor prompts to stages (greeting, ordering, modifying) for relevance.
+3. [**Ambiguity Detection**](): Explicitly flag unclear inputs (e.g., "5:30" AM vs PM) for clarification.
+4. [**Vector Database Semantic Memory**](): Store/search past conversations (pgvector) to handle edge cases (20-25% gain).
+5. [**RAG for Menu Context**](): Vector search menu items to reduce token usage by 40-60% for large menus.
+6. [**Fine-Tuning Custom Model**](): Train GPT-4o-mini on 500+ real orders for 30-40% accuracy gain & lower costs.
+7. [**Ensemble Voting**](): Call AI 3x with different temps for critical orders; use majority vote.
+8. [**Entity Extraction Preprocessing**](): Use NER to pre-identify items/times, speeding up AI processing.
+9. [**Constrained Generation (Logit Bias)**](): Bias tokens towards valid menu items to reduce hallucinations.
+10. [**Incremental Summarization**](): Update summaries per message rather than reprocessing the full history.
+11. [**Cross-Customer Learning**](): Apply patterns ("the usual") from global data to new customer interactions.
+12. [**Model Fallback Chain**](): Try cheap model -> fallback to strong model on low confidence (99% reliability).
+13. [**Partial Success Handling**](): Return valid parts of an order even if some fields fail; flag for review.
+13. [**Role-Based Prompting**](): Assign specific personas (e.g., "Experienced Manager") to improve precision.
 
 ## Key Takeaways from Real-World Analysis
 *   **Balance of Application Logic vs LLM**: You want to have a health balance of code vs LLM operations. (LLM is non-deterministic and should leverage Application code as much as possible for determinism) 
@@ -28,31 +28,31 @@
 
 ## Implementation Roadmap
 ### Phase 1: Quick Wins (Week 1-2) - **High Priority**
-*   [Implement Structured Outputs (Zod)](ai-summary-optimizations.md#structured-outputs-with-zod-schemas) & [Confidence Scoring](ai-summary-optimizations.md#confidence-scoring)
-*   Add [Business Validators](ai-summary-optimizations.md#business-logic-validators) & [Chain-of-Thought field](ai-summary-optimizations.md#chain-of-thought-cot-reasoning)
-*   [Optimize Hyperparameters](ai-summary-optimizations.md#ai-hyperparameter-tuning) (Temp=0, negative prompting)
-*   [Multi-Shot Prompting](ai-summary-optimizations.md#multi-shot-prompting)
-*   [Negative Prompting](ai-summary-optimizations.md#negative-prompting)
-*   [Switch to top benchmark models](ai-summary-optimizations.md#model-comparison-details) (e.g. GPT 5, Gemini 2.5 pro/flash)
-*   [Pin Model Versions](ai-summary-optimizations.md#pin-model-versions)
-*   [Self-Correction Loop](ai-summary-optimizations.md#self-correction-loop)
-*   Add [retry logic](ai-summary-optimizations.md#retry-logic-with-backoff)
-*   [Ambiguity Detection](ai-summary-optimizations.md#ambiguity-detection)
+*   [Implement Structured Outputs (Zod)]() & [Confidence Scoring]()
+*   Add [Business Validators]() & [Chain-of-Thought field]()
+*   [Optimize Hyperparameters]() (Temp=0, negative prompting)
+*   [Multi-Shot Prompting]()
+*   [Negative Prompting]()
+*   [Switch to top benchmark models]() (e.g. GPT 5, Gemini 2.5 pro/flash)
+*   [Pin Model Versions]()
+*   [Self-Correction Loop]()
+*   Add [retry logic]()
+*   [Ambiguity Detection]()
 Note* High impact low lift
 
 ### Phase 2: Memory & Efficiency (Week 3-4)
-*   [Deploy Sliding Window context management](ai-summary-optimizations.md#sliding-window-conversation-memory).
-*   [Add Semantic Caching](ai-summary-optimizations.md#semantic-caching) to reduce redundant calls.
+*   [Deploy Sliding Window context management]().
+*   [Add Semantic Caching]() to reduce redundant calls.
 *   *Impact: 60-80% cost reduction, faster responses.*
 
 ### Phase 3: Intelligence (Month 2)
-*   [Build Customer Profile Memory](ai-summary-optimizations.md#customer-profile-memory) & [Metrics Dashboard](ai-summary-optimizations.md#metrics-monitoring-dashboard).
-*   [Start A/B Testing Framework](ai-summary-optimizations.md#ab-testing-framework).
+*   [Build Customer Profile Memory]() & [Metrics Dashboard]().
+*   [Start A/B Testing Framework]().
 *   *Impact: Data-driven optimization.*
 
 ### Phase 4: Advanced (Month 3+)
-*   [Vector Semantic Memory](ai-summary-optimizations.md#vector-database-semantic-memory) & [Menu RAG](ai-summary-optimizations.md#rag-for-menu-context).
-*   [Fine-tuning custom models](ai-summary-optimizations.md#fine-tuning-custom-model) (Long-term ROI).
+*   [Vector Semantic Memory]() & [Menu RAG]().
+*   [Fine-tuning custom models]() (Long-term ROI).
 
 ## Model Strategy & Cost Analysis
 **Recommendation: [Hybrid Strategy](ai-summary-optimizations.md#model-switching-strategy)**
@@ -69,4 +69,4 @@ Note* High impact low lift
 **Track:** Order Detection Rate, Item Extraction Accuracy, Hallucination Rate, Cost Per Order.
 
 **The 80/20 Rule:**
-Phase 1 & 2 ([Structured Outputs](ai-summary-optimizations.md#structured-outputs-with-zod-schemas) + [Sliding Window](ai-summary-optimizations.md#sliding-window-conversation-memory)) require only **2-3 weeks** but deliver **80% of the benefit** (high accuracy + low cost). Start there immediately.
+Phase 1 & 2 e.g. ([Structured Outputs]() + [Sliding Window]()) require only **2-3 weeks** but deliver **80% of the benefit** (high accuracy + low cost). Start there immediately.
