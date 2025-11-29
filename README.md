@@ -335,7 +335,7 @@ gcloud builds submit --region=us-central1 --tag us-central1-docker.pkg.dev/$PROJ
 gcloud builds submit . --config cloudbuild.yaml
 ```
 
-### 13 - Create Rag Engine Corpus in Vertexai
+### 13 - Create Rag Engine Corpus in Vertexai *Optional
 
 Navigate to the Rag Engine in Vertexai and create a new corpus called user-chat-history
 ![](images/vertexai-rag.png)
