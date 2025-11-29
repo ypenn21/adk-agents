@@ -358,7 +358,6 @@ export RAG_CORPUS="projects/project-id/locations/region/ragCorpora/rag-corpus-id
 export DB_URL="postgresql://postgres:pword@internal-ip-address:5432/tickets-db"
 
 #deploy adk custom ui with django
-
 gcloud run deploy adk-agent-bug-assist \
   --image=us-central1-docker.pkg.dev/genai-apps-25/adk/adk-agent-bug-assist:latest \
   --region=us-central1 \
@@ -370,6 +369,7 @@ gcloud run deploy adk-agent-bug-assist \
   --vpc-egress=private-ranges-only \
   --set-env-vars=GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=us-central1,GOOGLE_GENAI_USE_VERTEXAI=TRUE,MCP_TOOLBOX_URL=$MCP_TOOLBOX_URL,DJANGO=true,AGENT_URL=https://adk-a2a-agent-bug-assist-803095609412.us-central1.run.app,DB_URL=postgresql://postgres:$DB_PASS@$internal-ip:5432/tickets-db
 
+#deploy a2a custom
 gcloud run deploy adk-a2a-agent-bug-assist \
   --image=us-central1-docker.pkg.dev/$PROJECT_ID/adk/adk-agent-a2a-bug-assist:latest \
   --region=us-central1 \
