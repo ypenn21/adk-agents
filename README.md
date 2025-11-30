@@ -493,6 +493,7 @@ Once you are done comment the line out again for cloud deployment.
 
 ```bash
 #in order to download uv https://docs.astral.sh/uv/getting-started/installation/
+source .env.example
 rm uv.lock
 uv sync
 python manage.py runserver 
