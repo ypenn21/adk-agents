@@ -20,14 +20,6 @@ Once deployed, you can integrate your Gemma 3 model with intelligent agents buil
 │       └── vertexai-agent
 │           ├── agent.py
 │           └── __init__.py
-├── GEMINI.md
-├── notebooks
-│   ├── common_util.py
-│   ├── deploy_gemma3_vllm_on_gke.ipynb
-│   ├── deploy_gemma3_vllm_on_vertex.ipynb
-├── pyproject.toml
-├── README.md
-└── uv.lock
 ```
 
 
@@ -59,13 +51,11 @@ Follow one of the notebooks below to deploy your Gemma 3 model.
 
 This approach uses **vLLM** to serve the Gemma 3 model on a GKE cluster, giving you full control over the serving environment and hardware.
 
-➡️ **Follow the notebook:** [`notebooks/deploy_gemma3_vllm_on_gke.ipynb`](./notebooks/deploy_gemma3_vllm_on_gke.ipynb)
-
 ### Option 2: Deploy to Vertex AI
 
 This approach uses the **Vertex AI Model Garden** to deploy Gemma 3 to a **Vertex AI Endpoint**. This is a fully managed, auto-scaling solution that simplifies deployment and maintenance.
 
-➡️ **Follow the notebook:** [`notebooks/deploy_gemma3_vllm_on_vertex.ipynb`](./notebooks/deploy_gemma3_vllm_on_vertex.ipynb)
+➡️ **Run the script:** [`deploy-gemma-3-1b-ft-to-vertex.sh`](https://github.com/ypenn21/adk-agents/blob/main/fine-tuned-vertex/deploy-gemma-3-1b-ft-to-vertex.sh)
 
 ---
 
