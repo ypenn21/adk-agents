@@ -329,7 +329,8 @@ gcloud artifacts repositories create adk \
 Build the container image and push it to Artifact Registry with Cloud Build.
 
 ```bash
-gcloud builds submit --region=us-central1 --tag us-central1-docker.pkg.dev/$PROJECT_ID/adk/adk-agent-bug-assist:latest
+#custom ui with django web framework
+gcloud builds submit . --config cloudbuild-django.yaml
 
 #for adk web ui use this build instead
 gcloud builds submit . --config cloudbuild.yaml
