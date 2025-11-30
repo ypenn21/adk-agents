@@ -93,6 +93,23 @@ class ServiceManager:
             instruction=system_prompt.agent_instruction,
             tools=[load_memory, get_current_date, search_tool, *get_toolbox_tools()],
         )
+    
+    def _init_gke_ai_agent(self):
+        """Initializes the GKE AI agent."""
+        api_base_url = os.getenv("GKE_INFERENCE_ENDPOINT")
+        MODEL_NAME = os.getenv("MODEL_NAME") 
+        print(f"Initializing GKE AI Agent: {api_base_url} and {MODEL_NAME}")
+        root_agent = Agent(
+            model=LiteLlm(
+                model=MODEL_NAME,
+                api_base=api_base_url,
+            ),
+            name="it_bug_assistant_agent",
+            description="An agent to help users with bug tickets, including searching, creating, and updating them.",
+            instruction=system_prompt.agent_instruction,
+            tools=[load_memory, get_current_date, search_tool, *get_toolbox_tools()],
+        )
+        return root_agent
 
     def _init_agent_executor(self):
         """Initializes the agent executor."""
@@ -122,7 +139,7 @@ class ServiceManager:
             elif AGENT_MODE == AgentMode.VERTEXAI.value:
                 self._root_agent = self._init_vertexai_agent()
             elif AGENT_MODE == AgentMode.GKE.value:
-                self._root_agent = self._init_vertexai_agent()
+                self._root_agent = self._init_gke_ai_agent()
             else:
                 raise ValueError(f"Unsupported AGENT_MODE: {AGENT_MODE}")
         return self._root_agent
