@@ -5,6 +5,7 @@ if [ -f .env ]; then
   source .env
 fi
 
+#jsonAgentCard get your own agent card from the well known uri: http://hostname:8001/.well-known/agent-card.json
 PAYLOAD=$(cat <<EOF
 {
   "name": "$AGENT_NAME",
