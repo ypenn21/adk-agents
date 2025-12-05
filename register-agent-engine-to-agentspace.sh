@@ -30,7 +30,7 @@ curl -X POST \
   -H "Authorization: Bearer $(gcloud auth print-access-token)" \
   -H "Content-Type: application/json" \
   -H "X-Goog-User-Project: $PROJECT_NUMBER" \
-"https://discoveryengine.googleapis.com/v1alpha/projects/$PROJECT_ID/locations/global/collections/default_collection/engines/gemini-enterprise-17628189_1762818964034/assistants/default_assistant/agents" \
+"https://discoveryengine.googleapis.com/v1alpha/projects/$PROJECT_ID/locations/global/collections/default_collection/engines/$GEMINI_ENTERPRISE/assistants/default_assistant/agents" \
   -d "$PAYLOAD" 
 
 # Please note that the "authorizations" tag is optional; it is only needed if the Agent needs to act on behalf of the users (when it needs OAuth 2.0 support, see Authorize your agents). 
