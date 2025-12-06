@@ -567,6 +567,14 @@ https://discoveryengine.googleapis.com/v1alpha/projects/genai-apps-25/locations/
 
 ```
 
+Use the following shell scripts & .env for registration: 
+
+[`Create a new .env file with .env.example before using the scripts below`](.env.example)
+
+[`Register Deployed Agent Engine Agent to Gemini Enterprise`](register-agent-engine-to-agentspace.sh)
+
+[`Register Deployed Cloud Run Agent to Gemini Enterprise`](register-agent-cr-to-agentspace.sh)
+
 IAM Support for Agents Running on Cloud Run: When the agent is deployed on Cloud Run (when the AGENT_URL ends with "run.app"), Gemini Enterprise attempts IAM authentication when talking to the agent. For this to work, you should grant the "Cloud Run Invoker" role to the following principal in the project where Cloud Run is running:
 
 service-PROJECT_NUMBER@gcp-sa-discoveryengine.iam.gserviceaccount.com
