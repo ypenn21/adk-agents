@@ -333,7 +333,7 @@ Build the container image and push it to Artifact Registry with Cloud Build.
 gcloud builds submit . --config cloudbuild-django.yaml
 
 #for adk web ui use this build instead
-gcloud builds submit . --config cloudbuild.yaml
+gcloud builds submit . --config cloudbuild-adk-web.yaml
 ```
 
 ### 13 - Create Rag Engine Corpus in Vertexai *Optional
