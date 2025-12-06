@@ -400,9 +400,7 @@ Check log to see that this deployment is successfully.
 
 [`Deploying To Agent Engine`](deploy_agent_engine.py)
 
-[`Register Deployed Agent Engine Agent to Gemini Enterprise`](register-agent-engine-to-agentspace.sh)
-
-[`Register Deployed Cloud Run Agent to Gemini Enterprise`](register-agent-cr-to-agentspace.sh)
+[`Skip to Register to Gemini enterprise`](https://github.com/ypenn21/adk-agents/blob/main/README.md#it-bug-assistant-agent-register-command)
 
 
 ### 15 - Test the Cloud Run Agent
