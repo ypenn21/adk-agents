@@ -396,7 +396,7 @@ gcloud run deploy adk-web-ui \
 ```
 Check log to see that this deployment is successfully.
 
-### Alternatively Deploy the agent to Cloud Run & Register Agents to Gemini Enterprise:
+### Alternatively Deploy the Agent to Agent Engine & Register Agents to Gemini Enterprise:
 
 [`Deploying To Agent Engine`](deploy_agent_engine.py)
 
