@@ -394,8 +394,13 @@ gcloud run deploy adk-web-ui \
    --vpc-egress=private-ranges-only \
    --set-env-vars=GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=us-central1,GOOGLE_GENAI_USE_VERTEXAI=TRUE,MCP_TOOLBOX_URL=$MCP_TOOLBOX_URL
 ```
-
 Check log to see that this deployment is successfully.
+
+### Alternatively Deploy the agent to Cloud Run & Register Agents to Gemini Enterprise:
+
+[`Deploying To Agent Engine`](deploy_agent_engine.py)
+[`Register Deployed Agent Engine Agent to Gemini Enterprise`](register-agent-engine-to-agentspace.sh)
+[`Register Deployed Cloud Run Agent to Gemini Enterprise`](register-agent-cr-to-agentspace.sh)
 
 
 ### 15 - Test the Cloud Run Agent
