@@ -399,7 +399,9 @@ Check log to see that this deployment is successfully.
 ### Alternatively Deploy the agent to Cloud Run & Register Agents to Gemini Enterprise:
 
 [`Deploying To Agent Engine`](deploy_agent_engine.py)
+
 [`Register Deployed Agent Engine Agent to Gemini Enterprise`](register-agent-engine-to-agentspace.sh)
+
 [`Register Deployed Cloud Run Agent to Gemini Enterprise`](register-agent-cr-to-agentspace.sh)
 
 
