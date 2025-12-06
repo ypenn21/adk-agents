@@ -2,7 +2,7 @@
 
 # To register a new agent with Gemini EnterpriseAgentspace, run the following curl command:
 
-# Source .env file if it exists
+# Source .env file if it exists.. Use .env.example to create a new .env
 if [ -f .env ]; then
   source .env
 fi
