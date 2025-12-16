@@ -357,7 +357,7 @@ export PROJECT_ID="project-id"
 # set using Resource name
 export RAG_CORPUS="projects/project-id/locations/region/ragCorpora/rag-corpus-id"
 export DB_URL="postgresql://postgres:pword@internal-ip-address:5432/tickets-db"
-export PROJECT_NUMBER="project-number"
+export PROJECT_NUMBER=$(gcloud projects describe $PROJECT_ID --format='value(projectNumber)')
 
 #the default service account is ${PROJECT_NUMBER}-compute@developer.gserviceaccount.com for cloud run. add aiplatform permission
 gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
