@@ -357,6 +357,12 @@ export PROJECT_ID="project-id"
 # set using Resource name
 export RAG_CORPUS="projects/project-id/locations/region/ragCorpora/rag-corpus-id"
 export DB_URL="postgresql://postgres:pword@internal-ip-address:5432/tickets-db"
+export PROJECT_NUMBER="project-number"
+
+gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
+    --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
+    --role="roles/aiplatform.user"
+
 
 #deploy adk custom ui with django
 gcloud run deploy adk-agent-bug-assist \
