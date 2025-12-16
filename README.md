@@ -360,7 +360,7 @@ export DB_URL="postgresql://postgres:pword@internal-ip-address:5432/tickets-db"
 export PROJECT_NUMBER=$(gcloud projects describe $PROJECT_ID --format='value(projectNumber)')
 
 #the default service account is ${PROJECT_NUMBER}-compute@developer.gserviceaccount.com for cloud run. add aiplatform permission
-gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
+gcloud projects add-iam-policy-binding $PROJECT_ID \
     --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
     --role="roles/aiplatform.user"
 
