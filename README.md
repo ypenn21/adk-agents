@@ -532,6 +532,8 @@ https://medium.com/google-cloud/2-minute-adk-speed-up-your-agent-with-parallel-t
 https://agents.md
 https://medium.com/google-cloud/using-open-telemetry-otlp-on-cloud-run-72cb8d36e1c4
 
+### Setup Agent Engine Deployment with Terraform
+https://medium.com/google-cloud/deploy-your-agent-engine-with-terraform-the-enterprise-way-f918becff0c8
 
 ### Register agent to Gemini Enterprise aka Agent Space
 
