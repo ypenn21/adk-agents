@@ -196,7 +196,7 @@ agent_card = AgentCard(
 # 1. Create the AgentCard, RequestHandler, and App at the global scope.
 #    This is more efficient as it's done only once when the function instance starts.
 
-# this is only used by adk web not in the django framework.
+#this is used for adk web ui or a2a framework for agent to agent communication. not in the django framework.
 django_env = os.environ.get("DJANGO")
 if django_env is None or django_env.strip().lower() != "true":
     # Note: to_a2a() auto-generates an agent card using AgentCardBuilder
