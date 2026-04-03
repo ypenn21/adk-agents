@@ -5,6 +5,14 @@ if [ -f .env ]; then
   source .env
 fi
 
+# Set Discovery Engine location and endpoint
+LOCATION="${GEMINI_LOCATION:-global}"
+if [ "$LOCATION" == "global" ]; then
+  ENDPOINT="discoveryengine.googleapis.com"
+else
+  ENDPOINT="${LOCATION}-discoveryengine.googleapis.com"
+fi
+
 #jsonAgentCard get your own agent card from the well known uri: http://hostname:8001/.well-known/agent-card.json
 PAYLOAD=$(cat <<EOF
 {
@@ -12,7 +20,7 @@ PAYLOAD=$(cat <<EOF
   "displayName": "$DISPLAY_NAME",
   "description": "$DESCRIPTION",
   "icon": {
-    "content": "$ICON_URI"
+    "uri": "$ICON_URI"
   },
   "a2aAgentDefinition": {
     "jsonAgentCard": "{\"capabilities\":{\"streaming\":true},\"defaultInputModes\":[\"text\",\"text/plain\"],\"defaultOutputModes\":[\"text\",\"text/plain\"],\"description\":\"$TOOL_DESCRIPTION\",\"name\":\"$DISPLAY_NAME\",\"preferredTransport\":\"JSONRPC\",\"protocolVersion\":\"0.3.0\",\"skills\":[{\"description\":\"Assists in triaging and debugging software issues by searching, creating, and updating bug tickets.\",\"examples\":[\"Create a new ticket for a login issue.\",\"Search for tickets related to 'database connection error'\"],\"id\":\"bug_triage_assistant\",\"name\":\"Bug Triage Assistant\",\"tags\":[\"bug-tracking\",\"triage\"]}],\"url\":\"$AGENT_SERVICE_URL\",\"version\":\"1.0.0\"}"
@@ -24,8 +32,9 @@ EOF
 curl -X POST \
   -H "Authorization: Bearer $(gcloud auth print-access-token)" \
   -H "Content-Type: application/json" \
+  -H "X-Goog-User-Project: $PROJECT_NUMBER" \
   -d "$PAYLOAD" \
-  "https://discoveryengine.googleapis.com/v1alpha/projects/$PROJECT_ID/locations/global/collections/default_collection/engines/$GEMINI_ENTERPRISE/assistants/default_assistant/agents"
+  "https://$ENDPOINT/v1alpha/projects/$PROJECT_ID/locations/$LOCATION/collections/default_collection/engines/$GEMINI_ENTERPRISE/assistants/default_assistant/agents"
 
   # Please note that the "authorizations" tag is optional; it is only needed if the Agent needs to act on behalf of the users (when it needs OAuth 2.0 support, see Authorize your agents). 
 # PROJECT_ID: the ID of your Google Cloud project.
