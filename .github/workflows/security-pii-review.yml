@@ -83,7 +83,7 @@ jobs:
           mkdir -p ~/.gemini .agentfarm/ .gemini/
           echo '{"projects":{}}' > ~/.gemini/projects.json
           echo "$GEMINI_SETTINGS" > ~/.gemini/settings.json
-          echo "${{ secrets.GITHUB_TOKEN }}" | gemini extensions link ./extensions/agent-farm --consent
+          echo "${{ secrets.G_PAT_TOKEN }}" | gemini extensions link ./extensions/agent-farm --consent
 
       - name: Gemini Security Scan
         env:
