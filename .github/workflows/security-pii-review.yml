@@ -157,7 +157,7 @@ jobs:
         env:
           GOOGLE_GENAI_USE_VERTEXAI: 'true'
           GOOGLE_CLOUD_LOCATION: ${{ secrets.GOOGLE_CLOUD_LOCATION || vars.GOOGLE_CLOUD_LOCATION }}
-          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT || vars.GCP_PROJECT_ID }}
+          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT || vars.GOOGLE_CLOUD_PROJECT }}
         run: |
           # Aggregate reports
           echo "### SECURITY SCAN ###" > final_report.txt
