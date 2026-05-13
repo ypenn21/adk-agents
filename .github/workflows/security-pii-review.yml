@@ -16,7 +16,7 @@ env:
   GEMINI_SETTINGS: |-
     {
       "model": {
-        "maxSessionTurns": 40
+        "maxSessionTurns": 35
       },
       "telemetry": {
         "enabled": true,
