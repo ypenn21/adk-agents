@@ -61,8 +61,8 @@ jobs:
 
       - name: 'Mint identity token'
         id: 'mint_identity_token'
-        if: |-
-          ${{ secrets.APP_ID }}
+        env:
+         APP_ID: '${{ secrets.APP_ID }}'
         uses: 'actions/create-github-app-token@v3' # ratchet:actions/create-github-app-token@v2
         with:
           app-id: '${{ secrets.APP_ID }}'
