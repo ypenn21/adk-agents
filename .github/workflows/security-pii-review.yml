@@ -42,6 +42,7 @@ jobs:
           project_id: 'genai-apps-25'
     
       - name: Generate GitHub App Token
+        if: ${{ secrets.APP_ID != '' && secrets.APP_PRIVATE_KEY != '' }}
         id: app-token
         uses: actions/create-github-app-token@v1
         with:
@@ -125,7 +126,7 @@ jobs:
         env:
           GITHUB_PERSONAL_ACCESS_TOKEN: ${{ steps.app-token.outputs.token || secrets.G_PAT_TOKEN || github.token }}
           GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.G_PAT_TOKEN || github.token }}
-          GITHUB_TOKEN: '${{ steps.mint_identity_token.outputs.token || secrets.G_PAT_TOKEN || github.token }}'
+          GITHUB_TOKEN: '${{ secrets.mint_identity_token.outputs.token || secrets.G_PAT_TOKEN || github.token }}'
           ISSUE_TITLE: '${{ github.event.pull_request.title || github.event.issue.title }}'
           ISSUE_BODY: '${{ github.event.pull_request.body || github.event.issue.body }}'
           PULL_REQUEST_NUMBER: '${{ github.event.pull_request.number || github.event.issue.number }}'
