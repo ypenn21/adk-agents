@@ -12,7 +12,7 @@ module "gh_oidc" {
   }
 
   # HARDCODE YOUR ORG HERE - This protects your project from other GitHub users
-  attribute_condition = "assertion.repository_owner == 'cloud-gtm-core-apps'"
+  attribute_condition = "assertion.repository_owner == 'cloud-gtm-core-apps' || assertion.repository_owner == 'ypenn21'"
 }
 
 # 2. Enable Required APIs
@@ -36,6 +36,12 @@ resource "google_service_account_iam_member" "wif_binding" {
   
   # Locked specifically to your repository
   member = "principalSet://iam.googleapis.com/projects/803095609412/locations/global/workloadIdentityPools/aaa-github-pool/attribute.repository/cloud-gtm-core-apps/e2e-agent-patterns"
+}
+
+resource "google_service_account_iam_member" "wif_binding_adk" {
+  service_account_id = "projects/genai-apps-25/serviceAccounts/803095609412-compute@developer.gserviceaccount.com"
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "principalSet://iam.googleapis.com/projects/803095609412/locations/global/workloadIdentityPools/aaa-github-pool/attribute.repository/ypenn21/adk-agents"
 }
 
 # 4. GCS Bucket for Scan Reports

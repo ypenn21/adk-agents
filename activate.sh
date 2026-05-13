@@ -1,0 +1,7 @@
+export PROJECT_ID=genai-apps-25
+export LOCATION=us-central1
+export PROJECT_NUMBER=12234
+export GOOGLE_GENAI_USE_VERTEXAI=TRUE
+export GOOGLE_GENAI_USE_VERTEXAI=1
+export GOOGLE_CLOUD_PROJECT=genai-apps-25
+export GOOGLE_CLOUD_LOCATION=global
