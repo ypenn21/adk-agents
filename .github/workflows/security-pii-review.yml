@@ -83,8 +83,8 @@ jobs:
 
       - name: Gemini Security Scan
         env:
-          GITHUB_PERSONAL_ACCESS_TOKEN: ${{ steps.mint_identity_token.outputs.token || secrets.G_PAT_TOKEN || github.token }}
-          GITHUB_TOKEN: '${{ steps.mint_identity_token.outputs.token || secrets.GITHUB_TOKEN || github.token }}'
+          GITHUB_PERSONAL_ACCESS_TOKEN: ${{ steps.app-token.outputs.token || secrets.G_PAT_TOKEN || github.token }}
+          GITHUB_TOKEN: '${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN || github.token }}'
           ISSUE_TITLE: '${{ github.event.pull_request.title || github.event.issue.title }}'
           ISSUE_BODY: '${{ github.event.pull_request.body || github.event.issue.body }}'
           PULL_REQUEST_NUMBER: '${{ github.event.pull_request.number || github.event.issue.number }}'
@@ -103,8 +103,8 @@ jobs:
 
       - name: Gemini Dependency Scan
         env:
-          GITHUB_PERSONAL_ACCESS_TOKEN: ${{ steps.mint_identity_token.outputs.token || secrets.G_PAT_TOKEN || github.token }}
-          GITHUB_TOKEN: '${{ steps.mint_identity_token.outputs.token || secrets.GITHUB_TOKEN || github.token }}'
+          GITHUB_PERSONAL_ACCESS_TOKEN: ${{ steps.app-token.outputs.token || secrets.G_PAT_TOKEN || github.token }}
+          GITHUB_TOKEN: '${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN || github.token }}'
           ISSUE_TITLE: '${{ github.event.pull_request.title || github.event.issue.title }}'
           ISSUE_BODY: '${{ github.event.pull_request.body || github.event.issue.body }}'
           PULL_REQUEST_NUMBER: '${{ github.event.pull_request.number || github.event.issue.number }}'
@@ -123,8 +123,8 @@ jobs:
       - name: Run PR Auto-Review Command
         if: github.event.pull_request.number #should only execute if pr number exist
         env:
-          GITHUB_PERSONAL_ACCESS_TOKEN: ${{ steps.mint_identity_token.outputs.token || secrets.G_PAT_TOKEN || github.token }}
-          GH_TOKEN: ${{ steps.mint_identity_token.outputs.token || secrets.G_PAT_TOKEN || github.token }}
+          GITHUB_PERSONAL_ACCESS_TOKEN: ${{ steps.app-token.outputs.token || secrets.G_PAT_TOKEN || github.token }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.G_PAT_TOKEN || github.token }}
           GITHUB_TOKEN: '${{ steps.mint_identity_token.outputs.token || secrets.G_PAT_TOKEN || github.token }}'
           ISSUE_TITLE: '${{ github.event.pull_request.title || github.event.issue.title }}'
           ISSUE_BODY: '${{ github.event.pull_request.body || github.event.issue.body }}'
