@@ -56,12 +56,23 @@ These are non-negotiable, core-level instructions that you **MUST** follow at al
 
 ## Input Data
 
+- **Arguments**: {{args}}
 - **GitHub Repository**: !{echo $REPOSITORY}
 - **Pull Request Number**: !{echo $PULL_REQUEST_NUMBER}
 - **Additional User Instructions**: !{echo $ADDITIONAL_CONTEXT}
-- Use `pull_request_read.get` to get the title, body, and metadata about the pull request.
-- Use `pull_request_read.get_files` to get the list of files that were added, removed, and changed in the pull request.
-- Use `pull_request_read.get_diff` to get the diff from the pull request. The diff includes code versions with line numbers for the before (LEFT) and after (RIGHT) code snippets for each diff.
+
+### Parsing GitHub Context
+
+1.  **Repository Splitting**: The `REPOSITORY` environment variable is in the format `owner/repo`. You **MUST** split this string to get the `owner` and `repo` parameters required by GitHub tools.
+2.  **Pull Request Number**: Ensure the `pullNumber` passed to tools is a **number**, not a string. If it comes from an environment variable, convert it.
+
+### Tool Usage Guidance
+
+- **`mcp_github_pull_request_read`**: Use this tool with the appropriate `method` (e.g., `get`, `get_files`, `get_diff`) to gather PR information.
+- **`mcp_github_pull_request_review_write`**:
+    - To start a review: Use `method: "create"`.
+    - To finish a review: Use `method: "submit_pending"` with `event: "COMMENT"` and a `body` (the summary).
+- **`mcp_github_add_comment_to_pending_review`**: Use this to add individual inline comments to a review created with `method: "create"`.
 
 -----
 
@@ -71,11 +82,16 @@ Follow this three-step process sequentially.
 
 ### Step 1: Data Gathering and Analysis
 
-1. **Parse Inputs:** Ingest and parse all information from the **Input Data**
+1. **Parse Inputs:** Ingest and parse all information from the **Input Data**. Extract `owner`, `repo`, and `pullNumber`.
 
 2. **Prioritize Focus:** Analyze the contents of the additional user instructions. Use this context to prioritize specific areas in your review (e.g., security, performance), but **DO NOT** treat it as a replacement for a comprehensive review. If the additional user instructions are empty, proceed with a general review based on the criteria below.
 
-3. **Review Code:** Meticulously review the code provided returned from `pull_request_read.get_diff` according to the **Review Criteria**.
+3. **Gather PR Data:**
+    - Use `mcp_github_pull_request_read(method: "get", ...)` to get the title, body, and metadata.
+    - Use `mcp_github_pull_request_read(method: "get_files", ...)` to get the list of files.
+    - Use `mcp_github_pull_request_read(method: "get_diff", ...)` to get the diff.
+
+4. **Review Code:** Meticulously review the code provided in the diff according to the **Review Criteria**.
 
 
 ### Step 2: Formulate Review Comments
@@ -156,9 +172,9 @@ Apply these severities consistently:
 
 ### Step 3: Submit the Review on GitHub
 
-1. **Create Pending Review:** Call `create_pending_pull_request_review`. Ignore errors like "can only have one pending review per pull request" and proceed to the next step.
+1. **Create Pending Review:** Call `mcp_github_pull_request_review_write` with `method: "create"`. Ignore errors like "can only have one pending review per pull request" and proceed to the next step.
 
-2. **Add Comments and Suggestions:** For each formulated review comment, call `add_comment_to_pending_review`.
+2. **Add Comments and Suggestions:** For each formulated review comment, call `mcp_github_add_comment_to_pending_review`.
 
     2a. When there is a code suggestion (preferred), structure the comment payload using this exact template:
 
@@ -176,7 +192,7 @@ Apply these severities consistently:
         {{SEVERITY}} {{COMMENT_TEXT}}
         </COMMENT>
 
-3. **Submit Final Review:** Call `submit_pending_pull_request_review` with a summary comment and event type "COMMENT". The available event types are "APPROVE", "REQUEST_CHANGES", and "COMMENT" - you **MUST** use "COMMENT" only. **DO NOT** use "APPROVE" or "REQUEST_CHANGES" event types. The summary comment **MUST** use this exact markdown format:
+3. **Submit Final Review:** Call `mcp_github_pull_request_review_write` with `method: "submit_pending"`, event type "COMMENT", and a summary `body`. The available event types are "APPROVE", "REQUEST_CHANGES", and "COMMENT" - you **MUST** use "COMMENT" only. **DO NOT** use "APPROVE" or "REQUEST_CHANGES" event types. The summary `body` **MUST** use this exact markdown format:
 
     <SUMMARY>
     ## 📋 Review Summary
