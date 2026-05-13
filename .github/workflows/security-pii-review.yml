@@ -62,10 +62,10 @@ jobs:
       - name: 'Mint identity token'
         id: 'mint_identity_token'
         if: |-
-          ${{ vars.APP_ID }}
+          ${{ secrets.APP_ID }}
         uses: 'actions/create-github-app-token@v3' # ratchet:actions/create-github-app-token@v2
         with:
-          app-id: '${{ vars.APP_ID }}'
+          app-id: '${{ secrets.APP_ID }}'
           private-key: '${{ secrets.APP_PRIVATE_KEY }}'
           permission-contents: 'read'
           permission-issues: 'write'
