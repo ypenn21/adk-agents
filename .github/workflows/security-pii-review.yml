@@ -28,6 +28,9 @@ env:
 jobs:
   scan-and-evaluate:
     runs-on: ubuntu-latest
+    env:
+      APP_ID: ${{ secrets.APP_ID }}
+      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -42,12 +45,12 @@ jobs:
           project_id: 'genai-apps-25'
     
       - name: Generate GitHub App Token
-        if: secrets.APP_ID != '' && secrets.APP_PRIVATE_KEY != ''
+        if: env.APP_ID != '' && env.APP_PRIVATE_KEY != ''
         id: app-token
         uses: actions/create-github-app-token@v1
         with:
-          app-id: ${{ secrets.APP_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          app-id: ${{ env.APP_ID }}
+          private-key: ${{ env.APP_PRIVATE_KEY }}
     
       - name: 'Set up Cloud SDK'
         uses: 'google-github-actions/setup-gcloud@v2'
