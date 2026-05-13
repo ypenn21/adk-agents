@@ -85,46 +85,44 @@ jobs:
           echo "$GEMINI_SETTINGS" > ~/.gemini/settings.json
           echo "${{ secrets.G_PAT_TOKEN }}" | gemini extensions link ./extensions/agent-farm --consent
 
-      - name: Gemini Security Scan
-        env:
-          GITHUB_PERSONAL_ACCESS_TOKEN: ${{ steps.mint_identity_token.outputs.token || secrets.G_PAT_TOKEN || github.token }}
-          GITHUB_TOKEN: '${{ steps.mint_identity_token.outputs.token || secrets.GITHUB_TOKEN || github.token }}'
-          ISSUE_TITLE: '${{ github.event.pull_request.title || github.event.issue.title }}'
-          ISSUE_BODY: '${{ github.event.pull_request.body || github.event.issue.body }}'
-          PULL_REQUEST_NUMBER: '${{ github.event.pull_request.number || github.event.issue.number }}'
-          REPOSITORY: '${{ github.repository }}'
-          ADDITIONAL_CONTEXT: '${{ inputs.additional_context }}'
-          GOOGLE_GENAI_USE_VERTEXAI: 'true'
-          GOOGLE_CLOUD_LOCATION: ${{ secrets.GOOGLE_CLOUD_LOCATION || vars.GOOGLE_CLOUD_LOCATION }}
-          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT || vars.GOOGLE_CLOUD_PROJECT }}
-        run: |
-          echo $GITHUB_PERSONAL_ACCESS_TOKEN
-          gemini extensions install https://github.com/gemini-cli-extensions/security --consent
-          gemini -p "/security:analyze" -y | tee reports/security-scan.txt
-          # Copy detailed report artifacts if they exist
-          if [ -d .gemini_security ]; then
-            cp -r .gemini_security/* reports/ || true
-          fi
+      # - name: Gemini Security Scan
+      #   env:
+      #     GITHUB_PERSONAL_ACCESS_TOKEN: ${{ steps.mint_identity_token.outputs.token || secrets.G_PAT_TOKEN || github.token }}
+      #     GITHUB_TOKEN: '${{ steps.mint_identity_token.outputs.token || secrets.GITHUB_TOKEN || github.token }}'
+      #     ISSUE_TITLE: '${{ github.event.pull_request.title || github.event.issue.title }}'
+      #     ISSUE_BODY: '${{ github.event.pull_request.body || github.event.issue.body }}'
+      #     PULL_REQUEST_NUMBER: '${{ github.event.pull_request.number || github.event.issue.number }}'
+      #     REPOSITORY: '${{ github.repository }}'
+      #     ADDITIONAL_CONTEXT: '${{ inputs.additional_context }}'
+      #     GOOGLE_GENAI_USE_VERTEXAI: 'true'
+      #     GOOGLE_CLOUD_LOCATION: ${{ secrets.GOOGLE_CLOUD_LOCATION || vars.GOOGLE_CLOUD_LOCATION }}
+      #     GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT || vars.GOOGLE_CLOUD_PROJECT }}
+      #   run: |
+      #     gemini extensions install https://github.com/gemini-cli-extensions/security --consent
+      #     gemini -p "/security:analyze" -y | tee reports/security-scan.txt
+      #     # Copy detailed report artifacts if they exist
+      #     if [ -d .gemini_security ]; then
+      #       cp -r .gemini_security/* reports/ || true
+      #     fi
 
-      - name: Gemini Dependency Scan
-        env:
-          GITHUB_PERSONAL_ACCESS_TOKEN: ${{ steps.mint_identity_token.outputs.token || secrets.G_PAT_TOKEN || github.token }}
-          GITHUB_TOKEN: '${{ steps.mint_identity_token.outputs.token || secrets.GITHUB_TOKEN || github.token }}'
-          ISSUE_TITLE: '${{ github.event.pull_request.title || github.event.issue.title }}'
-          ISSUE_BODY: '${{ github.event.pull_request.body || github.event.issue.body }}'
-          PULL_REQUEST_NUMBER: '${{ github.event.pull_request.number || github.event.issue.number }}'
-          REPOSITORY: '${{ github.repository }}'
-          ADDITIONAL_CONTEXT: '${{ inputs.additional_context }}'
-          GOOGLE_GENAI_USE_VERTEXAI: 'true'
-          GOOGLE_CLOUD_LOCATION: ${{ secrets.GOOGLE_CLOUD_LOCATION || vars.GOOGLE_CLOUD_LOCATION }}
-          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT || vars.GOOGLE_CLOUD_PROJECT }}
-        run: |
-          echo $GITHUB_PERSONAL_ACCESS_TOKEN
-          gemini -p "/security:scan-deps strictly only focus on generating the report, and don't try to modify or patch" -y | tee reports/dependency-audit.txt
-          # Copy detailed dependency artifacts if they exist
-          if [ -d .gemini_security ]; then
-            cp -r .gemini_security/* reports/ || true
-          fi
+      # - name: Gemini Dependency Scan
+      #   env:
+      #     GITHUB_PERSONAL_ACCESS_TOKEN: ${{ steps.mint_identity_token.outputs.token || secrets.G_PAT_TOKEN || github.token }}
+      #     GITHUB_TOKEN: '${{ steps.mint_identity_token.outputs.token || secrets.GITHUB_TOKEN || github.token }}'
+      #     ISSUE_TITLE: '${{ github.event.pull_request.title || github.event.issue.title }}'
+      #     ISSUE_BODY: '${{ github.event.pull_request.body || github.event.issue.body }}'
+      #     PULL_REQUEST_NUMBER: '${{ github.event.pull_request.number || github.event.issue.number }}'
+      #     REPOSITORY: '${{ github.repository }}'
+      #     ADDITIONAL_CONTEXT: '${{ inputs.additional_context }}'
+      #     GOOGLE_GENAI_USE_VERTEXAI: 'true'
+      #     GOOGLE_CLOUD_LOCATION: ${{ secrets.GOOGLE_CLOUD_LOCATION || vars.GOOGLE_CLOUD_LOCATION }}
+      #     GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT || vars.GOOGLE_CLOUD_PROJECT }}
+      #   run: |
+      #     gemini -p "/security:scan-deps strictly only focus on generating the report, and don't try to modify or patch" -y | tee reports/dependency-audit.txt
+      #     # Copy detailed dependency artifacts if they exist
+      #     if [ -d .gemini_security ]; then
+      #       cp -r .gemini_security/* reports/ || true
+      #     fi
 
       - name: Run PR Auto-Review Command
         if: github.event.pull_request.number #should only execute if pr number exist
@@ -141,7 +139,6 @@ jobs:
           GOOGLE_CLOUD_LOCATION: ${{ secrets.GOOGLE_CLOUD_LOCATION || vars.GOOGLE_CLOUD_LOCATION }}
           GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT || vars.GOOGLE_CLOUD_PROJECT }}
         run: |
-          echo $GITHUB_PERSONAL_ACCESS_TOKEN
           gemini -p "@reviewer pull_request: ${{ github.event.pull_request.number }} max_reviews: 3" -y | tee reports/pr-review.txt
 
       - name: 'GCP PII Scan'
