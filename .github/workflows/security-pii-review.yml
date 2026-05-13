@@ -42,7 +42,7 @@ jobs:
           project_id: 'genai-apps-25'
     
       - name: Generate GitHub App Token
-        if: ${{ secrets.APP_ID != '' && secrets.APP_PRIVATE_KEY != '' }}
+        if: secrets.APP_ID != '' && secrets.APP_PRIVATE_KEY != ''
         id: app-token
         uses: actions/create-github-app-token@v1
         with:
