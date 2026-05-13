@@ -40,6 +40,14 @@ jobs:
           workload_identity_provider: 'projects/803095609412/locations/global/workloadIdentityPools/aaa-github-pool/providers/github-provider'
           service_account: '803095609412-compute@developer.gserviceaccount.com'
           project_id: 'genai-apps-25'
+    
+      - name: Generate GitHub App Token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+    
       - name: 'Set up Cloud SDK'
         uses: 'google-github-actions/setup-gcloud@v2'
         with:
@@ -59,21 +67,9 @@ jobs:
       - name: Install Gemini CLI
         run: npm install -g @google/gemini-cli
 
-      - name: 'Mint identity token'
-        id: 'mint_identity_token'
-        env:
-         APP_ID: '${{ secrets.APP_ID }}'
-        uses: 'actions/create-github-app-token@v3' # ratchet:actions/create-github-app-token@v2
-        with:
-          app-id: '${{ secrets.APP_ID }}'
-          private-key: '${{ secrets.APP_PRIVATE_KEY }}'
-          permission-contents: 'read'
-          permission-issues: 'write'
-          permission-pull-requests: 'write'
-
       - name: 'Debug Token Metadata'
         env:
-          TOKEN: ${{ steps.mint_identity_token.outputs.token || secrets.G_PAT_TOKEN || github.token }}
+          TOKEN: ${{ steps.app-token.outputs.token || secrets.G_PAT_TOKEN || github.token }}
         run: |
           echo "Token Length: ${#TOKEN}"
           if [[ $TOKEN == ghp_* ]]; then echo "Token type: Classic PAT"; elif [[ $TOKEN == github_pat_* ]]; then echo "Token type: Fine-grained PAT"; else echo "Token type: Other/App Token"; fi
