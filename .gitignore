@@ -10,3 +10,30 @@ __pycache__/
 .venv/
 venv/
 ENV/
+
+# Local .terraform directories
+**/.terraform/*
+
+# .tfstate files
+*.tfstate
+*.tfstate.backup
+.terraform.lock.hcl
+tfplan
+# .terraform.lock.hcl
+# .terraform.lock.hcl is usually committed to ensure consistent provider versions, 
+# but I will include it here if you specifically want to ignore it. 
+# For now, I'll keep it commented out or include it based on common "artifact" definitions.
+# .terraform.lock.hcl
+
+# Environment files
+.env
+.env.*
+
+# Ignore logs
+*.log
+
+# Ignore temp creds
+gha-creds-*
+
+#ignore mcp toolbox cmd binary
+mcp-servers/mcp-toolbox/toolbox

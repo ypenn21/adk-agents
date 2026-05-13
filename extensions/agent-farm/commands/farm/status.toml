@@ -1,0 +1,13 @@
+description = "View the current state of the Agent Farm dashboard."
+prompt = """
+Execute the following Agent Farm Status workflow:
+1. Use `mcp_github_list_issues` to fetch all open issues in the current repository for the current repository.
+2. Group the issues by their current phase based on their `status:` labels:
+   - PM Phase (`status: pm-review`)
+   - TPM Phase (`status: needs-tpm`, `status: tpm-review`)
+   - Execution Phase (`status: needs-qa`, `status: needs-engineer`)
+   - Review Phase (`status: ready-to-merge`, `status: review-stuck`)
+3. Present the grouped dashboard cleanly to the user.
+4. For any issue requiring human action (`pm-review`, `needs-tpm`, `tpm-review`, `status: ready-to-merge`, `review-stuck`), provide a direct tactical push. Example: "Issue #2 is waiting for PM approval. Run `@pm 2` to refine it."
+5. For issues in the Execution Phase, state that the CI/CD orchestrator is currently handling them autonomously.
+"""

@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "name": "welcome",
+            "type": "command",
+            "command": "${extensionPath}/hooks/welcome.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

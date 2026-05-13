@@ -1,0 +1,188 @@
+name: Security PII and Code Review
+
+on:
+  push:
+    branches: [ main ]
+  pull_request: # trigger
+    types:
+      - opened
+      - synchronize
+
+permissions:
+  contents: 'read'
+  id-token: 'write' # Mandatory for the handshake
+
+env:
+  GEMINI_SETTINGS: |-
+    {
+      "model": {
+        "maxSessionTurns": 40
+      },
+      "telemetry": {
+        "enabled": true,
+        "target": "local",
+        "outfile": ".gemini/telemetry.log"
+      }
+    }
+
+jobs:
+  scan-and-evaluate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - id: 'auth'
+        name: 'Authenticate to Google Cloud'
+        uses: 'google-github-actions/auth@v2'
+        with:
+          # Constructed using your Project Number and Pool ID
+          workload_identity_provider: 'projects/803095609412/locations/global/workloadIdentityPools/aaa-github-pool/providers/github-provider'
+          service_account: '803095609412-compute@developer.gserviceaccount.com'
+          project_id: 'genai-apps-25'
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v2'
+        with:
+          install_components: 'alpha'
+
+      - name: 'Verify Authentication'
+        run: 'gcloud auth list'
+
+      - name: 'Create Reports Directory'
+        run: mkdir -p reports
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Gemini CLI
+        run: npm install -g @google/gemini-cli
+
+      - name: Link Hub Extension
+        run: |
+          mkdir -p ~/.gemini .agentfarm/ .gemini/
+          echo '{"projects":{}}' > ~/.gemini/projects.json
+          echo "$GEMINI_SETTINGS" > ~/.gemini/settings.json
+          echo "${{ secrets.GITHUB_TOKEN }}" | gemini extensions link ./extensions/agent-farm --consent
+
+      - name: Gemini Security Scan
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GOOGLE_GENAI_USE_VERTEXAI: 'true'
+          GOOGLE_CLOUD_LOCATION: ${{ secrets.GOOGLE_CLOUD_LOCATION || 'global' }}
+          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT || vars.GCP_PROJECT_ID }}
+        run: |
+          gemini extensions install https://github.com/gemini-cli-extensions/security --consent
+          gemini -p "/security:analyze" -y | tee reports/security-scan.txt
+          # Copy detailed report artifacts if they exist
+          if [ -d .gemini_security ]; then
+            cp -r .gemini_security/* reports/ || true
+          fi
+
+      - name: Gemini Dependency Scan
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GOOGLE_GENAI_USE_VERTEXAI: 'true'
+          GOOGLE_CLOUD_LOCATION: ${{ secrets.GOOGLE_CLOUD_LOCATION || 'global' }}
+          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT || vars.GCP_PROJECT_ID }}
+        run: |
+          gemini -p "/security:scan-deps strictly only focus on generating the report, and don't try to modify or patch" -y | tee reports/dependency-audit.txt
+          # Copy detailed dependency artifacts if they exist
+          if [ -d .gemini_security ]; then
+            cp -r .gemini_security/* reports/ || true
+          fi
+
+      - name: Run PR Auto-Review Command
+        if: github.event.pull_request.number #should only execute if pr number exist
+        env:
+          GITHUB_PERSONAL_ACCESS_TOKEN: ${{ secrets.G_PAT_TOKEN }}
+          GH_TOKEN: ${{ secrets.G_PAT_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.G_PAT_TOKEN }}
+          GOOGLE_GENAI_USE_VERTEXAI: 'true'
+          GOOGLE_CLOUD_LOCATION: ${{ secrets.GOOGLE_CLOUD_LOCATION || 'global' }}
+          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT || vars.GCP_PROJECT_ID }}
+        run: |
+          gemini -p "@reviewer pull_request: ${{ github.event.pull_request.number }} max_reviews: 3" -y | tee reports/pr-review.txt
+
+      - name: 'GCP PII Scan'
+        run: |
+          echo "Scanning for PII (Email, Phone, etc.)..."
+          # Scan common files in the repository for sensitive info types using Cloud DLP alpha
+          find . -type f -not -path '*/.*' -not -path './reports/*' -not -path './plans/*' -not -path './extensions/agent-farm/*' -not -name "gha-creds-*" \( -name "*.tf" -o -name "*.yml" -o -name "*.yaml" -o -name "*.md" -o -name "*.sh" -o -name "*.py" -o -name "*.json" -o -name "*.toml" -o -name "*.html" \) | while read file; do
+            echo "Scanning $file..." | tee -a reports/pii-scan.txt
+            CONTENT=$(cat "$file")
+            if [ ! -z "$CONTENT" ]; then
+              gcloud alpha dlp text inspect --info-types=EMAIL_ADDRESS,PHONE_NUMBER,LOCATION --content="$CONTENT" --format="json" | tee -a reports/pii-scan.txt
+            fi
+          done
+
+      - name: 'Quality Gate Decision'
+        env:
+          GOOGLE_GENAI_USE_VERTEXAI: 'true'
+          GOOGLE_CLOUD_LOCATION: ${{ secrets.GOOGLE_CLOUD_LOCATION || 'global' }}
+          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT || vars.GCP_PROJECT_ID }}
+        run: |
+          # Aggregate reports
+          echo "### SECURITY SCAN ###" > final_report.txt
+          [ -f reports/security-scan.txt ] && cat reports/security-scan.txt >> final_report.txt || echo "Security scan report missing" >> final_report.txt
+          echo "### DEPENDENCY AUDIT ###" >> final_report.txt
+          [ -f reports/dependency-audit.txt ] && cat reports/dependency-audit.txt >> final_report.txt || echo "Dependency audit report missing" >> final_report.txt
+          echo "### PII SCAN ###" >> final_report.txt
+          [ -f reports/pii-scan.txt ] && cat reports/pii-scan.txt >> final_report.txt || echo "PII scan report missing" >> final_report.txt
+          echo "### PR REVIEW ###" >> final_report.txt
+          [ -f reports/pr-review.txt ] && cat reports/pr-review.txt >> final_report.txt || echo "PR review report missing (not a PR?)" >> final_report.txt
+
+          # Gemini Evaluation
+          gemini -p "Act as a Release Engineer. Review this combined report. 
+          Quality Gate Criteria:
+          1. Zero 'High' severity security vulnerabilities.
+          2. Zero PII leaks (emails/phones).
+          3. PR reviews should not have major blocking issues.
+          4. Zero 'High' or 'Critical' vulnerabilities in third-party packages (SCA/Dependencies).
+          
+          If the criteria are met, output 'GATE_PASSED'. 
+          If any fail, output 'GATE_FAILED' followed by a bulleted list of reasons. 
+          REPORT CONTENT: $(cat final_report.txt)" -y | tee reports/decision.txt
+
+      - name: 'Upload Reports to GCS'
+        uses: 'google-github-actions/upload-cloud-storage@v2'
+        with:
+          path: 'reports'
+          destination: 'genai-apps-25-scan-reports/${{ github.run_id }}_${{ github.run_attempt }}'
+
+      - name: 'Enforce Quality Gate'
+        run: |
+          if grep -q "GATE_FAILED" reports/decision.txt; then
+            echo "Quality Gate Failed!"
+            cat reports/decision.txt
+            exit 1
+          fi
+          echo "Quality Gate Passed!"
+
+  build:
+    needs: scan-and-evaluate
+    runs-on: ubuntu-latest
+    environment: production
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - id: 'auth'
+        name: 'Authenticate to Google Cloud'
+        uses: 'google-github-actions/auth@v2'
+        with:
+          workload_identity_provider: 'projects/803095609412/locations/global/workloadIdentityPools/aaa-github-pool/providers/github-provider'
+          service_account: '803095609412-compute@developer.gserviceaccount.com'
+          project_id: 'genai-apps-25'
+
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v2'
+
+      - name: 'Submit Cloud Build'
+        run: |
+          gcloud builds submit \
+            --config .cloudbuild/cloudbuild-django.yaml \
+            --project genai-apps-25 \
+            .
