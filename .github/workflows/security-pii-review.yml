@@ -11,12 +11,20 @@ on:
 permissions:
   contents: 'read'
   id-token: 'write' # Mandatory for the handshake
+  pull-requests: 'write' # Added for automated review comments
 
 env:
+  APP_ID: ${{ secrets.APP_ID }}
+  APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
+  GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT || vars.GCP_PROJECT_ID }}
+  GOOGLE_CLOUD_PROJECT_NUMBER: ${{ secrets.GOOGLE_CLOUD_PROJECT_NUMBER || vars.GCP_PROJECT_NUMBER }}
+  GOOGLE_GENAI_USE_VERTEXAI: 'true'
+  GOOGLE_CLOUD_LOCATION: ${{ secrets.GOOGLE_CLOUD_LOCATION || 'global' }}
+  GEMINI_MEMORY_MONITOR_INTERVAL: 60000
   GEMINI_SETTINGS: |-
     {
       "model": {
-        "maxSessionTurns": 35
+        "maxSessionTurns": 30
       },
       "telemetry": {
         "enabled": true,
@@ -28,9 +36,6 @@ env:
 jobs:
   scan-and-evaluate:
     runs-on: ubuntu-latest
-    env:
-      APP_ID: ${{ secrets.APP_ID }}
-      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -40,10 +45,9 @@ jobs:
         uses: 'google-github-actions/auth@v2'
         with:
           # Constructed using your Project Number and Pool ID
-          workload_identity_provider: 'projects/803095609412/locations/global/workloadIdentityPools/aaa-github-pool/providers/github-provider'
-          service_account: '803095609412-compute@developer.gserviceaccount.com'
-          project_id: 'genai-apps-25'
-    
+          workload_identity_provider: 'projects/${{ env.GOOGLE_CLOUD_PROJECT_NUMBER }}/locations/global/workloadIdentityPools/aaa-github-pool/providers/github-provider'
+          service_account: '${{ env.GOOGLE_CLOUD_PROJECT_NUMBER }}-compute@developer.gserviceaccount.com'
+          project_id: ${{ env.GOOGLE_CLOUD_PROJECT }}
       - name: Generate GitHub App Token
         if: env.APP_ID != '' && env.APP_PRIVATE_KEY != ''
         id: app-token
@@ -51,7 +55,6 @@ jobs:
         with:
           app-id: ${{ env.APP_ID }}
           private-key: ${{ env.APP_PRIVATE_KEY }}
-    
       - name: 'Set up Cloud SDK'
         uses: 'google-github-actions/setup-gcloud@v2'
         with:
@@ -71,32 +74,16 @@ jobs:
       - name: Install Gemini CLI
         run: npm install -g @google/gemini-cli
 
-      - name: 'Debug Token Metadata'
-        env:
-          TOKEN: ${{ steps.app-token.outputs.token || secrets.G_PAT_TOKEN || github.token }}
-        run: |
-          echo "Token Length: ${#TOKEN}"
-          if [[ $TOKEN == ghp_* ]]; then echo "Token type: Classic PAT"; elif [[ $TOKEN == github_pat_* ]]; then echo "Token type: Fine-grained PAT"; else echo "Token type: Other/App Token"; fi
-
       - name: Link Hub Extension
         run: |
           mkdir -p ~/.gemini .agentfarm/ .gemini/
           echo '{"projects":{}}' > ~/.gemini/projects.json
           echo "$GEMINI_SETTINGS" > ~/.gemini/settings.json
-          echo "${{ secrets.G_PAT_TOKEN }}" | gemini extensions link ./extensions/agent-farm --consent
+          echo "${{ steps.app-token.outputs.token || secrets.G_PAT_TOKEN }}" | gemini extensions link ./extensions/agent-farm --consent
 
       - name: Gemini Security Scan
         env:
-          GITHUB_PERSONAL_ACCESS_TOKEN: ${{ steps.app-token.outputs.token || secrets.G_PAT_TOKEN || github.token }}
-          GITHUB_TOKEN: '${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN || github.token }}'
-          ISSUE_TITLE: '${{ github.event.pull_request.title || github.event.issue.title }}'
-          ISSUE_BODY: '${{ github.event.pull_request.body || github.event.issue.body }}'
-          PULL_REQUEST_NUMBER: '${{ github.event.pull_request.number || github.event.issue.number }}'
-          REPOSITORY: '${{ github.repository }}'
-          ADDITIONAL_CONTEXT: '${{ inputs.additional_context }}'
-          GOOGLE_GENAI_USE_VERTEXAI: 'true'
-          GOOGLE_CLOUD_LOCATION: ${{ secrets.GOOGLE_CLOUD_LOCATION || vars.GOOGLE_CLOUD_LOCATION }}
-          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT || vars.GOOGLE_CLOUD_PROJECT }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token || secrets.G_PAT_TOKEN }}
         run: |
           gemini extensions install https://github.com/gemini-cli-extensions/security --consent
           gemini -p "/security:analyze" -y | tee reports/security-scan.txt
@@ -107,16 +94,7 @@ jobs:
 
       - name: Gemini Dependency Scan
         env:
-          GITHUB_PERSONAL_ACCESS_TOKEN: ${{ steps.app-token.outputs.token || secrets.G_PAT_TOKEN || github.token }}
-          GITHUB_TOKEN: '${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN || github.token }}'
-          ISSUE_TITLE: '${{ github.event.pull_request.title || github.event.issue.title }}'
-          ISSUE_BODY: '${{ github.event.pull_request.body || github.event.issue.body }}'
-          PULL_REQUEST_NUMBER: '${{ github.event.pull_request.number || github.event.issue.number }}'
-          REPOSITORY: '${{ github.repository }}'
-          ADDITIONAL_CONTEXT: '${{ inputs.additional_context }}'
-          GOOGLE_GENAI_USE_VERTEXAI: 'true'
-          GOOGLE_CLOUD_LOCATION: ${{ secrets.GOOGLE_CLOUD_LOCATION || vars.GOOGLE_CLOUD_LOCATION }}
-          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT || vars.GOOGLE_CLOUD_PROJECT }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token || secrets.G_PAT_TOKEN }}
         run: |
           gemini -p "/security:scan-deps strictly only focus on generating the report, and don't try to modify or patch" -y | tee reports/dependency-audit.txt
           # Copy detailed dependency artifacts if they exist
@@ -127,17 +105,9 @@ jobs:
       - name: Run PR Auto-Review Command
         if: github.event.pull_request.number #should only execute if pr number exist
         env:
-          GITHUB_PERSONAL_ACCESS_TOKEN: ${{ steps.app-token.outputs.token || secrets.G_PAT_TOKEN || github.token }}
-          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.G_PAT_TOKEN || github.token }}
-          GITHUB_TOKEN: '${{ secrets.mint_identity_token.outputs.token || secrets.G_PAT_TOKEN || github.token }}'
-          ISSUE_TITLE: '${{ github.event.pull_request.title || github.event.issue.title }}'
-          ISSUE_BODY: '${{ github.event.pull_request.body || github.event.issue.body }}'
-          PULL_REQUEST_NUMBER: '${{ github.event.pull_request.number || github.event.issue.number }}'
-          REPOSITORY: '${{ github.repository }}'
-          ADDITIONAL_CONTEXT: '${{ inputs.additional_context }}'
-          GOOGLE_GENAI_USE_VERTEXAI: 'true'
-          GOOGLE_CLOUD_LOCATION: ${{ secrets.GOOGLE_CLOUD_LOCATION || vars.GOOGLE_CLOUD_LOCATION }}
-          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT || vars.GOOGLE_CLOUD_PROJECT }}
+          GITHUB_PERSONAL_ACCESS_TOKEN: ${{ steps.app-token.outputs.token || secrets.G_PAT_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.G_PAT_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token || secrets.G_PAT_TOKEN }}
         run: |
           gemini -p "@reviewer pull_request: ${{ github.event.pull_request.number }} max_reviews: 3" -y | tee reports/pr-review.txt
 
@@ -154,10 +124,6 @@ jobs:
           done
 
       - name: 'Quality Gate Decision'
-        env:
-          GOOGLE_GENAI_USE_VERTEXAI: 'true'
-          GOOGLE_CLOUD_LOCATION: ${{ secrets.GOOGLE_CLOUD_LOCATION || vars.GOOGLE_CLOUD_LOCATION }}
-          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT || vars.GOOGLE_CLOUD_PROJECT }}
         run: |
           # Aggregate reports
           echo "### SECURITY SCAN ###" > final_report.txt
@@ -181,11 +147,18 @@ jobs:
           If any fail, output 'GATE_FAILED' followed by a bulleted list of reasons. 
           REPORT CONTENT: $(cat final_report.txt)" -y | tee reports/decision.txt
 
+      - name: 'Collect Telemetry Log'
+        if: always()
+        run: |
+          if [ -f .gemini/telemetry.log ]; then
+            cp .gemini/telemetry.log reports/
+          fi
+
       - name: 'Upload Reports to GCS'
         uses: 'google-github-actions/upload-cloud-storage@v2'
         with:
           path: 'reports'
-          destination: 'genai-apps-25-scan-reports/${{ github.run_id }}_${{ github.run_attempt }}'
+          destination: '${{ env.GOOGLE_CLOUD_PROJECT }}-scan-reports/${{ github.run_id }}_${{ github.run_attempt }}'
 
       - name: 'Enforce Quality Gate'
         run: |
@@ -209,9 +182,9 @@ jobs:
         name: 'Authenticate to Google Cloud'
         uses: 'google-github-actions/auth@v2'
         with:
-          workload_identity_provider: 'projects/803095609412/locations/global/workloadIdentityPools/aaa-github-pool/providers/github-provider'
-          service_account: '803095609412-compute@developer.gserviceaccount.com'
-          project_id: 'genai-apps-25'
+          workload_identity_provider: 'projects/${{ env.GOOGLE_CLOUD_PROJECT_NUMBER }}/locations/global/workloadIdentityPools/aaa-github-pool/providers/github-provider'
+          service_account: '${{ env.GOOGLE_CLOUD_PROJECT_NUMBER }}-compute@developer.gserviceaccount.com'
+          project_id: ${{ env.GOOGLE_CLOUD_PROJECT }}
 
       - name: 'Set up Cloud SDK'
         uses: 'google-github-actions/setup-gcloud@v2'
@@ -220,5 +193,5 @@ jobs:
         run: |
           gcloud builds submit \
             --config .cloudbuild/cloudbuild-django.yaml \
-            --project genai-apps-25 \
+            --project ${{ env.GOOGLE_CLOUD_PROJECT }} \
             .
