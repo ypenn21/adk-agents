@@ -1,9 +1,9 @@
 # 1. The Workload Identity Pool and Provider
 module "gh_oidc" {
   source      = "terraform-google-modules/github-actions-runners/google//modules/gh-oidc"
-  project_id  = "genai-apps-25"
-  pool_id     = "aaa-github-pool"
-  provider_id = "github-provider"
+  project_id  = var.project_id
+  pool_id     = var.pool_id
+  provider_id = var.provider_id
   
   attribute_mapping = {
     "google.subject"       = "assertion.sub"
@@ -11,8 +11,8 @@ module "gh_oidc" {
     "attribute.owner"      = "assertion.repository_owner"
   }
 
-  # HARDCODE YOUR ORG HERE - This protects your project from other GitHub users
-  attribute_condition = "assertion.repository_owner == 'cloud-gtm-core-apps' || assertion.repository_owner == 'ypenn21'"
+  # This protects your project from other GitHub users by restricting to specific owners
+  attribute_condition = join(" || ", [for owner in var.repository_owners : "assertion.repository_owner == '${owner}'"])
 }
 
 # 2. Enable Required APIs
@@ -22,31 +22,27 @@ resource "google_project_service" "apis" {
     "cloudbuild.googleapis.com",
     "artifactregistry.googleapis.com"
   ])
-  project = "genai-apps-25"
+  project = var.project_id
   service = each.key
 
   disable_on_destroy = false
 }
 
-# 3. The IAM Binding (The "Permissions" link)
-resource "google_service_account_iam_member" "wif_binding" {
+# 3. The IAM Bindings (The "Permissions" links)
+resource "google_service_account_iam_member" "wif_bindings" {
+  for_each = toset(var.repositories)
+
   # Your specific service account
-  service_account_id = "projects/genai-apps-25/serviceAccounts/803095609412-compute@developer.gserviceaccount.com"
+  service_account_id = "projects/${var.project_id}/serviceAccounts/${var.service_account_email}"
   role               = "roles/iam.workloadIdentityUser"
   
   # Locked specifically to your repository
-  member = "principalSet://iam.googleapis.com/projects/803095609412/locations/global/workloadIdentityPools/aaa-github-pool/attribute.repository/cloud-gtm-core-apps/e2e-agent-patterns"
-}
-
-resource "google_service_account_iam_member" "wif_binding_adk" {
-  service_account_id = "projects/genai-apps-25/serviceAccounts/803095609412-compute@developer.gserviceaccount.com"
-  role               = "roles/iam.workloadIdentityUser"
-  member             = "principalSet://iam.googleapis.com/projects/803095609412/locations/global/workloadIdentityPools/aaa-github-pool/attribute.repository/ypenn21/adk-agents"
+  member = "principalSet://iam.googleapis.com/projects/${var.project_number}/locations/global/workloadIdentityPools/${var.pool_id}/attribute.repository/${each.value}"
 }
 
 # 4. GCS Bucket for Scan Reports
 resource "google_storage_bucket" "scan_reports" {
-  name     = "genai-apps-25-scan-reports"
+  name     = "${var.project_id}-scan-reports"
   location = "US"
   force_destroy = true
 
@@ -62,7 +58,7 @@ resource "google_project_iam_member" "cicd_roles" {
     "roles/run.admin",
     "roles/iam.serviceAccountUser"
   ])
-  project = "genai-apps-25"
+  project = var.project_id
   role    = each.key
-  member  = "serviceAccount:803095609412-compute@developer.gserviceaccount.com"
+  member  = "serviceAccount:${var.service_account_email}"
 }
