@@ -60,6 +60,8 @@ graph TD
     D -->|Validates & Returns<br/>Access Token| E["Cloud Provider<br/>Credentials"]
     E -->|Authorizes| F["Cloud Services<br/>AWS/GCP/Azure"]
     F -->|Executes Actions| G["Deployment/Infrastructure"]
+    end
+```
 
 # IT Bug Assistant Agent
 
