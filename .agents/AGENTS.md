@@ -92,3 +92,39 @@ To get the project up and running locally, follow these steps:
 *   **Security:** The `SECRET_KEY` in `settings.py` is hardcoded and exposed. For production, this should be loaded from a secure source like Secret Manager. The `@csrf_exempt` decorator is used on the main view; ensure any new POST endpoints are also properly secured.
 *   **Dependencies:** To add a new Python dependency, add it to the `[project]` section of `pyproject.toml` and then run `uv sync` to update the `uv.lock` file and the virtual environment.
 *   **Commit Messages:** No formal commit message convention is apparent from the context. It is recommended to adopt a standard like Conventional Commits (e.g., `feat:`, `fix:`, `docs:`) for future work.
+
+## 10. Multi-Agent Development Workflow (Spec-Driven SDLC)
+
+This project strictly utilizes a **Spec-Driven Software Development Life Cycle (SDLC)**. Because the execution sandbox restricts background subagent invocations to pre-registered typenames (specifically `self` and `research`), **the primary root agent in the main conversation thread directly acts as the Master Orchestrator**. 
+
+The Orchestrator coordinates the lifecycle, validates handovers, runs verification tests, and delegates specialized sub-tasks using the `self` subagent template configured for the appropriate roles (Architect and Engineer).
+
+Every AI-driven feature development or complex code change MUST follow this orchestrated flow:
+
+```mermaid
+graph TD
+    User[User Request] --> Orchestrator[1. Root Agent as Master Orchestrator]
+    Orchestrator -->|Delegate Design with Context| Architect[2. Technical Architect: self subagent]
+    Architect -->|Analyze Codebase & Create Specs| Blueprint[plans/feature-design.md]
+    Blueprint --> Orchestrator
+    Orchestrator -->|Delegate Checklist Chunks| Engineers[3. Software Engineers: self subagents]
+    Engineers -->|Write Code & Self-Test| Codebase[Codebase Integration]
+    Codebase --> Orchestrator
+    Orchestrator -->|Run Local Verification Commands| Verification{4. Verification pytest}
+    Verification -->|Success| Complete[5. Feature Delivered]
+    Verification -->|Failure / Bugs| Engineers
+```
+
+### 10.1 Role-Based Delegation Rules
+1.  **The Master Orchestrator (Primary Thread Agent):** Directly executes the orchestration logic from the system context. It manages requirements handoff, validates the output quality of other subagents, coordinates parallel engineering streams, runs testing commands, and reports final delivery. It does not spawn a separate `orchestrator` subagent to avoid double-orchestration overhead.
+2.  **The Technical Architect:** Conducted by invoking a background `self` subagent assigned the Technical Architect role (adhering to instructions in `.agents/agents/architect.md`).
+    *   **STRICT RULE:** You **MUST** invoke a background `self` subagent in the Technical Architect role to design any technical blueprint, API signatures, and a step-by-step checklist inside `plans/<feature-name>-design.md` **before** writing any implementation code. Jumping straight to writing code is prohibited.
+3.  **The Software Engineer:** Conducted by invoking background `self` subagent(s) assigned the Software Engineer role (adhering to instructions in `.agents/agents/engineer.md`).
+    *   **STRICT RULE:** You **MUST** invoke background `self` subagent(s) in the Software Engineer role to execute the implementation steps. The engineers must strictly adhere to the architect-designed specification and must never diverge or invent new architecture patterns without explicit authorization.
+
+### 10.2 SDLC Execution Steps
+*   **Design Phase:** The Orchestrator spawns a background `self` subagent under the Technical Architect role, providing the requirement context. The Architect outputs a highly detailed spec document in `/plans` including a Todo Checklist, Mermaid diagrams, API signatures, and step-by-step implementation instructions.
+*   **Quality Check & Chunking:** The Orchestrator reviews the Architect's spec, divides the checklist into independent, non-overlapping tasks, and allocates them to the Engineer subagents.
+*   **Implementation Phase:** Concurrent implementation is handled by spawning up to **3 Software Engineer** subagents using the `self` template with `invoke_subagent`. Each engineer receives precise step allocations and target files to avoid merge conflicts.
+*   **Self-Testing Phase:** Each Engineer must run automated tests (such as `PYTHONPATH=. uv run pytest tests/` or similar) to verify their modifications locally before notifying the Orchestrator.
+*   **Verification & Final Handover:** The Orchestrator integrates the changes and executes the final verification command. If any failures are encountered, the relevant error trace is immediately sent back to the respective Engineer subagent for rapid iteration and remediation. Once all checklist items are checked off and tests pass, the Orchestrator presents the completed work to the user.
