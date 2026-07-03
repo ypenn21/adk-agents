@@ -101,9 +101,7 @@ The Orchestrator coordinates the lifecycle, validates handovers, runs verificati
 > [!IMPORTANT]
 > CRITICAL ORCHESTRATION RULE:
 > When orchestrating custom subagents, you MUST NOT use custom TypeNames in the invoke_subagent tool. The runtime enforces a strict static allowlist and will block the invocation.
-
 > Instead, you MUST use the Direct Injection Proxy Method:
-
 > Read the custom agent's exact markdown instruction file from the workspace (e.g., `.agents/agents/<agent_name>.md`).
 > If workspace not defined. Read the custom agent's exact markdown instruction file from the global (e.g., `~/.gemini/config/agents/<agent_name>.md`).
 > Invoke using the system-approved TypeName: "self".
