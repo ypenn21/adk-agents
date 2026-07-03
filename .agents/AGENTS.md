@@ -97,7 +97,7 @@ To get the project up and running locally, follow these steps:
 
 This project strictly utilizes a **Spec-Driven Software Development Life Cycle (SDLC)**. Because the execution sandbox restricts background subagent invocations to pre-registered typenames (specifically `self` and `research`), **the primary root agent in the main conversation thread directly acts as the Master Orchestrator**. 
 
-The Orchestrator coordinates the lifecycle, validates handovers, runs verification tests, and delegates specialized sub-tasks using the `self` subagent template configured for the appropriate roles (Architect and Engineer).
+The Orchestrator coordinates the lifecycle, validates handovers, runs verification tests, and delegates specialized sub-tasks using the `self` subagent template and direct injection proxy method configured for the appropriate roles (Architect and Engineer).
 > [!IMPORTANT]
 > CRITICAL ORCHESTRATION RULE:
 > When orchestrating custom subagents, you MUST NOT use custom TypeNames in the invoke_subagent tool. The runtime enforces a strict static allowlist and will block the invocation.
@@ -112,10 +112,10 @@ Every AI-driven feature development or complex code change MUST follow this orch
 ```mermaid
 graph TD
     User[User Request] --> Orchestrator[1. Root Agent as Master Orchestrator]
-    Orchestrator -->|Delegate Design with Context| Architect[2. Technical Architect: self subagent]
+    Orchestrator -->|Delegate Design with Context| Architect[2. Technical Architect: self subagent, use direct injection proxy method]
     Architect -->|Analyze Codebase & Create Specs| Blueprint[plans/feature-design.md]
     Blueprint --> Orchestrator
-    Orchestrator -->|Delegate Checklist Chunks| Engineers[3. Software Engineers: self subagents]
+    Orchestrator -->|Delegate Checklist Chunks| Engineers[3. Software Engineers: self subagents, use direct injection proxy method]
     Engineers -->|Write Code & Self-Test| Codebase[Codebase Integration]
     Codebase --> Orchestrator
     Orchestrator -->|Run Local Verification Commands| Verification{4. Verification pytest}
