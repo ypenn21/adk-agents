@@ -1,4 +1,4 @@
-# GEMINI.MD: AI Collaboration Guide
+# AI Collaboration Guide
 
 This document provides essential context for AI models interacting with this project. Adhering to these guidelines will ensure consistency and maintain code quality.
 
@@ -98,6 +98,16 @@ To get the project up and running locally, follow these steps:
 This project strictly utilizes a **Spec-Driven Software Development Life Cycle (SDLC)**. Because the execution sandbox restricts background subagent invocations to pre-registered typenames (specifically `self` and `research`), **the primary root agent in the main conversation thread directly acts as the Master Orchestrator**. 
 
 The Orchestrator coordinates the lifecycle, validates handovers, runs verification tests, and delegates specialized sub-tasks using the `self` subagent template configured for the appropriate roles (Architect and Engineer).
+> [!IMPORTANT]
+> CRITICAL ORCHESTRATION RULE:
+> When orchestrating custom subagents, you MUST NOT use custom TypeNames in the invoke_subagent tool. The runtime enforces a strict static allowlist and will block the invocation.
+
+> Instead, you MUST use the Direct Injection Proxy Method:
+
+> Read the custom agent's exact markdown instruction file from the workspace (e.g., `.agents/agents/<agent_name>.md`).
+> If workspace not defined. Read the custom agent's exact markdown instruction file from the global (e.g., `~/.gemini/config/agents/<agent_name>.md`).
+> Invoke using the system-approved TypeName: "self".
+> Inject the entire verbatim contents of the custom agent's markdown file into the Prompt argument, appended with the user's current request.
 
 Every AI-driven feature development or complex code change MUST follow this orchestrated flow:
 
@@ -116,10 +126,11 @@ graph TD
 ```
 
 ### 10.1 Role-Based Delegation Rules
+
 1.  **The Master Orchestrator (Primary Thread Agent):** Directly executes the orchestration logic from the system context. It manages requirements handoff, validates the output quality of other subagents, coordinates parallel engineering streams, runs testing commands, and reports final delivery. It does not spawn a separate `orchestrator` subagent to avoid double-orchestration overhead.
-2.  **The Technical Architect:** Conducted by invoking a background `self` subagent assigned the Technical Architect role (adhering to instructions in `.agents/agents/architect.md`).
+2.  **The Technical Architect:** Conducted by invoking a background `self` subagent assigned the Technical Architect role.
     *   **STRICT RULE:** You **MUST** invoke a background `self` subagent in the Technical Architect role to design any technical blueprint, API signatures, and a step-by-step checklist inside `plans/<feature-name>-design.md` **before** writing any implementation code. Jumping straight to writing code is prohibited.
-3.  **The Software Engineer:** Conducted by invoking background `self` subagent(s) assigned the Software Engineer role (adhering to instructions in `.agents/agents/engineer.md`).
+3.  **The Software Engineer:** Conducted by invoking background `self` subagent(s) assigned the Software Engineer role. You can run up to a maximum of 3 Software Engineer subagents in parallel at once.
     *   **STRICT RULE:** You **MUST** invoke background `self` subagent(s) in the Software Engineer role to execute the implementation steps. The engineers must strictly adhere to the architect-designed specification and must never diverge or invent new architecture patterns without explicit authorization.
 
 ### 10.2 SDLC Execution Steps
