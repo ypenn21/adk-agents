@@ -353,7 +353,7 @@ You need enable direct vpc-egress on Cloud Run deployment to connect to the Clou
 
 ```bash
 export MCP_TOOLBOX_URL=$(gcloud run services describe toolbox --region us-central1 --format "value(status.url)")
-export PROJECT_ID="genai-apps-25"
+export PROJECT_ID="project-id"
 # set using Resource name
 # export RAG_CORPUS="projects/project-id/locations/region/ragCorpora/rag-corpus-id"
 export DB_URL="postgresql://postgres:pword@internal-ip-address:5432/tickets-db"
@@ -375,7 +375,7 @@ gcloud run deploy adk-agent-bug-assist \
   --network=default \
   --subnet=default \
   --vpc-egress=private-ranges-only \
-  --set-env-vars=GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=us-central1,GOOGLE_GENAI_USE_VERTEXAI=TRUE,MCP_TOOLBOX_URL=$MCP_TOOLBOX_URL,DJANGO=true,AGENT_URL=https://adk-a2a-agent-bug-assist-803095609412.us-central1.run.app,DB_URL=postgresql://postgres:$DB_PASS@$internal-ip:5432/tickets-db
+  --set-env-vars=GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=us-central1,GOOGLE_GENAI_USE_VERTEXAI=TRUE,MCP_TOOLBOX_URL=$MCP_TOOLBOX_URL,DJANGO=true,AGENT_URL=https://adk.us-central1.run.app,DB_URL=postgresql://postgres:$DB_PASS@$internal-ip:5432/tickets-db
 
 #deploy a2a custom
 gcloud run deploy adk-a2a-agent-bug-assist \
@@ -387,7 +387,7 @@ gcloud run deploy adk-a2a-agent-bug-assist \
   --network=default \
   --subnet=default \
   --vpc-egress=private-ranges-only \
-  --set-env-vars=GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=us-central1,GOOGLE_GENAI_USE_VERTEXAI=TRUE,MCP_TOOLBOX_URL=$MCP_TOOLBOX_URL,DJANGO=false,AGENT_URL=https://adk-a2a-agent-bug-assist-803095609412.us-central1.run.app
+  --set-env-vars=GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=us-central1,GOOGLE_GENAI_USE_VERTEXAI=TRUE,MCP_TOOLBOX_URL=$MCP_TOOLBOX_URL,DJANGO=false,AGENT_URL=https://adk.us-central1.run.app
 
 #deploy adk web ui bootstrapped
 gcloud run deploy adk-web-ui \
