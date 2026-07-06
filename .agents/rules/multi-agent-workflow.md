@@ -14,18 +14,17 @@ The Orchestrator coordinates the lifecycle, validates handovers, runs verificati
 > Instead, you MUST use the Direct Injection Proxy Method:
 > 1. Read the custom agent's exact markdown instruction file from the workspace (e.g., `.agents/agents/<agent_name>.md`).
 > 2. If workspace not defined, read the custom agent's exact markdown instruction file from the global configuration (e.g., `~/.gemini/config/agents/<agent_name>.md`).
-> 3. Invoke using the system-approved TypeName: "self".
-> 4. Inject the entire verbatim contents of the custom agent's markdown file into the Prompt argument, appended with the user's current request.
+> 3. Inject the entire verbatim contents of the custom agent's markdown file into the Prompt argument, appended with the user's current request.
 
 Every AI-driven feature development or complex code change MUST follow this orchestrated flow:
 
 ```mermaid
 graph TD
     User[User Request] --> Orchestrator[1. Root Agent as Master Orchestrator]
-    Orchestrator -->|Delegate Design with Context| Architect[2. Technical Architect: self subagent, use direct injection proxy method]
+    Orchestrator -->|Delegate Design with Context| Architect[2. Technical Architect: use direct injection proxy method]
     Architect -->|Analyze Codebase & Create Specs| Blueprint[plans/feature-design.md]
     Blueprint --> Orchestrator
-    Orchestrator -->|Delegate Checklist Chunks| Engineers[3. Software Engineers: self subagents, use direct injection proxy method]
+    Orchestrator -->|Delegate Checklist Chunks| Engineers[3. Software Engineers: use direct injection proxy method]
     Engineers -->|Write Code & Self-Test| Codebase[Codebase Integration]
     Codebase --> Orchestrator
     Orchestrator -->|Run Local Verification Commands| Verification{4. Verification pytest}
