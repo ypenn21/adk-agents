@@ -1,3 +1,7 @@
+---
+trigger: always_on
+---
+
 # Multi-Agent Development Workflow (Spec-Driven SDLC)
 
 This project strictly utilizes a **Spec-Driven Software Development Life Cycle (SDLC)**. Because the execution sandbox restricts background subagent invocations to pre-registered typenames (specifically `self` and `research`), **the primary root agent in the main conversation thread directly acts as the Master Orchestrator**. 
