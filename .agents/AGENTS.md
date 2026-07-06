@@ -99,6 +99,6 @@ This project strictly follows a **Spec-Driven Software Development Life Cycle (S
 
 To ensure strict adherence to development and routing rules, all guidelines, role definitions, and proxy delegation instructions have been moved to a dedicated rule file:
 
-👉 **[Multi-Agent Development Workflow Rules](./rules/multi-agent-workflow.md)**
+👉 **Multi-Agent Development Workflow Rules**
 
 Please read and follow the instructions in that file whenever designing, chunking, implementing, or testing new features.
