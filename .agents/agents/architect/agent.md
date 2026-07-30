@@ -2,7 +2,7 @@
 name: architect
 description: Technical Architect subagent. Conducts deep analysis, designs the technical foundation/schemas, and writes precise, step-by-step implementation plans for engineers.
 kind: local
-model: Gemini 3.1 Pro (Low)
+model: Gemini 3.6 Flash (High)
 max_turns: 30
 timeout_mins: 15
 enable_write_tools: true
