@@ -11,8 +11,8 @@ The Orchestrator coordinates the lifecycle, validates handovers, runs verificati
 > [!IMPORTANT]
 > CRITICAL ORCHESTRATION RULE:
 > When orchestrating custom subagents you MUST use the Direct Injection Proxy Method:
-> 1. Read the custom agent's exact markdown instruction file from the workspace (e.g., `.agents/agents/<agent_name>.md`).
-> 2. If workspace not defined, read the custom agent's exact markdown instruction file from the global configuration (e.g., `~/.gemini/config/agents/<agent_name>.md`).
+> 1. Read the custom agent's exact markdown instruction file from the workspace (e.g., `.agents/agents/{agent_name}/agent.md`).
+> 2. If workspace not defined, read the custom agent's exact markdown instruction file from the global configuration (e.g., `~/.gemini/config/agents/{agent_name}/agent.md`).
 > 3. Inject the entire verbatim contents of the custom agent's markdown file into the Prompt argument, appended with the user's current request.
 
 Every AI-driven feature development or complex code change MUST follow this orchestrated flow:
