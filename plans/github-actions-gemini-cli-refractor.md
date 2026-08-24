@@ -5,8 +5,8 @@
   - Modernize `.github/workflows/security-pii-review.yml` permissions (`contents: read`, `id-token: write`, `pull-requests: write`, `security-events: write`).
   - Standardize environment variables (`GOOGLE_GENAI_USE_VERTEXAI`, `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`, `AGY_SETTINGS`).
 - [x] **Task 2: Implement Antigravity CLI (`agy`) Installation & Binary Caching**
-  - Replace `npm install -g @google/gemini-cli` with native installer `curl -fsSL https://antigravity.google/install.sh | bash` (or standalone binary download).
-  - Add `actions/cache@v4` targeting `~/.antigravity` and `~/.gemini` to accelerate CI execution.
+  - Replace `npm install -g @google/gemini-cli` with native installer `curl -fsSL https://antigravity.google/cli/install.sh | bash` (or standalone binary download).
+  - Add `actions/cache@v4` targeting `~/.local/bin/agy`, `~/.antigravity` and `~/.gemini` to accelerate CI execution.
   - Verify binary availability via `agy --version`.
 - [x] **Task 3: Provision Declarative MCP & Agent Workspace Configuration**
   - Eliminate legacy `gemini extensions link` commands.
@@ -102,7 +102,7 @@ The current workflow (`.github/workflows/security-pii-review.yml`) relies on the
 ### Considerations & Challenges
 1. **Installation Model Differences:**
    - *Gemini CLI:* Distributed as an npm package (`@google/gemini-cli`), requiring `actions/setup-node`, npm dependency resolution, and substantial cold-start overhead (~45-60s).
-   - *Antigravity CLI (`agy`):* Distributed as an optimized native binary via `https://antigravity.google/install.sh`. Caching `~/.antigravity` drops setup time to <3s.
+   - *Antigravity CLI (`agy`):* Distributed as an optimized native binary via `https://antigravity.google/cli/install.sh`. Caching `~/.local/bin/agy` and `~/.antigravity` drops setup time to <3s.
 2. **CLI Command & Flag Mappings:**
    - The non-interactive flag `-y` (or `--yes`) is superseded in `agy` by `--dangerously-skip-permissions`, which permits autonomous tool calling (e.g. MCP tool execution, workspace reads) in headless CI runners.
    - Prompt flag: `-p` or `--prompt`.
@@ -287,7 +287,7 @@ env:
 
 | Action | Legacy Gemini CLI (`gemini`) | Antigravity CLI (`agy`) | Notes |
 | :--- | :--- | :--- | :--- |
-| **Install CLI** | `npm install -g @google/gemini-cli` | `curl -fsSL https://antigravity.google/install.sh \| bash` | Standalone native binary; no Node.js dependency required. |
+| **Install CLI** | `npm install -g @google/gemini-cli` | `curl -fsSL https://antigravity.google/cli/install.sh \| bash` | Standalone native binary; no Node.js dependency required. |
 | **Verify Version** | `gemini --version` | `agy --version` | Returns `agy version 1.1.x / 2.x.x`. |
 | **General Non-interactive Prompt** | `gemini -p "Prompt" -y` | `agy -p "Prompt" --dangerously-skip-permissions` | `--dangerously-skip-permissions` authorizes headless tool execution. |
 | **Invoke Subagent** | `gemini -p "@reviewer args" -y` | `agy --agent reviewer -p "Prompt" --dangerously-skip-permissions` | Uses native `.agents/agents/reviewer/agent.md` definition. |
@@ -337,9 +337,9 @@ env:
 - **Files to modify**: `.github/workflows/security-pii-review.yml`
 - **Changes needed**:
   - Remove `actions/setup-node@v4` and `npm install -g @google/gemini-cli`.
-  - Add cache action `actions/cache@v4` for `~/.antigravity` and `~/.gemini`.
-  - Install Antigravity CLI using `curl -fsSL https://antigravity.google/install.sh | bash`.
-  - Export `~/.antigravity/bin` and `/usr/local/bin` to `$GITHUB_PATH`.
+  - Add cache action `actions/cache@v4` for `~/.local/bin/agy`, `~/.antigravity` and `~/.gemini`.
+  - Install Antigravity CLI using `curl -fsSL https://antigravity.google/cli/install.sh | bash`.
+  - Export `~/.local/bin`, `~/.antigravity/bin` and `/usr/local/bin` to `$GITHUB_PATH`.
 - **Implementation YAML**:
 ```yaml
       - name: 'Cache Antigravity CLI & Plugins'
@@ -347,6 +347,7 @@ env:
         id: cache-agy
         with:
           path: |
+            ~/.local/bin/agy
             ~/.antigravity
             ~/.gemini
           key: ${{ runner.os }}-antigravity-cli-v2-${{ hashFiles('.agents/**') }}
@@ -356,17 +357,17 @@ env:
       - name: 'Install Antigravity CLI (agy)'
         if: steps.cache-agy.outputs.cache-hit != 'true'
         run: |
-          curl -fsSL https://antigravity.google/install.sh | bash
-          mkdir -p ~/.antigravity/bin
-          if [ -f "$HOME/.antigravity/bin/agy" ]; then
-            echo "$HOME/.antigravity/bin" >> $GITHUB_PATH
-          elif [ -f "/usr/local/bin/agy" ]; then
-            echo "/usr/local/bin" >> $GITHUB_PATH
-          fi
+          curl -fsSL https://antigravity.google/cli/install.sh | bash
+
+      - name: 'Add agy to PATH'
+        run: |
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          echo "$HOME/.antigravity/bin" >> $GITHUB_PATH
+          echo "/usr/local/bin" >> $GITHUB_PATH
 
       - name: 'Verify Antigravity CLI Installation'
         run: |
-          export PATH="$HOME/.antigravity/bin:/usr/local/bin:$PATH"
+          export PATH="$HOME/.local/bin:$HOME/.antigravity/bin:/usr/local/bin:$PATH"
           agy --version
 ```
 - **Status**: `- [x] Completed`

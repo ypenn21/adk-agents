@@ -72,6 +72,7 @@ jobs:
         id: cache-agy
         with:
           path: |
+            ~/.local/bin/agy
             ~/.antigravity
             ~/.gemini
           key: ${{ runner.os }}-antigravity-cli-v2-${{ hashFiles('.agents/**') }}
@@ -81,25 +82,17 @@ jobs:
       - name: 'Install Antigravity CLI (agy)'
         if: steps.cache-agy.outputs.cache-hit != 'true'
         run: |
-          curl -fsSL https://antigravity.google/install.sh | bash
-          mkdir -p ~/.antigravity/bin
-          if [ -f "$HOME/.antigravity/bin/agy" ]; then
-            echo "$HOME/.antigravity/bin" >> $GITHUB_PATH
-          elif [ -f "/usr/local/bin/agy" ]; then
-            echo "/usr/local/bin" >> $GITHUB_PATH
-          fi
+          curl -fsSL https://antigravity.google/cli/install.sh | bash
 
       - name: 'Add agy to PATH'
         run: |
-          if [ -f "$HOME/.antigravity/bin/agy" ]; then
-            echo "$HOME/.antigravity/bin" >> $GITHUB_PATH
-          elif [ -f "/usr/local/bin/agy" ]; then
-            echo "/usr/local/bin" >> $GITHUB_PATH
-          fi
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          echo "$HOME/.antigravity/bin" >> $GITHUB_PATH
+          echo "/usr/local/bin" >> $GITHUB_PATH
 
       - name: 'Verify Antigravity CLI Installation'
         run: |
-          export PATH="$HOME/.antigravity/bin:/usr/local/bin:$PATH"
+          export PATH="$HOME/.local/bin:$HOME/.antigravity/bin:/usr/local/bin:$PATH"
           agy --version
 
       - name: 'Configure Antigravity CLI & MCP Environment'
