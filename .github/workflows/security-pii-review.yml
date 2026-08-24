@@ -140,15 +140,15 @@ jobs:
         run: |
           set -o pipefail
           echo "Starting Antigravity AI Security Scan..."
-          agy -p "Using the security-privacy-review skill, conduct a comprehensive security and privacy audit across all application code files in this repository (Python, Django views/models, Dockerfile, shell scripts, and workflows).
+          agy -p "As a defensive software engineer and code quality reviewer, use the security-privacy-review skill to perform internal static code analysis (SAST) and code quality review across the application codebase (Python, Django views/models, Dockerfile, shell scripts, and CI workflows).
           
-          Apply the Two-Pass 'Recon & Investigate' model and Taint Analysis to:
-          1. Trace untrusted and sensitive data flows from Sources to Sinks to detect injection vulnerabilities (SQLi, XSS, Command Injection) and sensitive PII leaks.
-          2. Check for hardcoded secrets, credentials, API keys, and debug tokens.
-          3. Audit access control, CSRF protections, safe serialization, and secure file operations.
-          4. Verify production configuration hygiene (debug flags disabled, error details masked).
+          Apply the Two-Pass 'Recon & Investigate' model and data flow analysis for defensive code verification:
+          1. Verify source-to-sink data flows to ensure robust input validation, parameterization, and output encoding (preventing SQL injection, XSS, command injection risks) and privacy data protection.
+          2. Verify that credentials, secrets, and API keys are properly loaded from environment variables rather than hardcoded.
+          3. Review access controls, CSRF protections, safe serialization, and secure file operations.
+          4. Verify production configuration hygiene (ensuring debug flags are disabled and error details masked).
           
-          Provide a categorized findings table with Severity (Critical, High, Medium, Low), File Path, Line Number, Category, and Actionable Remediation." \
+          Output a structured review findings table with Severity (Critical, High, Medium, Low), File Path, Line Number, Category, and Actionable Remediation recommendations. If no issues are found, state that all files adhere to secure coding standards." \
           --dangerously-skip-permissions \
           --output-format text | tee reports/security-scan.txt
 
@@ -277,7 +277,6 @@ jobs:
 
           COMBINED REPORT:
           $(cat final_report.txt)" \
-          --effort medium \
           --dangerously-skip-permissions \
           --output-format text | tee reports/decision.txt
 
