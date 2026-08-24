@@ -1,0 +1,18 @@
+# osv-scanner.toml configuration template
+# Place this file at the repository root or subdirectory to control vulnerability filtering
+
+# Ignore specific vulnerabilities by ID (GHSA, CVE, PYSEC, GO, RUSTSEC, etc.)
+[[IgnoredVulns]]
+id = "GHSA-xxxx-xxxx-xxxx"
+reason = "Vulnerable feature is not enabled in our configuration."
+until = "2026-12-31"
+
+[[IgnoredVulns]]
+id = "CVE-2025-0001"
+reason = "Mitigated via upstream WAF and runtime validation."
+until = "2026-06-30"
+
+# Override packages (e.g., internal private packages or custom forks)
+# [[PackageOverrides]]
+# name = "my-internal-package"
+# ignore = true

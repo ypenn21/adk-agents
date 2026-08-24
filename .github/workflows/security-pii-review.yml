@@ -85,7 +85,6 @@ jobs:
         if: steps.cache-agy.outputs.cache-hit != 'true'
         run: |
           curl -fsSL https://antigravity.google/cli/install.sh | bash
-          curl -fsSL https://antigravity.google/cli/install.sh | bash
 
       - name: 'Add agy to PATH'
         run: |
@@ -97,6 +96,12 @@ jobs:
         run: |
           export PATH="$HOME/.local/bin:$HOME/.antigravity/bin:/usr/local/bin:$PATH"
           agy --version
+
+      - name: 'Install Google OSV-Scanner'
+        run: |
+          curl -fsSL https://github.com/google/osv-scanner/releases/latest/download/osv-scanner_linux_amd64 -o /usr/local/bin/osv-scanner
+          chmod +x /usr/local/bin/osv-scanner
+          osv-scanner --version
 
       - name: 'Configure Antigravity CLI & MCP Environment'
         env:
@@ -135,32 +140,39 @@ jobs:
         run: |
           set -o pipefail
           echo "Starting Antigravity AI Security Scan..."
-          agy -p "Perform a comprehensive Static Application Security Testing (SAST) and security vulnerability audit on all application files in this repository (Python, Django views/models, Dockerfile, shell scripts, and workflows). 
-          Inspect for:
-          1. OWASP Top 10 vulnerabilities (SQLi, XSS, SSRF, Broken Access Control, CSRF).
-          2. Hardcoded secrets, API keys, private credentials, or debug tokens.
-          3. Unsafe deserialization, insecure subshell execution, or unsafe file operations.
-          4. Permissive network policies or exposed debugging endpoints.
+          agy -p "Using the security-privacy-review skill, conduct a comprehensive security and privacy audit across all application code files in this repository (Python, Django views/models, Dockerfile, shell scripts, and workflows).
           
-          Provide a categorized findings table with Severity (Critical, High, Medium, Low), File Path, Line Number, Vulnerability Type, and Actionable Remediation." \
+          Apply the Two-Pass 'Recon & Investigate' model and Taint Analysis to:
+          1. Trace untrusted and sensitive data flows from Sources to Sinks to detect injection vulnerabilities (SQLi, XSS, Command Injection) and sensitive PII leaks.
+          2. Check for hardcoded secrets, credentials, API keys, and debug tokens.
+          3. Audit access control, CSRF protections, safe serialization, and secure file operations.
+          4. Verify production configuration hygiene (debug flags disabled, error details masked).
+          
+          Provide a categorized findings table with Severity (Critical, High, Medium, Low), File Path, Line Number, Category, and Actionable Remediation." \
           --dangerously-skip-permissions \
           --output-format text | tee reports/security-scan.txt
 
-      - name: 'Antigravity Dependency & SCA Audit'
+      - name: 'Antigravity OSV-Scanner Dependency Audit'
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token || secrets.G_PAT_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
           set -o pipefail
-          echo "Starting Antigravity Dependency Audit..."
-          agy -p "Perform a Software Composition Analysis (SCA) dependency audit on pyproject.toml, uv.lock, requirements.txt, and Dockerfile.
-          Strictly focus on generating a security report:
-          1. Cross-reference dependencies with known CVEs or insecure version ranges.
-          2. Flag deprecated or unmaintained third-party libraries.
-          3. Check for restrictive or incompatible software licenses.
-          Do NOT attempt to modify, patch, or alter files.
-          Output a structured Markdown table summarizing: Package Name, Installed Version, Target Advisory/CVE, Severity, and Recommended Safe Version." \
+          echo "Starting Antigravity OSV-Scanner Dependency Audit..."
+          agy -p "Using the osv-scanner skill, perform a comprehensive open-source dependency vulnerability scan across all project lockfiles and manifests (including uv.lock, pyproject.toml, requirements.txt, and Dockerfile).
+          
+          Instructions:
+          1. Run osv-scanner to scan dependencies for known CVEs and security advisories, outputting SARIF to reports/osv-scanner.sarif.
+          2. Structure a clear findings report detailing: Package Name, Installed Version, Vulnerability ID (CVE/GHSA), Severity, and Recommended Safe Version.
+          3. If no vulnerabilities are detected, state clearly that all dependencies passed with zero known CVEs." \
           --dangerously-skip-permissions \
           --output-format text | tee reports/dependency-audit.txt
+
+      - name: 'Upload OSV-Scanner SARIF to GitHub Code Scanning'
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: reports/osv-scanner.sarif
+        continue-on-error: true
 
       - name: 'Run PR Auto-Review via @reviewer Subagent'
         if: github.event.pull_request.number != null
@@ -206,7 +218,7 @@ jobs:
               echo "Inspecting $file..." >> reports/pii-scan.txt
               RESULT=$(gcloud alpha dlp text inspect \
                 --info-types=EMAIL_ADDRESS,PHONE_NUMBER,LOCATION,CREDIT_CARD_NUMBER,AUTH_TOKEN,API_KEY \
-                --content="$(cat "$file")" \
+                --content-file="$file" \
                 --format="json" 2>/dev/null || echo "{}")
               
               FINDINGS_COUNT=$(echo "$RESULT" | jq '.findings | length // 0' 2>/dev/null || echo 0)
