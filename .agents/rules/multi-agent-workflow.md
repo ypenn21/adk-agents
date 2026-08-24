@@ -13,7 +13,10 @@ The Orchestrator coordinates the lifecycle, validates handovers, runs verificati
 > When orchestrating custom subagents you MUST use the Direct Injection Proxy Method:
 > 1. Read the custom agent's exact markdown instruction file from the workspace (e.g., `.agents/agents/{agent_name}/agent.md`).
 > 2. If workspace not defined, read the custom agent's exact markdown instruction file from the global configuration (e.g., `~/.gemini/config/agents/{agent_name}/agent.md`).
-> 3. Inject the entire verbatim contents of the custom agent's markdown file into the Prompt argument, appended with the user's current request.
+> 3. **ALWAYS set `TypeName: "self"`** when calling `invoke_subagent` (e.g., for Technical Architect and Software Engineer). Using `TypeName: "self"` ensures the subagent inherits the full parent agent capabilities—including write tools (`replace_file_content`, `write_to_file`) and command execution tools (`run_command`)—enabling subagents to create files, write code, and run test suites directly without delegating edits back to the parent.
+> 4. Set the `Role` parameter to the descriptive role name (e.g. `Role: "Technical Architect"` or `Role: "Software Engineer"`).
+> 5. Inject the entire verbatim contents of the custom agent's markdown file into the `Prompt` argument, appended with the user's specific task instructions.
+
 
 
 Every AI-driven feature development or complex code change MUST follow this orchestrated flow:
@@ -21,10 +24,10 @@ Every AI-driven feature development or complex code change MUST follow this orch
 ```mermaid
 graph TD
     User[User Request] --> Orchestrator[1. Root Agent as Master Orchestrator]
-    Orchestrator -->|Delegate Design with Context| Architect[2. Technical Architect: use direct injection proxy method]
+    Orchestrator -->|Delegate Design with Context| Architect[2. Technical Architect: TypeName self + Direct Injection]
     Architect -->|Analyze Codebase & Create Specs| Blueprint[plans/feature-design.md]
     Blueprint --> Orchestrator
-    Orchestrator -->|Delegate Checklist Chunks| Engineers[3. Software Engineers: use direct injection proxy method]
+    Orchestrator -->|Delegate Checklist Chunks| Engineers[3. Software Engineers: TypeName self + Direct Injection]
     Engineers -->|Write Code & Self-Test| Codebase[Codebase Integration]
     Codebase --> Orchestrator
     Orchestrator -->|Run Local Verification Commands| Verification{4. Verification pytest}
@@ -35,10 +38,10 @@ graph TD
 ### 1. Role-Based Delegation Rules
 
 1.  **The Master Orchestrator (Primary Thread Agent):** Directly executes the orchestration logic from the system context. It manages requirements handoff, validates the output quality of other subagents, coordinates parallel engineering streams, runs testing commands, and reports final delivery. It does not spawn a separate `orchestrator` subagent to avoid double-orchestration overhead.
-2.  **The Technical Architect:** Conducted by invoking a background subagent using direct injection proxy method assigned the Technical Architect role.
-    *   **STRICT RULE:** You **MUST** invoke a background subagent using direct injection proxy method in the Technical Architect role to design any technical blueprint, API signatures, and a step-by-step checklist inside `plans/<feature-name>-design.md` **before** writing any implementation code. Jumping straight to writing code is prohibited.
-3.  **The Software Engineer:** Conducted by invoking background subagent(s) using direct injection proxy method assigned the Software Engineer role. You can run up to a maximum of 3 Software Engineer subagents in parallel at once.
-    *   **STRICT RULE:** You **MUST** invoke background subagent(s) using direct injection proxy method in the Software Engineer role to execute the implementation steps. The engineers must strictly adhere to the architect-designed specification and must never diverge or invent new architecture patterns without explicit authorization.
+2.  **The Technical Architect:** Conducted by invoking a background subagent with `TypeName: "self"` using direct injection proxy method assigned the Technical Architect role (`Role: "Technical Architect"`).
+    *   **STRICT RULE:** You **MUST** invoke a background subagent with `TypeName: "self"` using direct injection proxy method in the Technical Architect role to design any technical blueprint, API signatures, and a step-by-step checklist inside `plans/<feature-name>-design.md` **before** writing any implementation code. Jumping straight to writing code is prohibited.
+3.  **The Software Engineer:** Conducted by invoking background subagent(s) with `TypeName: "self"` using direct injection proxy method assigned the Software Engineer role (`Role: "Software Engineer"`). You can run up to a maximum of 3 Software Engineer subagents in parallel at once.
+    *   **STRICT RULE:** You **MUST** invoke background subagent(s) with `TypeName: "self"` using direct injection proxy method in the Software Engineer role to execute the implementation steps. Setting `TypeName: "self"` equips the engineer with file writing and test execution tools so it can write code and self-test autonomously. The engineers must strictly adhere to the architect-designed specification and must never diverge or invent new architecture patterns without explicit authorization.
 
 ### 2. SDLC Execution Steps
 
