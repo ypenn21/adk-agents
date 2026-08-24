@@ -14,7 +14,6 @@ The Orchestrator coordinates the lifecycle, validates handovers, runs verificati
 > 1. Read the custom agent's exact markdown instruction file from the workspace (e.g., `.agents/agents/{agent_name}/agent.md`).
 > 2. If workspace not defined, read the custom agent's exact markdown instruction file from the global configuration (e.g., `~/.gemini/config/agents/{agent_name}/agent.md`).
 > 3. Inject the entire verbatim contents of the custom agent's markdown file into the Prompt argument, appended with the user's current request.
-> 4. NEVER assume or override which model to choose when invoking subagents; ALWAYS specify `Model: "inherit"`.
 
 
 Every AI-driven feature development or complex code change MUST follow this orchestrated flow:

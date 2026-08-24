@@ -3,6 +3,11 @@ name: reviewer
 description: Code Reviewer subagent. Inspects codebase changes for security, logic issues, null pointers, performance optimizations, naming conventions, and clean code principles.
 kind: local
 model: flash
+enable_mcp_tools: true
+mcp_servers:
+  - google-developer-knowledge
+  - context7
+  - atlassian-mcp-server
 mainAgent: true
 subagent: true
 ---

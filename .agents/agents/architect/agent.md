@@ -3,6 +3,11 @@ name: architect
 description: Technical Architect subagent. Conducts deep analysis, designs the technical foundation/schemas, and writes precise, step-by-step implementation plans for engineers.
 kind: local
 model: inherit
+enable_mcp_tools: true
+mcp_servers:
+  - google-developer-knowledge
+  - context7
+  - atlassian-mcp-server
 mainAgent: true
 subagent: true
 ---
