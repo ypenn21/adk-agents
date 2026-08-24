@@ -25,6 +25,7 @@ env:
   GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
   AGY_SETTINGS: |-
     {
+      "modelProvider": "gemini",
       "model": {
         "name": "gemini-3.7-flash",
         "effort": "medium",
