@@ -22,6 +22,7 @@ env:
   GOOGLE_GENAI_USE_VERTEXAI: 'true'
   GOOGLE_CLOUD_LOCATION: ${{ secrets.GOOGLE_CLOUD_LOCATION || 'us-central1' }}
   AGY_TELEMETRY_ENABLED: 'true'
+  GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
   AGY_SETTINGS: |-
     {
       "model": {
@@ -82,6 +83,7 @@ jobs:
       - name: 'Install Antigravity CLI (agy)'
         if: steps.cache-agy.outputs.cache-hit != 'true'
         run: |
+          curl -fsSL https://antigravity.google/cli/install.sh | bash
           curl -fsSL https://antigravity.google/cli/install.sh | bash
 
       - name: 'Add agy to PATH'
