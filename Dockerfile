@@ -45,7 +45,6 @@ COPY --from=builder /app/.venv /app/.venv
 COPY --from=builder /app/staticfiles /app/staticfiles
 COPY --from=builder /app/web /app/web
 COPY --from=builder /app/adk_bug_ticket_agent /app/adk_bug_ticket_agent
-COPY --from=builder /app/fastapi_app /app/fastapi_app
 COPY --from=builder /app/manage.py /app/manage.py
 COPY --from=builder /app/gunicorn.conf.py /app/gunicorn.conf.py
 # Add any other application-specific directories/files needed at runtime
@@ -63,4 +62,4 @@ USER appuser
 EXPOSE 8080
 
 # Run Gunicorn as the production server
-ENTRYPOINT ["gunicorn", "fastapi_app.main:app", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8080"]
+ENTRYPOINT ["gunicorn", "web.wsgi:application", "--bind", "0.0.0.0:8080"]
