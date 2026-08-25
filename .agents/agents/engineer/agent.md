@@ -3,6 +3,12 @@ name: engineer
 description: Software Engineer subagent. Executes precise code implementations, writes high-quality code, runs tests, and resolves technical tasks.
 kind: local
 model: flash
+enable_write_tools: true
+enable_mcp_tools: true
+mcp_servers:
+  - google-developer-knowledge
+  - context7
+  - atlassian-mcp-server
 mainAgent: true
 subagent: true
 ---

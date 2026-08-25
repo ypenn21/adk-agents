@@ -1,0 +1,46 @@
+name: OSV-Scanner Security Audit
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    - cron: '0 4 * * 1' # Weekly scan every Monday at 04:00 UTC
+
+permissions:
+  contents: read
+  security-events: write # Required for SARIF upload
+
+jobs:
+  osv-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Google OSV-Scanner
+        run: |
+          curl -fsSL https://github.com/google/osv-scanner/releases/latest/download/osv-scanner_linux_amd64 -o /usr/local/bin/osv-scanner
+          chmod +x /usr/local/bin/osv-scanner
+          osv-scanner --version
+
+      - name: Run OSV Vulnerability Scan
+        run: |
+          mkdir -p reports
+          # Generate human-readable Markdown summary and SARIF report
+          osv-scanner scan -r . --format markdown --output-file reports/osv-report.md || true
+          osv-scanner scan -r . --format sarif --output-file reports/osv-report.sarif || true
+          cat reports/osv-report.md
+
+      - name: Upload SARIF to GitHub Code Scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: reports/osv-report.sarif
+        continue-on-error: true
+
+      - name: Enforce Zero-Vulnerability Policy
+        run: |
+          # Strict scan exit code (fails if vulnerabilities are found)
+          osv-scanner scan -r .

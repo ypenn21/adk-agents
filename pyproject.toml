@@ -5,7 +5,7 @@ description = "ADK Agent"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "google-adk>=1.27.4",
+    "google-adk[db]>=1.27.4",
     "a2a-sdk>=0.3.22",
     "python-dotenv==1.1.0",
     "toolbox-core==0.5.2",
@@ -16,3 +16,7 @@ dependencies = [
     "psycopg2-binary",
     "litellm>=1.81.4",
 ]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+
