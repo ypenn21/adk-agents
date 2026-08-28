@@ -75,14 +75,17 @@ The current `.github/workflows/security-pii-review.yml` workflow invokes the sta
 
 ### Dependencies & Integration Points
 - **Python Environment:** Python 3.10+, `uv` package manager, `google-antigravity>=0.1.0`, `pydantic>=2.0`.
-- **Google Cloud Auth:** Workload Identity Federation (WIF) OIDC token exchange with `google-github-actions/auth@v2`. Operates seamlessly in Standard Mode (ADC) with Vertex AI (`vertex=True`, `project=...`, `location=...`) or Gemini API key (`api_key=...`).
+- **Google Cloud Auth (Primary & Recommended):** Workload Identity Federation (WIF) OIDC token exchange via `google-github-actions/auth@v2`. This generates ephemeral Application Default Credentials (ADC) exported to `GOOGLE_APPLICATION_CREDENTIALS`. The Python Antigravity SDK communicates directly with Vertex AI in Standard Mode (`vertex=True`, `project=...`, `location=...`) with zero long-lived API keys.
+- **Development Fallback Auth:** Optional `GEMINI_API_KEY` fallback support for local developer dry-runs outside GCP infrastructure.
 - **GitHub MCP Server:** `ghcr.io/github/github-mcp-server:v0.27.0` running via Docker stdio transport.
 - **Reporting & Storage:** Google Cloud Storage (`upload-cloud-storage@v2`) and GitHub Step Summary (`$GITHUB_STEP_SUMMARY`).
 
 ### Considerations & Challenges
-1. **Vertex AI Authentication in CI:**
-   - When running under WIF, `google-github-actions/auth@v2` sets `GOOGLE_APPLICATION_CREDENTIALS` for ADC. The SDK initializes Vertex AI via `LocalAgentConfig(vertex=True, project=..., location=...)`.
-   - The runner scripts must gracefully fall back to `GEMINI_API_KEY` if running outside GCP WIF (e.g., local development or fork pull requests).
+1. **WIF and ADC as the Primary Authentication Standard (Recommended):**
+   - **Secretless Execution:** Workload Identity Federation (WIF) combined with Application Default Credentials (ADC) is the **recommended enterprise pattern** for authenticating and communicating with Vertex AI LLMs in CI/CD.
+   - When running under WIF, `google-github-actions/auth@v2` automatically writes temporary credentials and sets `GOOGLE_APPLICATION_CREDENTIALS`.
+   - The Antigravity Python SDK automatically detects `GOOGLE_APPLICATION_CREDENTIALS` and routes model inference calls securely to Vertex AI (`vertex=True`).
+   - The CI service account (`${{ env.GOOGLE_CLOUD_PROJECT_NUMBER }}-compute@developer.gserviceaccount.com`) is granted `roles/aiplatform.user` in Terraform (`main.tf`), eliminating the need to manage, rotate, or expose static `GEMINI_API_KEY` secrets in GitHub Actions.
 2. **Docker Stdio Execution for MCP in GitHub Actions:**
    - GitHub Actions standard Ubuntu runners have Docker pre-installed. The SDK launches the Docker container as a child subprocess via `types.McpStdioServer`. Environment variables (such as `GITHUB_PERSONAL_ACCESS_TOKEN`) must be passed safely to the subprocess.
 3. **Non-Interactive CI Safety Policies:**
@@ -203,6 +206,45 @@ sequenceDiagram
         end
     end
 ```
+
+---
+
+### 🔐 Authentication Architecture: WIF & Application Default Credentials (ADC)
+
+Workload Identity Federation (WIF) paired with Application Default Credentials (ADC) is the **recommended standard** for authenticating and communicating with Vertex AI Large Language Models in automated CI/CD pipelines.
+
+#### 1. End-to-End Secretless Authentication Flow
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant GHA as GitHub Actions Runner
+    participant OIDC as GitHub OIDC Token Issuer
+    participant Pool as GCP Workload Identity Pool
+    participant SA as CI/CD Service Account
+    participant SDK as Antigravity Python SDK
+    participant Vertex as Vertex AI (Gemini 3.7 Flash)
+
+    GHA->>OIDC: Request short-lived OIDC Token (actions/id-token: write)
+    OIDC-->>GHA: Return signed JWT with repo/owner claims
+    GHA->>Pool: Exchange OIDC JWT via google-github-actions/auth@v2
+    Pool->>Pool: Verify attribute conditions (attribute.repository == ypenn21/adk-agents)
+    Pool->>SA: Impersonate Service Account (roles/iam.workloadIdentityUser)
+    SA-->>GHA: Return temporary GCP OAuth2 token (ADC credentials file)
+    Note over GHA: Sets GOOGLE_APPLICATION_CREDENTIALS in $GITHUB_ENV
+    
+    GHA->>SDK: Execute uv run python scripts/ci_*.py
+    SDK->>SDK: LocalAgentConfig(vertex=True, project=..., location=...)
+    SDK->>Vertex: Inference call with ADC OAuth2 Bearer Token
+    Vertex->>Vertex: Authorize roles/aiplatform.user
+    Vertex-->>SDK: Model Inference & Tool Trajectory Response
+```
+
+#### 2. Key Advantages of WIF + ADC over API Keys in CI/CD
+- **Zero Static Secret Leaks:** No long-lived `GEMINI_API_KEY` stored in GitHub repository secrets, eliminating credential leakage in build logs or PR forks.
+- **Short-Lived Ephemeral Tokens:** Tokens expire automatically at the end of the CI job run.
+- **Role-Based Access Control (RBAC):** Permissions are governed strictly by IAM in Terraform (`main.tf` granting `roles/aiplatform.user` and `roles/dlp.user`).
+- **Comprehensive Audit Trail:** Every inference request is recorded under GCP Cloud Audit Logs with caller identity tied to the specific GitHub repository and commit SHA.
 
 ---
 
@@ -329,8 +371,12 @@ def create_ci_agent_config(
     policies: Optional[List[Any]] = None,
     model: str = "gemini-3.7-flash",
 ) -> LocalAgentConfig:
-    """Builds a LocalAgentConfig tuned for headless CI/CD execution."""
-    use_vertex = os.environ.get("GOOGLE_GENAI_USE_VERTEXAI", "false").lower() == "true"
+    """Builds a LocalAgentConfig tuned for headless CI/CD execution.
+    
+    Authentication Priority:
+    1. Primary (Recommended): Vertex AI via Application Default Credentials (ADC) generated by GCP Workload Identity Federation (WIF).
+    2. Fallback: Gemini API Studio Key (GEMINI_API_KEY) for local development outside GCP.
+    """
     gcp_project = os.environ.get("GOOGLE_CLOUD_PROJECT")
     gcp_location = os.environ.get("GOOGLE_CLOUD_LOCATION", "us-central1")
     gemini_api_key = os.environ.get("GEMINI_API_KEY")
@@ -353,16 +399,18 @@ def create_ci_agent_config(
     if mcp_servers:
         config_kwargs["mcp_servers"] = mcp_servers
 
-    if use_vertex and gcp_project:
-        logger.info(f"Configuring Agent with Vertex AI (Project: {gcp_project}, Location: {gcp_location})")
+    # Primary: Vertex AI with Application Default Credentials (ADC) from WIF
+    if gcp_project:
+        logger.info(f"Authenticating via Application Default Credentials (ADC) -> Vertex AI (Project: {gcp_project}, Location: {gcp_location})")
         config_kwargs["vertex"] = True
         config_kwargs["project"] = gcp_project
         config_kwargs["location"] = gcp_location
     elif gemini_api_key:
-        logger.info("Configuring Agent with Gemini API Studio Key")
+        logger.info("Authenticating via Fallback Gemini API Studio Key")
         config_kwargs["api_key"] = gemini_api_key
     else:
-        logger.warning("No explicit Vertex credentials or GEMINI_API_KEY found; relying on default environment ADC.")
+        logger.info("Using default environment ADC for Vertex AI.")
+        config_kwargs["vertex"] = True
 
     return LocalAgentConfig(**config_kwargs)
 
@@ -1003,8 +1051,9 @@ jobs:
 ---
 
 ## 🎯 Success Criteria
-1. **Deterministic Type Safety:** 100% elimination of fragile bash string/regex matching (`grep "GATE_PASSED"`) replaced by strongly typed Pydantic models.
-2. **Faster CI Setup & Execution:** CI environment initialization duration reduced by >60% by leveraging `astral-sh/setup-uv` and native Python bytecode caching instead of external CLI binary scripts.
-3. **Robust MCP & Skill Integration:** In-memory configuration of `types.McpStdioServer` and declarative `skills_paths` without filesystem side-effects or configuration file pollution.
-4. **Zero Silent Failures (Fail-Closed Gate):** Any unhandled runtime error or missing audit report explicitly fails the release gate, preventing unverified production deployments.
-5. **Rich Developer Experience:** Comprehensive `$GITHUB_STEP_SUMMARY` markdown tables displaying exact violation reasons, severity badges, and remediation advice.
+1. **Secretless WIF & ADC Authentication (Recommended Standard):** 100% elimination of static `GEMINI_API_KEY` secrets in CI by authenticating directly to Vertex AI using Application Default Credentials (ADC) generated by GCP Workload Identity Federation (WIF) and authorized via `roles/aiplatform.user`.
+2. **Deterministic Type Safety:** 100% elimination of fragile bash string/regex matching (`grep "GATE_PASSED"`) replaced by strongly typed Pydantic models.
+3. **Faster CI Setup & Execution:** CI environment initialization duration reduced by >60% by leveraging `astral-sh/setup-uv` and native Python bytecode caching instead of external CLI binary scripts.
+4. **Robust MCP & Skill Integration:** In-memory configuration of `types.McpStdioServer` and declarative `skills_paths` without filesystem side-effects or configuration file pollution.
+5. **Zero Silent Failures (Fail-Closed Gate):** Any unhandled runtime error or missing audit report explicitly fails the release gate, preventing unverified production deployments.
+6. **Rich Developer Experience:** Comprehensive `$GITHUB_STEP_SUMMARY` markdown tables displaying exact violation reasons, severity badges, and remediation advice.
