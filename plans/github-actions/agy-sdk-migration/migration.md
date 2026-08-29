@@ -4,29 +4,29 @@
 - [ ] **Task 1: Project & CI Dependency Configuration**
   - Add `google-antigravity>=0.1.0` and `pydantic>=2.0` to project dependencies in `pyproject.toml` and update `uv.lock`.
   - Ensure GitHub Actions workflow configures `astral-sh/setup-uv@v5` with Python 3.10+ caching.
-- [ ] **Task 2: Implement Common Agent CI Infrastructure (`scripts/ci_common.py`)**
+- [ ] **Task 2: Implement Common Agent CI Infrastructure (`.github/scripts/ci_common.py`)**
   - Implement unified agent factory `create_ci_agent_config()` supporting Vertex AI (WIF/ADC) and Gemini API Studio (`GEMINI_API_KEY`).
   - Configure declarative safety policies (`policy.allow_all()` / scoped allowances) for non-interactive headless CI execution.
   - Implement telemetry, error handling, retries, and report output persistence utilities (`save_report_artifacts()`).
-- [ ] **Task 3: Implement Dedicated SAST AI Security Runner (`scripts/ci_security_sast.py`)**
+- [ ] **Task 3: Implement Dedicated SAST AI Security Runner (`.github/scripts/ci_security_sast.py`)**
   - Load `security-privacy-review` skill via `skills_paths`.
   - Enforce Pydantic structured output model `SecurityAuditReport` via `response_schema`.
   - Save `reports/security-scan.json` and human-readable `reports/security-scan.txt`.
-- [ ] **Task 4: Implement Dedicated Dependency & SCA Audit Runner (`scripts/ci_dependency_audit.py`)**
+- [ ] **Task 4: Implement Dedicated Dependency & SCA Audit Runner (`.github/scripts/ci_dependency_audit.py`)**
   - Load `osv-scanner` skill via `skills_paths`.
   - Enforce Pydantic structured output model `DependencyAuditReport` via `response_schema`.
   - Audit `uv.lock`, `pyproject.toml`, `requirements.txt`, and Dockerfile; export `reports/dependency-audit.json` and `reports/dependency-audit.txt`.
-- [ ] **Task 5: Implement Dedicated PR Code Reviewer Agent Runner (`scripts/ci_pr_review.py`)**
+- [ ] **Task 5: Implement Dedicated PR Code Reviewer Agent Runner (`.github/scripts/ci_pr_review.py`)**
   - Wire GitHub MCP container via `types.McpStdioServer` using dynamically injected GitHub tokens.
   - Enforce Pydantic structured output model `PRReviewReport` via `response_schema`.
   - Inspect PR diffs, submit inline review comments via GitHub MCP, and export `reports/pr-review.json` and `reports/pr-review.txt`.
-- [ ] **Task 6: Implement Dedicated Release Engineer Quality Gate Runner (`scripts/ci_quality_gate.py`)**
+- [ ] **Task 6: Implement Dedicated Release Engineer Quality Gate Runner (`.github/scripts/ci_quality_gate.py`)**
   - Ingest JSON audit artifacts (`reports/security-scan.json`, `reports/dependency-audit.json`, `reports/pii-scan.json`, `reports/pr-review.json`).
   - Enforce Pydantic structured output model `GateEvaluationResult` via `response_schema`.
   - Implement deterministic pass/fail exit code handling (`--enforce` flag) and generate Markdown summary for `$GITHUB_STEP_SUMMARY`.
 - [ ] **Task 7: Refactor GitHub Actions Workflow (`.github/workflows/security-pii-review.yml`)**
   - Remove legacy CLI installer (`curl | bash`), binary caching (`~/.local/bin/agy`), and subshell bash scripts.
-  - Replace CLI steps with clean `uv run python scripts/ci_*.py` invocations.
+  - Replace CLI steps with clean `uv run python .github/scripts/ci_*.py` invocations.
   - Preserve Workload Identity Federation (WIF), Cloud DLP scan, GCS report archiving, and downstream Cloud Build deployment trigger.
 - [ ] **Task 8: Unit & Integration Testing for CI Runner Scripts**
   - Write test suite in `tests/ci/test_ci_runners.py` validating Pydantic schemas, policy configuration, and error handling.
@@ -46,11 +46,12 @@ The files directly impacted and referenced by this transformation include:
 | [`.agents/skills/security-privacy-review/SKILL.md`](file:///Users/yannipeng/git-projects/adk-agents/.agents/skills/security-privacy-review/SKILL.md) | Domain skill for defensive SAST taint analysis, OWASP Top 10, and Django/ADK security auditing. |
 | [`.agents/skills/osv-scanner/SKILL.md`](file:///Users/yannipeng/git-projects/adk-agents/.agents/skills/osv-scanner/SKILL.md) | Domain skill for vulnerability auditing across lockfiles and manifests using OSV.dev. |
 | [`.agents/agents/reviewer/agent.md`](file:///Users/yannipeng/git-projects/adk-agents/.agents/agents/reviewer/agent.md) | Persona and prompt instructions for the automated Code Reviewer subagent. |
-| [`scripts/ci_common.py`](file:///Users/yannipeng/git-projects/adk-agents/scripts/ci_common.py) | **[NEW]** Shared SDK initialization, Vertex AI / Gemini auth, safety policies, and report persistence. |
-| [`scripts/ci_security_sast.py`](file:///Users/yannipeng/git-projects/adk-agents/scripts/ci_security_sast.py) | **[NEW]** Autonomous SAST security scanner leveraging SDK + `security-privacy-review` skill. |
-| [`scripts/ci_dependency_audit.py`](file:///Users/yannipeng/git-projects/adk-agents/scripts/ci_dependency_audit.py) | **[NEW]** Autonomous SCA dependency auditor leveraging SDK + `osv-scanner` skill. |
-| [`scripts/ci_pr_review.py`](file:///Users/yannipeng/git-projects/adk-agents/scripts/ci_pr_review.py) | **[NEW]** Autonomous PR code reviewer leveraging SDK + GitHub MCP stdio server. |
-| [`scripts/ci_quality_gate.py`](file:///Users/yannipeng/git-projects/adk-agents/scripts/ci_quality_gate.py) | **[NEW]** Deterministic Release Engineer Quality Gate evaluator with structured output. |
+| [`.github/scripts/schemas.py`](file:///Users/yannipeng/git-projects/adk-agents/.github/scripts/schemas.py) | **[NEW]** Pydantic schemas for SAST, SCA, PR review, and quality gate reports. |
+| [`.github/scripts/ci_common.py`](file:///Users/yannipeng/git-projects/adk-agents/.github/scripts/ci_common.py) | **[NEW]** Shared SDK initialization, Vertex AI / Gemini auth, safety policies, and report persistence. |
+| [`.github/scripts/ci_security_sast.py`](file:///Users/yannipeng/git-projects/adk-agents/.github/scripts/ci_security_sast.py) | **[NEW]** Autonomous SAST security scanner leveraging SDK + `security-privacy-review` skill. |
+| [`.github/scripts/ci_dependency_audit.py`](file:///Users/yannipeng/git-projects/adk-agents/.github/scripts/ci_dependency_audit.py) | **[NEW]** Autonomous SCA dependency auditor leveraging SDK + `osv-scanner` skill. |
+| [`.github/scripts/ci_pr_review.py`](file:///Users/yannipeng/git-projects/adk-agents/.github/scripts/ci_pr_review.py) | **[NEW]** Autonomous PR code reviewer leveraging SDK + GitHub MCP stdio server. |
+| [`.github/scripts/ci_quality_gate.py`](file:///Users/yannipeng/git-projects/adk-agents/.github/scripts/ci_quality_gate.py) | **[NEW]** Deterministic Release Engineer Quality Gate evaluator with structured output. |
 | [`.cloudbuild/cloudbuild-django.yaml`](file:///Users/yannipeng/git-projects/adk-agents/.cloudbuild/cloudbuild-django.yaml) | Cloud Build container build specification triggered upon passing the quality gate on `main`. |
 
 ### Current Architecture (`agy-cli`)
@@ -106,22 +107,22 @@ The current `.github/workflows/security-pii-review.yml` workflow invokes the sta
 │ 1. Setup: actions/checkout@v4 ➔ auth@v2 (WIF) ➔ astral-sh/setup-uv@v5 ➔ uv sync       │
 ├────────────────────────────────────────────────────────────────────────────────────────┤
 │ 2. Python SDK AI Scans & Audits (Autonomous Scripts)                                   │
-│    ┌───────────────────────────────────┐     ┌───────────────────────────────────┐     │
-│    │     scripts/ci_security_sast.py   │     │    scripts/ci_dependency_audit.py │     │
-│    │  • Skill: security-privacy-review │     │  • Skill: osv-scanner             │     │
-│    │  • Schema: SecurityAuditReport    │     │  • Schema: DependencyAuditReport  │     │
-│    │  ➔ reports/security-scan.json     │     │  ➔ reports/dependency-audit.json  │     │
-│    └───────────────────────────────────┘     └───────────────────────────────────┘     │
-│    ┌───────────────────────────────────┐     ┌───────────────────────────────────┐     │
-│    │       scripts/ci_pr_review.py     │     │        Cloud DLP PII Scan         │     │
-│    │  • MCP: GitHub Stdio Container    │     │  • gcloud alpha dlp text inspect  │     │
-│    │  • Schema: PRReviewReport         │     │  ➔ reports/pii-scan.json          │     │
-│    │  ➔ reports/pr-review.json         │     │  ➔ reports/pii-scan.txt           │     │
-│    └───────────────────────────────────┘     └───────────────────────────────────┘     │
+│    ┌──────────────────────────────────────┐  ┌──────────────────────────────────────┐  │
+│    │ .github/scripts/ci_security_sast.py  │  │ .github/scripts/ci_dependency_audit.py│ │
+│    │  • Skill: security-privacy-review    │  │  • Skill: osv-scanner                │  │
+│    │  • Schema: SecurityAuditReport       │  │  • Schema: DependencyAuditReport     │  │
+│    │  ➔ reports/security-scan.json        │  │  ➔ reports/dependency-audit.json     │  │
+│    └──────────────────────────────────────┘  └──────────────────────────────────────┘  │
+│    ┌──────────────────────────────────────┐  ┌──────────────────────────────────────┐  │
+│    │ .github/scripts/ci_pr_review.py      │  │        Cloud DLP PII Scan            │  │
+│    │  • MCP: GitHub Stdio Container       │  │  • gcloud alpha dlp text inspect     │  │
+│    │  • Schema: PRReviewReport            │  │  ➔ reports/pii-scan.json             │  │
+│    │  ➔ reports/pr-review.json            │  │  ➔ reports/pii-scan.txt              │  │
+│    └──────────────────────────────────────┘  └──────────────────────────────────────┘  │
 ├────────────────────────────────────────────────────────────────────────────────────────┤
 │ 3. Release Engineer Quality Gate Evaluation                                           │
 │    ┌──────────────────────────────────────────────────────────────────────────────┐    │
-│    │                          scripts/ci_quality_gate.py                          │    │
+│    │                     .github/scripts/ci_quality_gate.py                       │    │
 │    │  • Aggregates all JSON audit models into a unified evaluation context        │    │
 │    │  • Schema: GateEvaluationResult (decision: GATE_PASSED | GATE_FAILED)         │    │
 │    │  • Outputs: reports/decision.json & reports/decision.txt                     │    │
@@ -156,7 +157,7 @@ sequenceDiagram
 
     rect rgb(240, 248, 255)
         note over GHA,Vertex: Step 1: Static Application Security Testing (SAST)
-        GHA->>PyAgent: uv run python scripts/ci_security_sast.py
+        GHA->>PyAgent: uv run python .github/scripts/ci_security_sast.py
         PyAgent->>Vertex: Prompt + Skill (.agents/skills/security-privacy-review) + response_schema=SecurityAuditReport
         Vertex-->>PyAgent: Structured JSON Response
         PyAgent-->>GHA: Write reports/security-scan.json & reports/security-scan.txt
@@ -164,7 +165,7 @@ sequenceDiagram
 
     rect rgb(245, 250, 255)
         note over GHA,Vertex: Step 2: Dependency & SCA Vulnerability Audit
-        GHA->>PyAgent: uv run python scripts/ci_dependency_audit.py
+        GHA->>PyAgent: uv run python .github/scripts/ci_dependency_audit.py
         PyAgent->>Vertex: Prompt + Skill (.agents/skills/osv-scanner) + response_schema=DependencyAuditReport
         Vertex-->>PyAgent: Structured JSON Response
         PyAgent-->>GHA: Write reports/dependency-audit.json & reports/dependency-audit.txt
@@ -173,7 +174,7 @@ sequenceDiagram
     opt If Pull Request
         rect rgb(255, 250, 240)
             note over GHA,MCP: Step 3: Automated PR Review via GitHub MCP
-            GHA->>PyAgent: uv run python scripts/ci_pr_review.py
+            GHA->>PyAgent: uv run python .github/scripts/ci_pr_review.py
             PyAgent->>MCP: types.McpStdioServer (docker run ghcr.io/github/github-mcp-server)
             PyAgent->>Vertex: Review PR Diff + Submit Inline Comments via MCP Tools
             Vertex-->>MCP: Execute create_review_comment / submit_review
@@ -190,7 +191,7 @@ sequenceDiagram
 
     rect rgb(255, 245, 245)
         note over GHA,Vertex: Step 5: Release Engineer Quality Gate Decision
-        GHA->>PyAgent: uv run python scripts/ci_quality_gate.py --enforce
+        GHA->>PyAgent: uv run python .github/scripts/ci_quality_gate.py --enforce
         PyAgent->>Vertex: Ingest all JSON audit reports + response_schema=GateEvaluationResult
         Vertex-->>PyAgent: GateEvaluationResult (decision="GATE_PASSED" | "GATE_FAILED")
         PyAgent-->>GHA: Write reports/decision.json & decision.txt, Render $GITHUB_STEP_SUMMARY
@@ -233,7 +234,7 @@ sequenceDiagram
     SA-->>GHA: Return temporary GCP OAuth2 token (ADC credentials file)
     Note over GHA: Sets GOOGLE_APPLICATION_CREDENTIALS in $GITHUB_ENV
     
-    GHA->>SDK: Execute uv run python scripts/ci_*.py
+    GHA->>SDK: Execute uv run python .github/scripts/ci_*.py
     SDK->>SDK: LocalAgentConfig(vertex=True, project=..., location=...)
     SDK->>Vertex: Inference call with ADC OAuth2 Bearer Token
     Vertex->>Vertex: Authorize roles/aiplatform.user
@@ -343,11 +344,11 @@ class GateEvaluationResult(BaseModel):
 
 ### Python CI Runner Script Signatures & Implementations
 
-#### 1. Common Agent CI Infrastructure: `scripts/ci_common.py`
+#### 1. Common Agent CI Infrastructure: `.github/scripts/ci_common.py`
 Provides unified authentication, configuration factory, and artifact persistence.
 
 ```python
-"""scripts/ci_common.py - Shared infrastructure for Antigravity CI agents."""
+""".github/scripts/ci_common.py - Shared infrastructure for Antigravity CI agents."""
 import json
 import logging
 import os
@@ -430,11 +431,11 @@ def save_report_artifacts(name: str, structured_data: BaseModel, text_content: s
 
 ---
 
-#### 2. AI Security SAST Scanner: `scripts/ci_security_sast.py`
+#### 2. AI Security SAST Scanner: `.github/scripts/ci_security_sast.py`
 Executes static application security testing using the `security-privacy-review` skill.
 
 ```python
-"""scripts/ci_security_sast.py - Autonomous SAST Security Scanner."""
+""".github/scripts/ci_security_sast.py - Autonomous SAST Security Scanner."""
 import asyncio
 import sys
 from google.antigravity import Agent
@@ -480,11 +481,11 @@ if __name__ == "__main__":
 
 ---
 
-#### 3. Dependency & SCA Auditor: `scripts/ci_dependency_audit.py`
+#### 3. Dependency & SCA Auditor: `.github/scripts/ci_dependency_audit.py`
 Audits lockfiles and dependencies using the `osv-scanner` skill.
 
 ```python
-"""scripts/ci_dependency_audit.py - Autonomous Dependency & SCA Auditor."""
+""".github/scripts/ci_dependency_audit.py - Autonomous Dependency & SCA Auditor."""
 import asyncio
 import sys
 from google.antigravity import Agent
@@ -527,11 +528,11 @@ if __name__ == "__main__":
 
 ---
 
-#### 4. Automated PR Reviewer with GitHub MCP: `scripts/ci_pr_review.py`
+#### 4. Automated PR Reviewer with GitHub MCP: `.github/scripts/ci_pr_review.py`
 Connects to the GitHub MCP container via `types.McpStdioServer` and inspects PR diffs.
 
 ```python
-"""scripts/ci_pr_review.py - Automated Pull Request Code Reviewer."""
+""".github/scripts/ci_pr_review.py - Automated Pull Request Code Reviewer."""
 import asyncio
 import os
 import sys
@@ -604,11 +605,11 @@ if __name__ == "__main__":
 
 ---
 
-#### 5. Release Engineer Quality Gate Decision Agent: `scripts/ci_quality_gate.py`
+#### 5. Release Engineer Quality Gate Decision Agent: `.github/scripts/ci_quality_gate.py`
 Ingests all structured JSON reports, queries Gemini 3.7 Flash for final gate evaluation, outputs `$GITHUB_STEP_SUMMARY`, and enforces strict exit codes.
 
 ```python
-"""scripts/ci_quality_gate.py - Deterministic Quality Gate Decision Evaluator."""
+""".github/scripts/ci_quality_gate.py - Deterministic Quality Gate Decision Evaluator."""
 import argparse
 import asyncio
 import json
@@ -819,13 +820,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token || secrets.G_PAT_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
-          uv run python scripts/ci_security_sast.py
+          uv run python .github/scripts/ci_security_sast.py
 
       - name: 'Antigravity OSV-Scanner Dependency Audit'
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token || secrets.G_PAT_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
-          uv run python scripts/ci_dependency_audit.py
+          uv run python .github/scripts/ci_dependency_audit.py
 
       - name: 'Run PR Auto-Review via Antigravity SDK'
         if: github.event.pull_request.number != null
@@ -835,7 +836,7 @@ jobs:
           REPOSITORY: ${{ github.repository }}
           PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          uv run python scripts/ci_pr_review.py
+          uv run python .github/scripts/ci_pr_review.py
 
       - name: 'Google Cloud DLP Sensitive Data & PII Scan'
         run: |
@@ -883,7 +884,7 @@ jobs:
 
       - name: 'Quality Gate Decision & Enforcement'
         run: |
-          uv run python scripts/ci_quality_gate.py --enforce
+          uv run python .github/scripts/ci_quality_gate.py --enforce
 
       - name: 'Upload Audit Reports to GCS'
         if: always()
@@ -933,16 +934,16 @@ jobs:
 
 ---
 
-### Step 2: Implement CI Schemas (`scripts/schemas.py`)
-- **Files to create**: `scripts/schemas.py`
+### Step 2: Implement CI Schemas (`.github/scripts/schemas.py`)
+- **Files to create**: `.github/scripts/schemas.py`
 - **Changes needed**:
   - Implement `SecurityAuditReport`, `DependencyAuditReport`, `PRReviewReport`, and `GateEvaluationResult` Pydantic models.
 - **Status**: `- [ ] Pending`
 
 ---
 
-### Step 3: Implement Common Agent CI Infrastructure (`scripts/ci_common.py`)
-- **Files to create**: `scripts/ci_common.py`
+### Step 3: Implement Common Agent CI Infrastructure (`.github/scripts/ci_common.py`)
+- **Files to create**: `.github/scripts/ci_common.py`
 - **Changes needed**:
   - Implement `create_ci_agent_config()` supporting Vertex AI (WIF) and Gemini API Studio.
   - Configure `policy.allow_all()` for non-interactive headless CI execution.
@@ -951,8 +952,8 @@ jobs:
 
 ---
 
-### Step 4: Implement SAST Scanner (`scripts/ci_security_sast.py`)
-- **Files to create**: `scripts/ci_security_sast.py`
+### Step 4: Implement SAST Scanner (`.github/scripts/ci_security_sast.py`)
+- **Files to create**: `.github/scripts/ci_security_sast.py`
 - **Changes needed**:
   - Connect `security-privacy-review` skill via `skills_paths`.
   - Enforce `SecurityAuditReport` response schema.
@@ -961,8 +962,8 @@ jobs:
 
 ---
 
-### Step 5: Implement Dependency SCA Auditor (`scripts/ci_dependency_audit.py`)
-- **Files to create**: `scripts/ci_dependency_audit.py`
+### Step 5: Implement Dependency SCA Auditor (`.github/scripts/ci_dependency_audit.py`)
+- **Files to create**: `.github/scripts/ci_dependency_audit.py`
 - **Changes needed**:
   - Connect `osv-scanner` skill via `skills_paths`.
   - Enforce `DependencyAuditReport` response schema.
@@ -971,8 +972,8 @@ jobs:
 
 ---
 
-### Step 6: Implement PR Code Reviewer Runner (`scripts/ci_pr_review.py`)
-- **Files to create**: `scripts/ci_pr_review.py`
+### Step 6: Implement PR Code Reviewer Runner (`.github/scripts/ci_pr_review.py`)
+- **Files to create**: `.github/scripts/ci_pr_review.py`
 - **Changes needed**:
   - Connect GitHub MCP container via `types.McpStdioServer`.
   - Enforce `PRReviewReport` response schema.
@@ -981,8 +982,8 @@ jobs:
 
 ---
 
-### Step 7: Implement Quality Gate Decision Runner (`scripts/ci_quality_gate.py`)
-- **Files to create**: `scripts/ci_quality_gate.py`
+### Step 7: Implement Quality Gate Decision Runner (`.github/scripts/ci_quality_gate.py`)
+- **Files to create**: `.github/scripts/ci_quality_gate.py`
 - **Changes needed**:
   - Ingest JSON reports from `reports/`.
   - Evaluate release gate criteria via Gemini 3.7 Flash and enforce strict pass/fail with `--enforce`.
@@ -994,7 +995,7 @@ jobs:
 ### Step 8: Refactor Workflow YAML (`.github/workflows/security-pii-review.yml`)
 - **Files to modify**: `.github/workflows/security-pii-review.yml`
 - **Changes needed**:
-  - Replace `agy` CLI installation and bash steps with `astral-sh/setup-uv@v5` and `uv run python scripts/ci_*.py`.
+  - Replace `agy` CLI installation and bash steps with `astral-sh/setup-uv@v5` and `uv run python .github/scripts/ci_*.py`.
 - **Status**: `- [ ] Pending`
 
 ---
@@ -1019,20 +1020,20 @@ jobs:
 
 2. **Local SAST Runner Dry Run:**
    ```bash
-   uv run python scripts/ci_security_sast.py
+   uv run python .github/scripts/ci_security_sast.py
    ```
    - Confirms `reports/security-scan.json` and `reports/security-scan.txt` are created and contain valid structured findings.
 
 3. **Local SCA Runner Dry Run:**
    ```bash
-   uv run python scripts/ci_dependency_audit.py
+   uv run python .github/scripts/ci_dependency_audit.py
    ```
    - Confirms `reports/dependency-audit.json` and `reports/dependency-audit.txt` are generated without errors.
 
 4. **Local Quality Gate Decision Test:**
    - Test passing gate:
      ```bash
-     uv run python scripts/ci_quality_gate.py
+     uv run python .github/scripts/ci_quality_gate.py
      echo "Exit code: $?"
      ```
    - Verify `reports/decision.json` contains `decision: "GATE_PASSED"`.
@@ -1040,7 +1041,7 @@ jobs:
      ```bash
      # Inject dummy critical finding
      echo '{"passed": false, "total_findings": 1, "critical_count": 1, "findings": [{"file_path": "test.py", "severity": "Critical", "category": "SQLi", "description": "Raw query", "remediation": "Use ORM"}]}' > reports/security-scan.json
-     uv run python scripts/ci_quality_gate.py --enforce
+     uv run python .github/scripts/ci_quality_gate.py --enforce
      # Assert non-zero exit code (1)
      ```
 
