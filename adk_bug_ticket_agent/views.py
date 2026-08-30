@@ -101,3 +101,6 @@ async def interact_with_agent(request): # Removed the initial check for session_
     
     return JsonResponse({'error': 'Unsupported method'}, status=405)
 
+
+def new_interact_with_agent(request):
+    return render(request, 'adk_agent/new_interact.html')
