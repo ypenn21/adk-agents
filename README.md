@@ -356,7 +356,7 @@ export MCP_TOOLBOX_URL=$(gcloud run services describe toolbox --region us-centra
 export PROJECT_ID="project-id"
 # set using Resource name
 # export RAG_CORPUS="projects/project-id/locations/region/ragCorpora/rag-corpus-id"
-export DB_URL="postgresql+asyncpg://postgres:pword@internal-ip-address:5432/tickets-db"
+export DB_URL="postgresql://postgres:pword@internal-ip-address:5432/tickets-db"
 export PROJECT_NUMBER=$(gcloud projects describe $PROJECT_ID --format='value(projectNumber)')
 
 #the default service account is ${PROJECT_NUMBER}-compute@developer.gserviceaccount.com for cloud run. add aiplatform permission
@@ -375,7 +375,7 @@ gcloud run deploy adk-agent-bug-assist \
   --network=default \
   --subnet=default \
   --vpc-egress=private-ranges-only \
-  --set-env-vars=GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=us-central1,GOOGLE_GENAI_USE_VERTEXAI=TRUE,MCP_TOOLBOX_URL=$MCP_TOOLBOX_URL,DJANGO=true,AGENT_URL=https://adk.us-central1.run.app,DB_URL=postgresql+asyncpg://postgres:$DB_PASS@$internal-ip:5432/tickets-db
+  --set-env-vars=GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=us-central1,GOOGLE_GENAI_USE_VERTEXAI=TRUE,MCP_TOOLBOX_URL=$MCP_TOOLBOX_URL,DJANGO=true,AGENT_URL=https://adk.us-central1.run.app,DB_URL=postgresql://postgres:$DB_PASS@$internal-ip:5432/tickets-db
 
 #deploy a2a custom
 gcloud run deploy adk-a2a-agent-bug-assist \
