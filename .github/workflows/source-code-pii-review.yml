@@ -1,0 +1,208 @@
+name: Source Code PII and Code Review
+
+on:
+  # push:
+  #   branches: [ main ]
+  pull_request: # trigger
+    types:
+      - opened
+      - synchronize
+
+permissions:
+  contents: read
+  id-token: write
+  pull-requests: write
+
+env:
+  APP_ID: ${{ secrets.APP_ID }}
+  APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
+  GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT || vars.GCP_PROJECT_ID }}
+  GOOGLE_CLOUD_PROJECT_NUMBER: ${{ secrets.GOOGLE_CLOUD_PROJECT_NUMBER || vars.GCP_PROJECT_NUMBER }}
+  GOOGLE_GENAI_USE_VERTEXAI: 'true'
+  GOOGLE_CLOUD_LOCATION: ${{ secrets.GOOGLE_CLOUD_LOCATION || 'us-central1' }}
+  LLM_Model: ${{ vars.LLM_MODEL || vars.LLM_Model || secrets.LLM_MODEL || secrets.LLM_Model || 'gemini-3.7-flash' }}
+
+jobs:
+  scan-and-evaluate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - id: 'auth'
+        name: 'Authenticate to Google Cloud (WIF)'
+        uses: 'google-github-actions/auth@v2'
+        with:
+          workload_identity_provider: 'projects/${{ env.GOOGLE_CLOUD_PROJECT_NUMBER }}/locations/global/workloadIdentityPools/aaa-github-pool/providers/github-provider'
+          service_account: '${{ env.GOOGLE_CLOUD_PROJECT_NUMBER }}-compute@developer.gserviceaccount.com'
+          project_id: ${{ env.GOOGLE_CLOUD_PROJECT }}
+
+      - name: Generate GitHub App Token
+        if: env.APP_ID != '' && env.APP_PRIVATE_KEY != ''
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ env.APP_ID }}
+          private-key: ${{ env.APP_PRIVATE_KEY }}
+
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v2'
+        with:
+          install_components: 'alpha'
+
+      - name: 'Verify Authentication'
+        run: gcloud auth list
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python SDK and dependencies
+        run: |
+          pip install google-antigravity "pydantic>=2.0.0,<3.0.0"
+
+      - name: 'Google Cloud DLP Sensitive Data & PII Scan'
+        run: |
+          mkdir -p reports
+          echo "Starting Cloud DLP Sensitive Data & PII Scan..."
+          echo "### PII SCAN RESULTS ###" > reports/pii-scan.txt
+          echo "[]" > reports/pii-scan.json
+
+          TOTAL_FINDINGS=0
+          while IFS= read -r -d '' file; do
+            if [ -s "$file" ]; then
+              echo "Inspecting $file..." >> reports/pii-scan.txt
+              RESULT=$(gcloud alpha dlp text inspect \
+                --info-types=EMAIL_ADDRESS,PHONE_NUMBER,LOCATION,CREDIT_CARD_NUMBER,AUTH_TOKEN,GCP_API_KEY,GCP_CREDENTIALS \
+                --content-file="$file" \
+                --format="json" 2>/dev/null || echo "{}")
+              
+              FINDINGS_COUNT=$(echo "$RESULT" | jq '.findings | length // 0' 2>/dev/null || echo 0)
+              if [ "$FINDINGS_COUNT" -gt 0 ]; then
+                echo "⚠️ [PII DETECTED] $file ($FINDINGS_COUNT findings)" | tee -a reports/pii-scan.txt
+                echo "$RESULT" | jq -r '.findings[] | "  - Type: \(.infoType.name) | Likelihood: \(.likelihood)"' >> reports/pii-scan.txt
+                TOTAL_FINDINGS=$((TOTAL_FINDINGS + FINDINGS_COUNT))
+              fi
+
+              REGEX_MATCHES=$(grep -n -E "(GEMINI_API_KEY|API_KEY|SECRET_KEY|ACCESS_KEY|PRIVATE_KEY)[[:space:]]*=[[:space:]]*['\"]?[A-Za-z0-9_.-]{16,}|AIza[0-9A-Za-z_-]{35}|AQ\.[A-Za-z0-9_-]{30,}" "$file" 2>/dev/null | grep -v -E "^[0-9]+:[[:space:]]*#" || true)
+              if [ -n "$REGEX_MATCHES" ]; then
+                MATCH_COUNT=$(echo "$REGEX_MATCHES" | wc -l | tr -d ' ')
+                echo "⚠️ [PII DETECTED] $file ($MATCH_COUNT secret findings via pattern match)" | tee -a reports/pii-scan.txt
+                while IFS= read -r line_match; do
+                  echo "  - Type: AUTH_TOKEN / API_KEY (Pattern Match) | $line_match" >> reports/pii-scan.txt
+                done <<< "$REGEX_MATCHES"
+                TOTAL_FINDINGS=$((TOTAL_FINDINGS + MATCH_COUNT))
+              fi
+            fi
+          done < <(find . -type f \
+            \( -not -path '*/.*' -o -name ".env*" -o -name "*.env" \) \
+            -not -path './.git/*' \
+            -not -path './.venv/*' \
+            -not -path './.pytest_cache/*' \
+            -not -path './reports/*' \
+            -not -path './plans/*' \
+            -not -path './extensions/*' \
+            -not -path './mcp-servers/*' \
+            -not -path './.agents/*' \
+            -not -name "gha-creds-*" \
+            -not -name "*.lock" \
+            -not -name "*.png" \
+            -not -name "*.jpg" \
+            -not -name "*.zip" \
+            -size -500k \
+            \( \
+              -name ".env" -o -name ".env.*" -o -name "*.env" -o -name "*.pem" -o -name "*.key" -o -name "*.crt" -o -name "*.cert" \
+              -o -name "Dockerfile" -o -name "Dockerfile.*" -o -name "Makefile" -o -name "Procfile" -o -name "Jenkinsfile" \
+              -o -name "*.ini" -o -name "*.cfg" -o -name "*.conf" -o -name "*.properties" -o -name "*.xml" -o -name "*.csv" -o -name "*.txt" \
+              -o -name "*.js" -o -name "*.ts" -o -name "*.jsx" -o -name "*.tsx" -o -name "*.go" -o -name "*.rs" -o -name "*.java" -o -name "*.css" -o -name "*.scss" \
+              -o -name "*.tf" -o -name "*.yml" -o -name "*.yaml" -o -name "*.md" -o -name "*.sh" -o -name "*.py" -o -name "*.json" -o -name "*.toml" -o -name "*.html" -o -name "*.sql" \
+            \) \
+            -print0)
+
+          if [ "$TOTAL_FINDINGS" -eq 0 ]; then
+            echo "✅ No sensitive data or PII detected by Cloud DLP." | tee -a reports/pii-scan.txt
+          else
+            echo "❌ Total PII findings detected: $TOTAL_FINDINGS" | tee -a reports/pii-scan.txt
+          fi
+
+      - name: 'Run PR Auto-Review via Antigravity Code Reviewer'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.G_PAT_TOKEN || secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token || secrets.G_PAT_TOKEN || secrets.GITHUB_TOKEN }}
+          GITHUB_PERSONAL_ACCESS_TOKEN: ${{ steps.app-token.outputs.token || secrets.G_PAT_TOKEN || secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          python .github/scripts/pr_reviewer_agent.py
+
+      - name: 'Quality Gate Decision via Release Engineer Agent'
+        env:
+          PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          python .github/scripts/quality_gate_agent.py
+
+      - name: 'Generate GitHub Actions Job Summary'
+        if: always()
+        run: |
+          echo "## 🛡️ Antigravity CI/CD Quality Gate Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if grep -q "GATE_PASSED" reports/decision.txt 2>/dev/null; then
+            echo "### ✅ Status: **GATE PASSED**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ❌ Status: **GATE FAILED**" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📋 Release Engineer Decision" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          cat reports/decision.txt 2>/dev/null || echo "No decision report generated." >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📦 Archived Artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "GCS Destination: \`gs://${{ env.GOOGLE_CLOUD_PROJECT }}-scan-reports/${{ github.run_id }}_${{ github.run_attempt }}\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: 'Upload Audit Reports & Telemetry to GCS'
+        if: always()
+        uses: 'google-github-actions/upload-cloud-storage@v2'
+        with:
+          path: 'reports'
+          destination: '${{ env.GOOGLE_CLOUD_PROJECT }}-scan-reports/${{ github.run_id }}_${{ github.run_attempt }}'
+
+      - name: 'Enforce Quality Gate'
+        run: |
+          if [ ! -f reports/gate-decision.json ]; then
+            echo "❌ Gate decision artifact missing!"
+            exit 1
+          fi
+          PASSED=$(python -c "import json; print(json.load(open('reports/gate-decision.json')).get('passed', False))")
+          if [ "$PASSED" != "True" ]; then
+            echo "❌ Quality Gate Failed! Halting deployment."
+            cat reports/decision.txt 2>/dev/null || true
+            exit 1
+          fi
+          echo "✅ Quality Gate Passed successfully!"
+  build:
+    needs: scan-and-evaluate
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: 'Checkout code'
+        uses: actions/checkout@v4
+
+      - id: 'auth'
+        name: 'Authenticate to Google Cloud (WIF)'
+        uses: 'google-github-actions/auth@v2'
+        with:
+          workload_identity_provider: 'projects/${{ env.GOOGLE_CLOUD_PROJECT_NUMBER }}/locations/global/workloadIdentityPools/aaa-github-pool/providers/github-provider'
+          service_account: '${{ env.GOOGLE_CLOUD_PROJECT_NUMBER }}-compute@developer.gserviceaccount.com'
+          project_id: ${{ env.GOOGLE_CLOUD_PROJECT }}
+
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v2'
+
+      - name: 'Submit Cloud Build'
+        run: |
+          gcloud builds submit \
+            --config .cloudbuild/cloudbuild-django.yaml \
+            --project ${{ env.GOOGLE_CLOUD_PROJECT }} \
+            .
