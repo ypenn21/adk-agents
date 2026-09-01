@@ -29,7 +29,27 @@ AGENT_PORT = os.environ.get("AGENT_PORT", "8000")
 AGENT_URL = os.environ.get("AGENT_URL", f"http://127.0.0.1:{AGENT_PORT}")
 AGENT_MODE = os.environ.get("AGENT_MODE", f"{AgentMode.GEMINI.value}")
 SUPPORTED_CONTENT_TYPES = ["text", "text/plain"]
-DB_URL = os.environ.get("DB_URL", "postgresql://postgres:admin@localhost:5432/tickets-db")
+
+
+def normalize_db_url(url: str) -> str:
+    """
+    Ensures database URLs for PostgreSQL use the asyncpg dialect required by SQLAlchemy async engine.
+    
+    Args:
+        url: Raw database connection URL.
+        
+    Returns:
+        Normalized database connection URL starting with postgresql+asyncpg:// if PostgreSQL.
+    """
+    if url.startswith("postgresql://"):
+        return url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    if url.startswith("postgres://"):
+        return url.replace("postgres://", "postgresql+asyncpg://", 1)
+    return url
+
+
+DEFAULT_DB_URL = "postgresql+asyncpg://postgres:admin@localhost:5432/tickets-db"
+DB_URL = normalize_db_url(os.environ.get("DB_URL", DEFAULT_DB_URL))
 
 
 # adding memory https://google.github.io/adk-docs/sessions/memory/#how-memory-works-in-practice
@@ -54,9 +74,10 @@ class ServiceManager:
         print("ServiceManager initialized (services will be lazy-loaded).")
 
     def _init_session_service(self):
-        """Initializes the database session service."""
+        """Initializes the database session service with NullPool to avoid event loop reuse conflicts."""
         print("Initializing DatabaseSessionService...")
-        service = DatabaseSessionService(db_url=DB_URL)
+        from sqlalchemy.pool import NullPool
+        service = DatabaseSessionService(db_url=DB_URL, poolclass=NullPool)
         print(f"ADK Database URL: {DB_URL}")
         return service
 
