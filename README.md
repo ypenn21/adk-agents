@@ -526,6 +526,74 @@ Here are some example requests you may ask the agent:
 - "Can you bump the priority of ticket ID 2 to P1?"
 - "all bugs that are assigned to user with email user@google.com?"
 
+---
+
+## Running Tests
+
+The test suite is built with [`pytest`](https://docs.pytest.org/) and tests the agent's database session management, URL normalization, and cross-event-loop execution in synchronous web frameworks (Django/WSGI).
+
+### How to Run the Tests
+
+#### 1. Using `uv` (Recommended)
+
+Run all tests in the [`tests/`](tests/) directory:
+
+```bash
+uv run pytest tests/
+```
+
+#### 2. Using Activated Virtual Environment
+
+If your virtual environment is already activated:
+
+```bash
+source .venv/bin/activate
+pytest tests/
+```
+
+#### 3. Targeted Test Execution
+
+- **Verbose output:**
+  ```bash
+  uv run pytest -v tests/
+  ```
+
+- **Run a specific test file:**
+  ```bash
+  uv run pytest tests/test_database_session.py
+  ```
+
+- **Run a specific test function:**
+  ```bash
+  uv run pytest tests/test_database_session.py -k "test_normalize_db_url"
+  ```
+
+---
+
+### How the Tests Work
+
+The test suite in [`tests/test_database_session.py`](tests/test_database_session.py) validates the core session and database infrastructure required by Google ADK in Django:
+
+1. **Database URL Normalization (`test_normalize_db_url`)**
+   - Verifies that standard PostgreSQL URL schemes (`postgresql://` or `postgres://`) are automatically converted to SQLAlchemy's asynchronous dialect scheme (`postgresql+asyncpg://`).
+   - Ensures non-PostgreSQL URLs (such as SQLite `sqlite+aiosqlite://`) remain unchanged.
+
+2. **Database Session Service Initialization (`test_database_session_service_initialization`, `test_database_session_service_with_normalized_url`)**
+   - Validates that Google ADK's `DatabaseSessionService` successfully creates an `AsyncEngine` with dialect `postgresql` and driver `asyncpg` without runtime or connection configuration errors.
+
+3. **Singleton Lazy Loading (`test_service_manager_session_service_lazy_load`)**
+   - Tests `ServiceManager` in `adk_bug_ticket_agent/agent.py` to confirm that session services are lazily loaded upon first access and that subsequent calls return the cached singleton instance.
+
+4. **Cross-Event-Loop Lifecycle & Concurrency (`test_cross_event_loop_session_service`)**
+   - Simulates synchronous Django WSGI / Gunicorn request lifecycles where each HTTP request runs in a new, independent `asyncio` event loop using `asgiref.sync.async_to_sync`.
+   - Uses `NullPool` with a temporary database to verify that `DatabaseSessionService` creates and retrieves sessions across different event loops without attaching connections to a closed loop or causing `Attached to a different loop` errors.
+
+5. **Test Configuration & Environment Flagging**
+   - Configured in [`pyproject.toml`](pyproject.toml) with `pythonpath = ["."]` so project modules are discoverable.
+   - Sets `os.environ["DJANGO"] = "true"` to prevent `agent.py` from attempting to initialize standalone A2A Starlette server applications during unit test execution.
+
+---
+
 ### Reference google adk-samples for more samples on adk
 https://github.com/google/adk-samples
 https://medium.com/google-cloud/2-minute-adk-speed-up-your-agent-with-parallel-tools-56450c3edb64
