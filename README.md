@@ -291,7 +291,7 @@ gcloud run deploy toolbox \
     --region us-central1 \
     --set-secrets "/app/tools.yaml=tools:latest" \
     --set-env-vars="PROJECT_ID=$PROJECT_ID,DB_USER=postgres,DB_PASS=admin" \
-    --args="--tools-file=/app/tools.yaml","--address=0.0.0.0","--port=8080" \
+    --args="--tools-file=/app/tools.yaml","--address=0.0.0.0","--port=8080","--enable-api" \
     --network=default \
     --subnet=default \
     --vpc-egress=private-ranges-only \
@@ -485,7 +485,7 @@ Now you run the toolbox server locally:
 
 ```bash 
 cd mcp-servers/mcp-toolbox/
-./toolbox --tools-file="tools.yaml"
+./toolbox --tools-file="tools.yaml" --enable-api
 ```
 
 You can verify the server is running by opening http://localhost:5000/api/toolset in your browser. 
