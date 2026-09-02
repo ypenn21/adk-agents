@@ -12,7 +12,19 @@ import asyncio
 from enum import Enum
 from typing import Optional
 from pydantic import BaseModel, Field, model_validator
-from google.antigravity import Agent, LocalAgentConfig
+try:
+    from google.antigravity import Agent, LocalAgentConfig, types
+except ImportError:
+    Agent = None
+    class LocalAgentConfig:  # type: ignore
+        def __init__(self, **kwargs: Any):
+            for k, v in kwargs.items():
+                setattr(self, k, v)
+    from helper import types
+    if "google.antigravity" in sys.modules:
+        sys.modules["google.antigravity"].Agent = Agent
+        sys.modules["google.antigravity"].LocalAgentConfig = LocalAgentConfig
+        sys.modules["google.antigravity"].types = types
 
 from helper import (
     format_text_decision,
@@ -201,6 +213,8 @@ async def evaluate_quality_gate(
 
     # 4. Attempt to invoke Antigravity SDK Agent
     try:
+        if Agent is None:
+            raise RuntimeError("Antigravity SDK is not available")
         prompt = build_quality_gate_prompt(pii_content, pr_review_content)
         config = LocalAgentConfig(
             vertex=True,

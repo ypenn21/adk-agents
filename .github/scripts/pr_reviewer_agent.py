@@ -11,7 +11,19 @@ import asyncio
 from enum import Enum
 from typing import Optional, Any
 from pydantic import BaseModel, Field, model_validator
-from google.antigravity import Agent, LocalAgentConfig, types
+try:
+    from google.antigravity import Agent, LocalAgentConfig, types
+except ImportError:
+    Agent = None
+    class LocalAgentConfig:  # type: ignore
+        def __init__(self, **kwargs: Any):
+            for k, v in kwargs.items():
+                setattr(self, k, v)
+    from helper import types
+    if "google.antigravity" in sys.modules:
+        sys.modules["google.antigravity"].Agent = Agent
+        sys.modules["google.antigravity"].LocalAgentConfig = LocalAgentConfig
+        sys.modules["google.antigravity"].types = types
 
 from helper import (
     POSITIVE_APPROVAL_TEMPLATE,
@@ -189,6 +201,8 @@ async def run_pr_review(
     pii_context = read_text_file(pii_report_path)
 
     try:
+        if Agent is None:
+            raise RuntimeError("Antigravity SDK is not available")
         mcp_server = create_github_mcp_server(auth_token or "", repository or "")
         config = LocalAgentConfig(
             vertex=True,

@@ -22,7 +22,47 @@ from pydantic import BaseModel
 try:
     from google.antigravity import types
 except ImportError:
-    types = None
+    class DummyLocalAgentConfig:
+        def __init__(self, **kwargs: Any):
+            for k, v in kwargs.items():
+                setattr(self, k, v)
+
+    class DummyTypes:
+        class Thought:
+            def __init__(self, step_index: int = 0, text: str = ""):
+                self.step_index = step_index
+                self.text = text
+        class ToolCall:
+            def __init__(self, name: str = "", args: Any = None):
+                self.name = name
+                self.args = args or {}
+            def __str__(self) -> str:
+                return f"{self.name}({self.args})"
+        class ToolResult:
+            def __init__(self, name: str = "", result: Any = None):
+                self.name = name
+                self.result = result
+            def __str__(self) -> str:
+                return str(self.result)
+        class Text:
+            def __init__(self, step_index: int = 0, text: str = ""):
+                self.step_index = step_index
+                self.text = text
+        class McpStdioServer:
+            def __init__(self, name: str, command: str, args: list[str], env: dict[str, str]):
+                self.name = name
+                self.command = command
+                self.args = args
+                self.env = env
+
+    types = DummyTypes
+    import types as _py_types
+    if "google.antigravity" not in sys.modules:
+        _antigravity_mod = _py_types.ModuleType("google.antigravity")
+        _antigravity_mod.Agent = None
+        _antigravity_mod.LocalAgentConfig = DummyLocalAgentConfig
+        _antigravity_mod.types = types
+        sys.modules["google.antigravity"] = _antigravity_mod
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -656,9 +696,17 @@ def write_gate_reports(decision: Any) -> None:
 
 def create_github_mcp_server(token: str, repo: str) -> Any:
     """Constructs a types.McpStdioServer configured for GitHub MCP container."""
-    if types is None:
-        return None
-    return types.McpStdioServer(
+    server_cls = getattr(types, "McpStdioServer", None) if types else None
+    if server_cls is None:
+        class DummyMcpStdioServer:
+            def __init__(self, name: str, command: str, args: list[str], env: dict[str, str]):
+                self.name = name
+                self.command = command
+                self.args = args
+                self.env = env
+        server_cls = DummyMcpStdioServer
+
+    return server_cls(
         name="github",
         command="docker",
         args=[
