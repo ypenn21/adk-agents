@@ -495,6 +495,19 @@ You should see a JSON response with the list of tools specified in `tools.yaml`.
 {
 }
 ```
+
+Add it as mcp config to your favorite Agent harness. 
+
+```json
+    "mcp-tool-box-db": {
+       "command": "npx",
+       "args": [
+         "mcp-remote",
+         "http://127.0.0.1:5000/mcp"
+       ],
+       "transportType": "streamable-http"
+     }
+```
 ---------
 
 ### 4. Run Python Django:
