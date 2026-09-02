@@ -9,7 +9,7 @@ IT Support triggers the Bug Assistant Agent
 
 **The agent:**
 
-Queries Gemini 2.5 Flash for AI insights
+Queries Gemini 3.7 Flash for AI insights
 
 Connects to MCP Toolbox, which in turn interacts with the Bug Ticket Database
 
