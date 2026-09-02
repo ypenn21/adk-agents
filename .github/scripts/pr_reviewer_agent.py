@@ -11,7 +11,12 @@ import asyncio
 from enum import Enum
 from typing import Optional, Any
 from pydantic import BaseModel, Field, model_validator
-from google.antigravity import Agent, LocalAgentConfig, types
+try:
+    from google.antigravity import Agent, LocalAgentConfig, types
+except ImportError:
+    Agent = None
+    LocalAgentConfig = None
+    types = None
 
 from helper import (
     POSITIVE_APPROVAL_TEMPLATE,
