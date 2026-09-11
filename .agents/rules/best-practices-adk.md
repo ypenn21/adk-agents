@@ -14,7 +14,7 @@ trigger: always_on
 
 - **Agent-Executor Pattern:** Utilize a `ServiceManager` (typically in `app/agent.py`) to lazily load and manage singletons for the Agent and Services (e.g., `SessionService`, `MemoryService`).
 - **Specific Built-in Tool Imports:** When using ADK built-in tools, import the _tool instance_ directly, not the module (e.g., use `from google.adk.tools.load_web_page import load_web_page`, and pass it as `tools=[load_web_page]`).
-- **Model Selection:** Never change the model unless explicitly asked. If creating a brand new agent, default to `gemini-3-flash-preview` or `gemini-3-pro-preview`.
+- **Model Selection:** Never change the model unless explicitly asked. If creating anything new, default to `gemini-3.8-flash` or `gemini-3.7-flash`. Never use gemini-2.5-flash, or any model below Gemini 3.5.
 - **Separation of Concerns:**
   - Place agent configuration in `app/agent.py`.
   - Place system prompts and pure business logic functions in `app/strategies.py`.

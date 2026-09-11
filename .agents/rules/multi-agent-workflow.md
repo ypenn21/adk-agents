@@ -16,6 +16,7 @@ The Orchestrator coordinates the lifecycle, validates handovers, runs verificati
 > 3. **ALWAYS set `TypeName: "self"`** when calling `invoke_subagent` (e.g., for Technical Architect and Software Engineer). Using `TypeName: "self"` ensures the subagent inherits the full parent agent capabilities—including write tools (`replace_file_content`, `write_to_file`) and command execution tools (`run_command`)—enabling subagents to create files, write code, and run test suites directly without delegating edits back to the parent.
 > 4. Set the `Role` parameter to the descriptive role name (e.g. `Role: "Technical Architect"` or `Role: "Software Engineer"`).
 > 5. Inject the entire verbatim contents of the custom agent's markdown file into the `Prompt` argument, appended with the user's specific task instructions.
+> 6. When creating or editing files, default to `gemini-3.8-flash` or `gemini-3.7-flash`. Never use gemini-2.5-flash, or any model below Gemini 3.5.
 
 
 
