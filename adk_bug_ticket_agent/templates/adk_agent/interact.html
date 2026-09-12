@@ -1,348 +1,41 @@
 <!DOCTYPE html>
-<html>
+<html lang="en" data-theme="light">
 <head>
-    <title>Soft Micro ADK Agent Interaction</title>
-    <style>
-        body { font-family: sans-serif; margin: 20px; background-color: #f4f4f4; color: #333; }
-        h1 { color: #333; }
-        #chatbox { width: 100%; max-width: 600px; margin: 0 auto; background-color: #fff; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); padding: 20px; }
-        .message { margin-bottom: 15px; padding: 10px; border-radius: 5px; }
-        .user-message { background-color: #e1f5fe; text-align: right; }
-        .agent-message { background-color: #f0f0f0; }
-        .input-area {
-            display: flex;
-            align-items: center;
-            margin-top: 20px;
-        }
-        #messageInput { flex-grow: 1; padding: 10px; border: 1px solid #ccc; border-radius: 4px; }
-        button { padding: 10px 15px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; margin-left: 15px; }
-        button:hover { background-color: #0056b3; }
-        #conversation { max-height: 400px; overflow-y: auto; margin-bottom: 20px; border: 1px solid #eee; padding: 10px; }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IT Bug Assistant - AI Support</title>
 
-        #pendingIndicator {
-            display: none; /* Hidden by default */
-            margin: 10px 0;
-            text-align: center;
-            color: #555;
-            font-size: 0.9em;
-        }
-
-        .spinner {
-            display: inline-block;
-            width: 16px;
-            height: 16px;
-            border: 2px solid rgba(0,0,0,.1);
-            border-radius: 50%;
-            border-top-color: #007bff;
-            animation: spin 1s ease-infinite;
-            margin-right: 8px;
-            vertical-align: middle;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-
-        /* New table styles */
-        .agent-message table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 10px;
-            font-size: 0.9em;
-            table-layout: auto; /* Allows table to adjust to content */
-        }
-        .agent-message th, .agent-message td {
-            border: 1px solid #ccc; /* Consistent border for table elements */
-            padding: 8px;
-            text-align: left;
-            word-wrap: break-word; /* Ensures long text wraps within cells */
-        }
-        .agent-message th {
-            background-color: #e0e0e0; /* Distinct background for headers */
-            font-weight: bold;
-            color: #333;
-        }
-        .agent-message tr:nth-child(even) td { /* Zebra striping for data rows */
-            background-color: #f9f9f9;
-        }
-        .agent-message tr:hover td { /* Hover effect for data rows */
-            background-color: #f1f1f1;
-        }
-    </style>
+  <!-- Prevent dark mode flicker / FOUC -->
+  <script>
+  </script>
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <!-- jQuery 3.7.1 CDN -->
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <!-- Marked.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
-    <div id="chatbox">
-        <h1>Chat with Soft Micro Bug Agent</h1>
-        <div id="conversation">
-            <div class="message agent-message">Hello! How can I help you today?</div>
+
+  <!-- App Header -->
+  <header>
+    <div class="header-brand">
+      <div class="brand-icon">
+        <!-- Robot Icon -->
+        <svg fill="currentColor" viewBox="0 0 24 24">
+          <path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h2a6 6 0 0 1 6 6v1h1a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2h-1v1a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4v-1H3a2 2 0 0 1-2-2v-2a2 2 0 0 1 2-2h1v-1a6 6 0 0 1 6-6h2V5.73A2 2 0 0 1 12 2zm-3 9a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-7 8a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-1H8v1z"/>
+        </svg>
+      </div>
+      <div class="brand-text">
+        <h1>IT Bug Assistant</h1>
+        <div class="status-pill">
+          <span class="status-dot"></span>
+          <span>Online</span>
         </div>
-        <div id="pendingIndicator">
-            <span class="spinner"></span>Waiting for response...
-        </div>
-        <div class="input-area">
-            <input type="text" id="messageInput" placeholder="Type your message...">
-            <button id="sendButton">Send</button>
-        </div>
+      </div>
     </div>
 
-    <script>
-        let sessionId = sessionStorage.getItem('adk_chat_session_id');
-        if (!sessionId) {
-            sessionId = self.crypto.randomUUID();
-            sessionStorage.setItem('adk_chat_session_id', sessionId);
-        }
-
-        async function sendMessage() {
-            const input = document.getElementById('messageInput');
-            const message = input.value.trim();
-            if (!message) return;
-
-            const conversation = document.getElementById('conversation');
-
-            const userMessageDiv = document.createElement('div');
-            userMessageDiv.classList.add('message', 'user-message');
-            const userPre = document.createElement('pre');
-            userPre.style.whiteSpace = 'pre-wrap';
-            userPre.style.fontFamily = 'inherit';
-            userPre.textContent = message;
-            userMessageDiv.appendChild(userPre);
-            conversation.appendChild(userMessageDiv);
-            conversation.scrollTop = conversation.scrollHeight; // Scroll to new message
-
-            input.value = '';
-            input.disabled = true;
-            document.getElementById('sendButton').disabled = true;
-            document.getElementById('pendingIndicator').style.display = 'block';
-
-            const payload = {
-                appName: "AgentBugAssistant",
-                userId: "user_123", // Using a static user ID for this session
-                sessionId: sessionId,
-                newMessage: {
-                    role: "user",
-                    parts: [{ text: message }]
-                },
-                streaming: false
-            };
-
-            try {
-                const response = await fetch('{% url "interact_with_agent" %}', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(payload)
-                });
-
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
-                }
-
-                const data = await response.json();
-                appendAgentMessage(data.content.parts[0].text, 'agent-message');
-            } catch (error) {
-                console.error('Error:', error);
-                appendAgentMessage(`Error: ${error.message}`, 'agent-message');
-            } finally {
-                document.getElementById('pendingIndicator').style.display = 'none';
-                input.disabled = false;
-                document.getElementById('sendButton').disabled = false;
-                input.focus();
-                conversation.scrollTop = conversation.scrollHeight;
-            }
-        }
-
-        function parseMarkdownTable(markdown) {
-            const lines = markdown.trim().split('\n').map(line => line.trim());
-            if (lines.length < 2) return null;
-
-            const table = document.createElement('table');
-            const thead = document.createElement('thead');
-            const tbody = document.createElement('tbody');
-            table.appendChild(thead);
-            table.appendChild(tbody);
-
-            // Helper function to robustly extract cells from a line
-            function getCells(lineString) {
-                // This function assumes lineString is already trimmed.
-                // It also expects the line to start and end with '|', 
-                // which is ensured by the collection logic in appendAgentMessage.
-                if (!lineString.startsWith('|') || !lineString.endsWith('|')) {
-                    // This check is a safeguard; appendAgentMessage should pre-filter lines.
-                    console.warn("getCells received a line not starting/ending with '|':", lineString);
-                    return null; // Or handle error as appropriate for your logic
-                }
-                // Remove the leading and trailing '|' then split by '|'
-                const content = lineString.slice(1, lineString.length - 1);
-                return content.split('|').map(cell => cell.trim());
-            }
-
-            const headerLine = lines[0];
-            const headers = getCells(headerLine);
-            if (!headers) {
-                console.warn("Failed to parse headers from:", headerLine);
-                return null;
-            }
-
-            const trHead = document.createElement('tr');
-            headers.forEach(headerText => {
-                const th = document.createElement('th');
-                th.textContent = headerText;
-                trHead.appendChild(th);
-            });
-            thead.appendChild(trHead);
-
-            const separatorLine = lines[1];
-            const separatorCells = getCells(separatorLine);
-            if (!separatorCells || separatorCells.length !== headers.length) {
-                console.warn("Failed to parse or validate separator cells from:", separatorLine, "Expected", headers.length, "got", separatorCells ? separatorCells.length : 'null');
-                return null;
-            }
-
-            for (const cell of separatorCells) {
-                if (!/^:?-+:?$/.test(cell)) { 
-                    console.warn('Invalid separator cell format:', cell);
-                    return null; 
-                }
-            }
-
-            for (let i = 2; i < lines.length; i++) {
-                const dataLine = lines[i];
-                // Skip any genuinely empty lines that might have been collected if the table had blank lines
-                if (dataLine === "") continue; 
-                
-                const cells = getCells(dataLine);
-                if (!cells) {
-                    console.warn("Skipping malformed data line (getCells failed):", dataLine);
-                    continue; // Skip this row if cell parsing fails
-                }
-
-                const trBody = document.createElement('tr');
-                for (let k = 0; k < headers.length; k++) {
-                    const td = document.createElement('td');
-                    td.textContent = cells[k] || ''; // Use empty string if cell is undefined (e.g. fewer cells than headers)
-                    trBody.appendChild(td);
-                }
-                tbody.appendChild(trBody);
-            }
-            
-            // A valid table must have headers. 
-            // It can be an empty table (header + separator only) or have data rows.
-            if (headers.length > 0) {
-                if (tbody.hasChildNodes() || lines.length === 2) { 
-                    return table;
-                }
-            }
-            console.warn("Table parsing completed without returning a valid table structure for markdown:", markdown);
-            return null;
-        }
-
-        function appendAgentMessage(text, className) {
-            const conversation = document.getElementById('conversation');
-            const messageDiv = document.createElement('div');
-            messageDiv.classList.add('message', className);
-
-            const lines = text.split('\n');
-            let currentTextBuffer = [];
-            let i = 0;
-            let containsTable = false; // Flag to indicate if this message contains a table
-
-            function flushTextBuffer() {
-                if (currentTextBuffer.length > 0) {
-                    const bufferedText = currentTextBuffer.join('\n');
-                    if (bufferedText.trim().length > 0) {
-                        const pre = document.createElement('pre');
-                        pre.style.whiteSpace = 'pre-wrap';
-                        pre.style.fontFamily = 'inherit';
-                        pre.textContent = bufferedText;
-                        messageDiv.appendChild(pre);
-                    }
-                    currentTextBuffer = [];
-                }
-            }
-
-            while (i < lines.length) {
-                const currentLineRaw = lines[i];
-                const currentLineTrimmed = currentLineRaw.trim();
-                let successfullyProcessedAsTable = false;
-
-                // Check for potential table start: header line + separator line
-                if (currentLineTrimmed.startsWith('|') && (currentLineTrimmed.endsWith('|') || currentLineTrimmed.endsWith('| |'))) {
-                    if (i + 1 < lines.length) {
-                        const nextLineRaw = lines[i+1];
-                        const nextLineTrimmed = nextLineRaw.trim();
-                        if (nextLineTrimmed.startsWith('|') && 
-                            (nextLineTrimmed.endsWith('|') || nextLineTrimmed.endsWith('| |')) && 
-                            nextLineTrimmed.includes('-')) {
-                            
-                            flushTextBuffer(); // Render any preceding text
-
-                            let tableLinesCollector = [currentLineRaw, nextLineRaw];
-                            let tableEndIndex = i + 1;
-
-                            // Collect all subsequent lines that appear to be part of this table
-                            for (let j = i + 2; j < lines.length; j++) {
-                                const rowLineRaw = lines[j];
-                                const rowLineTrimmed = rowLineRaw.trim();
-                                // Ensure collected lines for the table also conform to the basic pipe structure
-                                if (rowLineTrimmed.startsWith('|') && (rowLineTrimmed.endsWith('|') || rowLineTrimmed.endsWith('| |'))) {
-                                    tableLinesCollector.push(rowLineRaw);
-                                    tableEndIndex = j;
-                                } else if (rowLineTrimmed === "") { // Allow empty lines within a table block
-                                    tableLinesCollector.push(rowLineRaw); 
-                                    tableEndIndex = j;
-                                } else {
-                                    break; // Line does not look like a table row, so table ends here.
-                                }
-                            }
-
-                            const tableMarkdown = tableLinesCollector.join('\n');
-                            const tableElement = parseMarkdownTable(tableMarkdown);
-
-                            if (tableElement) {
-                                messageDiv.appendChild(tableElement);
-                                containsTable = true; // Set flag if a table is added
-                                i = tableEndIndex + 1; // Move loop index past the parsed table
-                                successfullyProcessedAsTable = true;
-                            } else {
-                                // Table parsing failed. The currentLineRaw will be added to the buffer below.
-                                // successfullyProcessedAsTable remains false, so normal text processing occurs for this line.
-                            }
-                        }
-                    }
-                }
-
-                if (!successfullyProcessedAsTable) {
-                    currentTextBuffer.push(currentLineRaw);
-                    i++;
-                }
-            }
-
-            flushTextBuffer(); // Render any remaining text in the buffer
-            
-            if (messageDiv.hasChildNodes()) {
-                conversation.appendChild(messageDiv);
-                if (containsTable) {
-                    // Increase the max-height of the conversation div
-                    conversation.style.maxHeight = 'none'; 
-                    const chatbox = document.getElementById('chatbox');
-                    if (chatbox) {
-                        chatbox.style.maxWidth = '90%';
-                    }
-                    conversation.style.width = '100%';
-                    conversation.style.overflowX = 'auto';
-                }
-            }
-        }
-
-        document.getElementById('messageInput').addEventListener('keypress', function(event) {
-            if (event.key === 'Enter') {
-                sendMessage();
-            }
-        });
-
-        document.getElementById('sendButton').addEventListener('click', sendMessage);
-    </script>
 </body>
 </html>
