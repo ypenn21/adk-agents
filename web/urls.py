@@ -16,8 +16,10 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+from adk_bug_ticket_agent import views as agent_views
 
 urlpatterns = [
     path("admin/", admin.site.urls),
-    path("agent/", include("adk_bug_ticket_agent.urls"))
+    path("", agent_views.interact_with_agent, name="root"),
+    path("agent/", include("adk_bug_ticket_agent.urls")),
 ]
