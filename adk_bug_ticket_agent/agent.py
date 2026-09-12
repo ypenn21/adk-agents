@@ -95,8 +95,9 @@ class ServiceManager:
     def _init_agent(self):
         """Initializes the root agent."""
         print("Initializing Root Agent...")
+        MODEL_NAME = os.getenv("MODEL_NAME") 
         return Agent(
-            model="gemini-2.5-flash",
+            model=MODEL_NAME,
             name="it_bug_assistant_agent",
             description="An agent to help users with bug tickets, including searching, creating, and updating them.",
             instruction=system_prompt.agent_instruction,

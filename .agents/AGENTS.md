@@ -44,7 +44,7 @@ To get the project up and running locally, follow these steps:
     *   `/web_ui`: The main Django project directory containing global settings (`settings.py`) and root URL configuration (`urls.py`).
     *   `/adk_bug_ticket_agent`: A self-contained Django app that holds the primary application logic.
         *   `views.py`: Contains the request handling logic, including the main `interact_with_agent` endpoint.
-        *   `agent.py`: Defines the ADK agent, its model (`gemini-2.5-flash`), and its tools.
+        *   `agent.py`: Defines the ADK agent, its model (`gemini-3.8-flash`), and its tools.
         *   `tools/`: Defines the tools available to the agent (e.g., database interactions).
         *   `templates/`: Contains the HTML template for the web UI.
     *   `/sql`: Contains SQL scripts for database schema setup and data insertion.
