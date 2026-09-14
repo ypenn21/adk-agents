@@ -21,6 +21,12 @@ env:
   GOOGLE_GENAI_USE_VERTEXAI: 'true'
   GOOGLE_CLOUD_LOCATION: ${{ secrets.GOOGLE_CLOUD_LOCATION || 'us-central1' }}
   LLM_Model: ${{ vars.LLM_MODEL || vars.LLM_Model || secrets.LLM_MODEL || secrets.LLM_Model || 'gemini-3.7-flash' }}
+  MAX_TOTAL_TOKENS: ${{ vars.MAX_TOTAL_TOKENS || secrets.MAX_TOTAL_TOKENS || '120000' }}
+  MAX_INPUT_TOKENS: ${{ vars.MAX_INPUT_TOKENS || secrets.MAX_INPUT_TOKENS || '100000' }}
+  MAX_OUTPUT_TOKENS: ${{ vars.MAX_OUTPUT_TOKENS || secrets.MAX_OUTPUT_TOKENS || '25000' }}
+  MAX_MODEL_CALLS: ${{ vars.MAX_MODEL_CALLS || secrets.MAX_MODEL_CALLS || '10' }}
+  MAX_TOOL_CALLS: ${{ vars.MAX_TOOL_CALLS || secrets.MAX_TOOL_CALLS || '25' }}
+  MAX_SPEND_USD: ${{ vars.MAX_SPEND_USD || secrets.MAX_SPEND_USD || '' }}
 
 jobs:
   scan-and-evaluate:
@@ -133,6 +139,12 @@ jobs:
           GITHUB_PERSONAL_ACCESS_TOKEN: ${{ steps.app-token.outputs.token || secrets.G_PAT_TOKEN || secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
+          MAX_TOTAL_TOKENS: ${{ env.MAX_TOTAL_TOKENS }}
+          MAX_INPUT_TOKENS: ${{ env.MAX_INPUT_TOKENS }}
+          MAX_OUTPUT_TOKENS: ${{ env.MAX_OUTPUT_TOKENS }}
+          MAX_MODEL_CALLS: ${{ env.MAX_MODEL_CALLS }}
+          MAX_TOOL_CALLS: ${{ env.MAX_TOOL_CALLS }}
+          MAX_SPEND_USD: ${{ env.MAX_SPEND_USD }}
         run: |
           python .github/scripts/pr_reviewer_agent.py
 
