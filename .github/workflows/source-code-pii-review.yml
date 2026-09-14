@@ -21,11 +21,11 @@ env:
   GOOGLE_GENAI_USE_VERTEXAI: 'true'
   GOOGLE_CLOUD_LOCATION: ${{ secrets.GOOGLE_CLOUD_LOCATION || 'us-central1' }}
   LLM_Model: ${{ vars.LLM_MODEL || vars.LLM_Model || secrets.LLM_MODEL || secrets.LLM_Model || 'gemini-3.7-flash' }}
-  MAX_TOTAL_TOKENS: ${{ vars.MAX_TOTAL_TOKENS || secrets.MAX_TOTAL_TOKENS || '120000' }}
-  MAX_INPUT_TOKENS: ${{ vars.MAX_INPUT_TOKENS || secrets.MAX_INPUT_TOKENS || '100000' }}
-  MAX_OUTPUT_TOKENS: ${{ vars.MAX_OUTPUT_TOKENS || secrets.MAX_OUTPUT_TOKENS || '25000' }}
-  MAX_MODEL_CALLS: ${{ vars.MAX_MODEL_CALLS || secrets.MAX_MODEL_CALLS || '10' }}
-  MAX_TOOL_CALLS: ${{ vars.MAX_TOOL_CALLS || secrets.MAX_TOOL_CALLS || '25' }}
+  MAX_TOTAL_TOKENS: ${{ vars.MAX_TOTAL_TOKENS || secrets.MAX_TOTAL_TOKENS || '1100000' }}
+  MAX_INPUT_TOKENS: ${{ vars.MAX_INPUT_TOKENS || secrets.MAX_INPUT_TOKENS || '800000' }}
+  MAX_OUTPUT_TOKENS: ${{ vars.MAX_OUTPUT_TOKENS || secrets.MAX_OUTPUT_TOKENS || '200000' }}
+  MAX_MODEL_CALLS: ${{ vars.MAX_MODEL_CALLS || secrets.MAX_MODEL_CALLS || '100' }}
+  MAX_TOOL_CALLS: ${{ vars.MAX_TOOL_CALLS || secrets.MAX_TOOL_CALLS || '50' }}
   MAX_SPEND_USD: ${{ vars.MAX_SPEND_USD || secrets.MAX_SPEND_USD || '' }}
 
 jobs:
@@ -190,7 +190,7 @@ jobs:
           print(f'| :--- | :--- |')
           print(f'| **Model** | \`{model}\` |')
           print(f'| **Execution Status** | {halted} (\`{stop}\`) |')
-          print(f'| **Prompt Tokens (Uncached)** | {prompt - cached:,} |')
+          print(f'| **Prompt Tokens (Uncached)** | {max(0, prompt - cached):,} |')
           print(f'| **Cached Prompt Tokens** | {cached:,} |')
           print(f'| **Candidate Generation Tokens** | {candidate:,} |')
           print(f'| **Reasoning / Thought Tokens** | {thought:,} |')

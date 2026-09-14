@@ -538,11 +538,11 @@ def test_resolve_env_config_budget_defaults_and_env(monkeypatch):
         monkeypatch.delenv(var, raising=False)
 
     cfg_default = helper.resolve_env_config()
-    assert cfg_default["max_total_tokens"] == 120_000
-    assert cfg_default["max_input_tokens"] == 100_000
-    assert cfg_default["max_output_tokens"] == 25_000
-    assert cfg_default["max_model_calls"] == 10
-    assert cfg_default["max_tool_calls"] == 25
+    assert cfg_default["max_total_tokens"] == 1_100_000
+    assert cfg_default["max_input_tokens"] == 800_000
+    assert cfg_default["max_output_tokens"] == 200_000
+    assert cfg_default["max_model_calls"] == 100
+    assert cfg_default["max_tool_calls"] == 50
     assert cfg_default["max_spend_usd"] is None
 
     # Set env vars
@@ -574,7 +574,7 @@ def test_resolve_env_config_max_spend_usd_derived_ceiling(monkeypatch):
     monkeypatch.setenv("MAX_SPEND_USD", "0.375")
 
     # (0.375 / 3.75) * 1,000,000 = 100,000 tokens
-    # Default max_total_tokens is 120_000, capped to min(120_000, 100_000) = 100_000
+    # Default max_total_tokens is 1_100_000, capped to min(1_100_000, 100_000) = 100_000
     cfg = helper.resolve_env_config()
     assert cfg["max_total_tokens"] == 100_000
     assert cfg["max_spend_usd"] == 0.375

@@ -325,7 +325,7 @@ async def run_pr_review(
             print("📊 TOKEN USAGE & ESTIMATED SPEND", flush=True)
             print("=" * 60, flush=True)
             print(f"Model: {cfg['model']}")
-            print(f"Prompt Tokens (Uncached): {usage_stats['prompt_tokens'] - usage_stats['cached_tokens']:,}")
+            print(f"Prompt Tokens (Uncached): {max(0, usage_stats['prompt_tokens'] - usage_stats['cached_tokens']):,}")
             print(f"Cached Tokens: {usage_stats['cached_tokens']:,}")
             print(f"Candidate Tokens: {usage_stats['candidate_tokens']:,}")
             print(f"Reasoning / Thought Tokens: {usage_stats['thought_tokens']:,}")
