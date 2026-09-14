@@ -37,3 +37,9 @@ gha-creds-*
 
 #ignore mcp toolbox cmd binary
 mcp-servers/mcp-toolbox/toolbox
+
+# OS & SQLite files
+.DS_Store
+*.sqlite3
+db.sqlite3
+
