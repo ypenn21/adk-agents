@@ -128,11 +128,11 @@ def resolve_env_config(
                 return None
         return None
 
-    resolved_total_tokens = _parse_int_env(max_total_tokens, "MAX_TOTAL_TOKENS", 120_000)
-    resolved_input_tokens = _parse_int_env(max_input_tokens, "MAX_INPUT_TOKENS", 100_000)
-    resolved_output_tokens = _parse_int_env(max_output_tokens, "MAX_OUTPUT_TOKENS", 25_000)
-    resolved_model_calls = _parse_int_env(max_model_calls, "MAX_MODEL_CALLS", 10)
-    resolved_tool_calls = _parse_int_env(max_tool_calls, "MAX_TOOL_CALLS", 25)
+    resolved_total_tokens = _parse_int_env(max_total_tokens, "MAX_TOTAL_TOKENS", 1_100_000)
+    resolved_input_tokens = _parse_int_env(max_input_tokens, "MAX_INPUT_TOKENS", 800_000)
+    resolved_output_tokens = _parse_int_env(max_output_tokens, "MAX_OUTPUT_TOKENS", 200_000)
+    resolved_model_calls = _parse_int_env(max_model_calls, "MAX_MODEL_CALLS", 100)
+    resolved_tool_calls = _parse_int_env(max_tool_calls, "MAX_TOOL_CALLS", 50)
     resolved_spend_usd = _parse_float_env(max_spend_usd, "MAX_SPEND_USD")
 
     if resolved_spend_usd is not None and resolved_spend_usd > 0:
