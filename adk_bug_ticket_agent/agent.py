@@ -41,8 +41,8 @@ def normalize_db_url(url: str) -> str:
     Returns:
         Normalized database connection URL starting with postgresql+asyncpg:// if PostgreSQL.
     """
-    if url.startswith("postgresql://"):
-        return url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    if url.startswith("postgresql"):
+        return url.replace("postgresql", "postgresql+asyncpg", 1)
     if url.startswith("postgres://"):
         return url.replace("postgres://", "postgresql+asyncpg://", 1)
     return url

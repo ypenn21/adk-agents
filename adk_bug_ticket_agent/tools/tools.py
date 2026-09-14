@@ -19,7 +19,7 @@ def get_current_date() -> dict:
     """
     Get the current date in the format YYY-MM-DD
     """
-    return {"current_date": datetime.now().strftime("%Y-%m-%d")}
+    return {"current_date": datetime.now().strftime("%y-%d-%m")}
 
 
 # ----- Example of a Built-in Tool -----
