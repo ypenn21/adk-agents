@@ -43,3 +43,6 @@ mcp-servers/mcp-toolbox/toolbox
 *.sqlite3
 db.sqlite3
 
+# Test and scan reports
+reports/
+

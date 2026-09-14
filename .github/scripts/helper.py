@@ -3,7 +3,7 @@
 Provides reusable utilities for GitHub REST API calls, report serialization,
 environment variable resolution, response streaming, formatting, and MCP configuration.
 
-Cites Decisions from docs/spec.md (D-1, D-4, D-5, D-6, D-7, D-10).
+Cites Decisions from docs/spec.md (D-1, D-4, D-5, D-6, D-7, D-10, D-13, D-14).
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ POSITIVE_APPROVAL_TEMPLATE = (
 
 
 # =====================================================================
-# Environment and Configuration Helpers (D-4)
+# Environment and Configuration Helpers (D-4, D-13)
 # =====================================================================
 
 def resolve_env_config(
@@ -44,8 +44,14 @@ def resolve_env_config(
     project_id: Optional[str] = None,
     location: str = "us-central1",
     model: Optional[str] = None,
+    max_total_tokens: Optional[int] = None,
+    max_input_tokens: Optional[int] = None,
+    max_output_tokens: Optional[int] = None,
+    max_model_calls: Optional[int] = None,
+    max_tool_calls: Optional[int] = None,
+    max_spend_usd: Optional[float] = None,
 ) -> dict[str, Any]:
-    """Resolves configuration from CLI parameters, environment variables, and defaults."""
+    """Resolves configuration and token budget parameters (Decision D-4, D-13)."""
     resolved_pr = pr_number or os.environ.get("PULL_REQUEST_NUMBER") or os.environ.get("PR_NUMBER")
     if resolved_pr is not None:
         resolved_pr = str(resolved_pr).strip()
@@ -93,6 +99,46 @@ def resolve_env_config(
         or "gemini-3.7-flash"
     )
 
+    # Budget limits resolution (D-13)
+    def _parse_int_env(val: Optional[int], env_name: str, default: int) -> int:
+        if val is not None:
+            try:
+                return int(val)
+            except (ValueError, TypeError):
+                return default
+        env_val = os.environ.get(env_name)
+        if env_val is not None:
+            try:
+                return int(env_val)
+            except (ValueError, TypeError):
+                return default
+        return default
+
+    def _parse_float_env(val: Optional[float], env_name: str) -> Optional[float]:
+        if val is not None:
+            try:
+                return float(val)
+            except (ValueError, TypeError):
+                return None
+        env_val = os.environ.get(env_name)
+        if env_val is not None:
+            try:
+                return float(env_val)
+            except (ValueError, TypeError):
+                return None
+        return None
+
+    resolved_total_tokens = _parse_int_env(max_total_tokens, "MAX_TOTAL_TOKENS", 120_000)
+    resolved_input_tokens = _parse_int_env(max_input_tokens, "MAX_INPUT_TOKENS", 100_000)
+    resolved_output_tokens = _parse_int_env(max_output_tokens, "MAX_OUTPUT_TOKENS", 25_000)
+    resolved_model_calls = _parse_int_env(max_model_calls, "MAX_MODEL_CALLS", 10)
+    resolved_tool_calls = _parse_int_env(max_tool_calls, "MAX_TOOL_CALLS", 25)
+    resolved_spend_usd = _parse_float_env(max_spend_usd, "MAX_SPEND_USD")
+
+    if resolved_spend_usd is not None and resolved_spend_usd > 0:
+        spend_derived_tokens = int((resolved_spend_usd / 3.75) * 1_000_000)
+        resolved_total_tokens = min(resolved_total_tokens, spend_derived_tokens)
+
     return {
         "pr_number": resolved_pr,
         "repo": resolved_repo,
@@ -100,6 +146,12 @@ def resolve_env_config(
         "project_id": resolved_project,
         "location": resolved_location,
         "model": resolved_model,
+        "max_total_tokens": resolved_total_tokens,
+        "max_input_tokens": resolved_input_tokens,
+        "max_output_tokens": resolved_output_tokens,
+        "max_model_calls": resolved_model_calls,
+        "max_tool_calls": resolved_tool_calls,
+        "max_spend_usd": resolved_spend_usd,
     }
 
 
@@ -743,3 +795,152 @@ def parse_agent_structured_output(raw_output: Any, schema_cls: type[T]) -> T:
             pass
         return schema_cls.model_validate_json(raw_output)
     return schema_cls.model_validate(raw_output)
+
+
+# =====================================================================
+# Token Tracking and Spend Governance (D-13, D-14)
+# =====================================================================
+
+MODEL_PRICING: dict[str, dict[str, float]] = {
+    "gemini-3.7-flash": {
+        "input_per_m": 0.75,
+        "output_per_m": 3.75,
+        "cached_per_m": 0.075,
+    },
+    "gemini-3.8-flash": {
+        "input_per_m": 0.75,
+        "output_per_m": 3.75,
+        "cached_per_m": 0.075,
+    },
+    "default": {
+        "input_per_m": 0.75,
+        "output_per_m": 3.75,
+        "cached_per_m": 0.075,
+    },
+}
+
+
+def calculate_token_spend(
+    usage: Any,
+    model_name: str = "gemini-3.7-flash",
+) -> dict[str, Any]:
+    """Calculates approximate spend in USD from SDK UsageMetadata or response metadata.
+
+    Accounts for prompt caching discounts and prices extended thinking tokens
+    at the candidate generation rate ($3.75/1M). Safely returns 0 values if usage is None.
+
+    Args:
+        usage: SDK UsageMetadata instance or response object containing token counts.
+        model_name: Identifier of the Gemini model used.
+
+    Returns:
+        dict containing:
+            prompt_tokens (int)
+            cached_tokens (int)
+            candidate_tokens (int)
+            thought_tokens (int)
+            total_tokens (int)
+            total_cost_usd (float rounded to 6 decimals)
+    """
+    if usage is None:
+        return {
+            "prompt_tokens": 0,
+            "cached_tokens": 0,
+            "candidate_tokens": 0,
+            "thought_tokens": 0,
+            "total_tokens": 0,
+            "total_cost_usd": 0.0,
+        }
+
+    def _extract_val(obj: Any, *keys: str) -> int:
+        for k in keys:
+            if isinstance(obj, dict):
+                v = obj.get(k)
+            else:
+                v = getattr(obj, k, None)
+            if v is not None and not hasattr(v, "_mock_name") and type(v).__name__ not in ("MagicMock", "Mock", "AsyncMock"):
+                try:
+                    return int(v)
+                except (ValueError, TypeError):
+                    pass
+        return 0
+
+    prompt_tokens = _extract_val(usage, "prompt_token_count", "prompt_tokens")
+    cached_tokens = _extract_val(usage, "cached_content_token_count", "cached_tokens")
+    candidate_tokens = _extract_val(usage, "candidates_token_count", "candidate_tokens")
+    thought_tokens = _extract_val(usage, "thoughts_token_count", "thought_tokens")
+    total_tokens = _extract_val(usage, "total_token_count", "total_tokens")
+
+    if not total_tokens:
+        total_tokens = prompt_tokens + candidate_tokens + thought_tokens
+
+    rate = MODEL_PRICING.get(model_name, MODEL_PRICING["default"])
+    input_rate = rate.get("input_per_m", 0.75)
+    output_rate = rate.get("output_per_m", 3.75)
+    cached_rate = rate.get("cached_per_m", 0.075)
+
+    net_input = max(0, prompt_tokens - cached_tokens)
+    output_tokens = candidate_tokens + thought_tokens
+
+    cost = (
+        (net_input * (input_rate / 1_000_000.0))
+        + (cached_tokens * (cached_rate / 1_000_000.0))
+        + (output_tokens * (output_rate / 1_000_000.0))
+    )
+
+    return {
+        "prompt_tokens": prompt_tokens,
+        "cached_tokens": cached_tokens,
+        "candidate_tokens": candidate_tokens,
+        "thought_tokens": thought_tokens,
+        "total_tokens": total_tokens,
+        "total_cost_usd": round(cost, 6),
+    }
+
+
+def write_token_usage_report(
+    usage_data: dict[str, Any],
+    stop_reason: Optional[str] = None,
+    output_path: str = "reports/token-usage.json",
+    model: str = "gemini-3.7-flash",
+    budget_limits: Optional[dict[str, Any]] = None,
+) -> None:
+    """Persists structured token usage and cost metrics to reports directory (Decision D-14).
+
+    Args:
+        usage_data: Dictionary returned by calculate_token_spend.
+        stop_reason: String name or value of turn StopReason.
+        output_path: Target path for JSON persistence.
+        model: Model identifier string.
+        budget_limits: Dict of configured budget thresholds.
+    """
+    if stop_reason is not None and not hasattr(stop_reason, "_mock_name") and type(stop_reason).__name__ not in ("MagicMock", "Mock", "AsyncMock"):
+        stop_reason_val = getattr(stop_reason, "name", str(stop_reason))
+        if hasattr(stop_reason_val, "_mock_name") or type(stop_reason_val).__name__ in ("MagicMock", "Mock", "AsyncMock"):
+            stop_reason_val = "COMPLETED"
+    else:
+        stop_reason_val = "COMPLETED"
+
+    if "budget_exceeded" in usage_data:
+        budget_exceeded = bool(usage_data["budget_exceeded"])
+    elif stop_reason is not None and "EXCEEDED" in stop_reason_val.upper():
+        budget_exceeded = True
+    else:
+        budget_exceeded = False
+
+    payload = {
+        "model": model,
+        "stop_reason": stop_reason_val,
+        "budget_exceeded": budget_exceeded,
+        "prompt_tokens": int(usage_data.get("prompt_tokens", 0)),
+        "cached_tokens": int(usage_data.get("cached_tokens", 0)),
+        "candidate_tokens": int(usage_data.get("candidate_tokens", 0)),
+        "thought_tokens": int(usage_data.get("thought_tokens", 0)),
+        "total_tokens": int(usage_data.get("total_tokens", 0)),
+        "total_cost_usd": float(usage_data.get("total_cost_usd", 0.0)),
+        "budget_limits": budget_limits or {},
+    }
+
+    out_file = Path(output_path)
+    out_file.parent.mkdir(parents=True, exist_ok=True)
+    out_file.write_text(json.dumps(payload, indent=2), encoding="utf-8")

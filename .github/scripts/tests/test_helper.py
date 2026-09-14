@@ -455,3 +455,171 @@ def test_ensure_directory(tmp_path):
     target_dir = tmp_path / "sub" / "dir"
     res = helper.ensure_directory(str(target_dir))
     assert os.path.exists(res)
+
+
+# =====================================================================
+# Tests: calculate_token_spend & write_token_usage_report (D-13, D-14)
+# =====================================================================
+
+class MockUsageMetadata:
+    """Mock object mimicking Google Antigravity / Gemini UsageMetadata."""
+    def __init__(
+        self,
+        prompt_token_count: int = 0,
+        cached_content_token_count: int = 0,
+        candidates_token_count: int = 0,
+        thoughts_token_count: int = 0,
+        total_token_count: int = 0,
+    ):
+        self.prompt_token_count = prompt_token_count
+        self.cached_content_token_count = cached_content_token_count
+        self.candidates_token_count = candidates_token_count
+        self.thoughts_token_count = thoughts_token_count
+        self.total_token_count = total_token_count
+
+
+def test_calculate_token_spend_standard_usage():
+    """Decision D-13: Verifies exact token spend calculation with caching and thinking tokens."""
+    # 120k prompt tokens (20k cached, 100k net uncached) -> 100k * 0.75 / 1M = 0.075
+    # 20k cached prompt tokens -> 20k * 0.075 / 1M = 0.0015
+    # 10k candidate + 10k thought tokens -> 20k * 3.75 / 1M = 0.075
+    # Total spend = 0.075 + 0.0015 + 0.075 = 0.1515
+    usage = MockUsageMetadata(
+        prompt_token_count=120_000,
+        cached_content_token_count=20_000,
+        candidates_token_count=10_000,
+        thoughts_token_count=10_000,
+        total_token_count=140_000,
+    )
+
+    stats = helper.calculate_token_spend(usage, "gemini-3.7-flash")
+    assert stats["prompt_tokens"] == 120_000
+    assert stats["cached_tokens"] == 20_000
+    assert stats["candidate_tokens"] == 10_000
+    assert stats["thought_tokens"] == 10_000
+    assert stats["total_tokens"] == 140_000
+    assert stats["total_cost_usd"] == 0.1515
+
+    # Dict input format
+    usage_dict = {
+        "prompt_token_count": 120_000,
+        "cached_content_token_count": 20_000,
+        "candidates_token_count": 10_000,
+        "thoughts_token_count": 10_000,
+        "total_token_count": 140_000,
+    }
+    stats_dict = helper.calculate_token_spend(usage_dict, "gemini-3.8-flash")
+    assert stats_dict["total_cost_usd"] == 0.1515
+
+
+def test_calculate_token_spend_empty_or_none():
+    """Decision D-13: Safely handles None or empty usage objects with 0 costs."""
+    stats_none = helper.calculate_token_spend(None)
+    assert stats_none["total_tokens"] == 0
+    assert stats_none["total_cost_usd"] == 0.0
+    assert stats_none["prompt_tokens"] == 0
+
+    stats_empty = helper.calculate_token_spend({})
+    assert stats_empty["total_tokens"] == 0
+    assert stats_empty["total_cost_usd"] == 0.0
+
+
+def test_resolve_env_config_budget_defaults_and_env(monkeypatch):
+    """Decision D-13: Verifies default budget values and environment variable overrides."""
+    # Clear env vars
+    for var in [
+        "MAX_TOTAL_TOKENS",
+        "MAX_INPUT_TOKENS",
+        "MAX_OUTPUT_TOKENS",
+        "MAX_MODEL_CALLS",
+        "MAX_TOOL_CALLS",
+        "MAX_SPEND_USD",
+    ]:
+        monkeypatch.delenv(var, raising=False)
+
+    cfg_default = helper.resolve_env_config()
+    assert cfg_default["max_total_tokens"] == 120_000
+    assert cfg_default["max_input_tokens"] == 100_000
+    assert cfg_default["max_output_tokens"] == 25_000
+    assert cfg_default["max_model_calls"] == 10
+    assert cfg_default["max_tool_calls"] == 25
+    assert cfg_default["max_spend_usd"] is None
+
+    # Set env vars
+    monkeypatch.setenv("MAX_TOTAL_TOKENS", "50000")
+    monkeypatch.setenv("MAX_INPUT_TOKENS", "40000")
+    monkeypatch.setenv("MAX_OUTPUT_TOKENS", "10000")
+    monkeypatch.setenv("MAX_MODEL_CALLS", "5")
+    monkeypatch.setenv("MAX_TOOL_CALLS", "12")
+    monkeypatch.setenv("MAX_SPEND_USD", "0.50")
+
+    cfg_env = helper.resolve_env_config()
+    assert cfg_env["max_input_tokens"] == 40_000
+    assert cfg_env["max_output_tokens"] == 10_000
+    assert cfg_env["max_model_calls"] == 5
+    assert cfg_env["max_tool_calls"] == 12
+    assert cfg_env["max_spend_usd"] == 0.50
+    # $0.50 / $3.75 * 1M = 133,333 -> min(50_000, 133_333) = 50_000
+    assert cfg_env["max_total_tokens"] == 50_000
+
+    # CLI arg overrides env var
+    cfg_cli = helper.resolve_env_config(max_total_tokens=60_000, max_spend_usd=0.80)
+    assert cfg_cli["max_spend_usd"] == 0.80
+    assert cfg_cli["max_total_tokens"] == 60_000
+
+
+def test_resolve_env_config_max_spend_usd_derived_ceiling(monkeypatch):
+    """Decision D-13: Verifies MAX_SPEND_USD=0.375 caps max_total_tokens to 100_000."""
+    monkeypatch.delenv("MAX_TOTAL_TOKENS", raising=False)
+    monkeypatch.setenv("MAX_SPEND_USD", "0.375")
+
+    # (0.375 / 3.75) * 1,000,000 = 100,000 tokens
+    # Default max_total_tokens is 120_000, capped to min(120_000, 100_000) = 100_000
+    cfg = helper.resolve_env_config()
+    assert cfg["max_total_tokens"] == 100_000
+    assert cfg["max_spend_usd"] == 0.375
+
+
+def test_write_token_usage_report_file_generation(tmp_path):
+    """Decision D-14: Verifies structured schema and file persistence of token usage report."""
+    report_file = tmp_path / "reports" / "token-usage.json"
+    usage_data = {
+        "prompt_tokens": 120_000,
+        "cached_tokens": 20_000,
+        "candidate_tokens": 10_000,
+        "thought_tokens": 10_000,
+        "total_tokens": 140_000,
+        "total_cost_usd": 0.1515,
+    }
+    budget_limits = {
+        "max_total_tokens": 120_000,
+        "max_input_tokens": 100_000,
+        "max_output_tokens": 25_000,
+        "max_model_calls": 10,
+        "max_tool_calls": 25,
+        "max_spend_usd": None,
+    }
+
+    helper.write_token_usage_report(
+        usage_data=usage_data,
+        stop_reason="MAX_TOTAL_TOKENS_EXCEEDED",
+        output_path=str(report_file),
+        model="gemini-3.7-flash",
+        budget_limits=budget_limits,
+    )
+
+    assert report_file.exists()
+    with open(report_file, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    assert data["model"] == "gemini-3.7-flash"
+    assert data["stop_reason"] == "MAX_TOTAL_TOKENS_EXCEEDED"
+    assert data["budget_exceeded"] is True
+    assert data["prompt_tokens"] == 120_000
+    assert data["cached_tokens"] == 20_000
+    assert data["candidate_tokens"] == 10_000
+    assert data["thought_tokens"] == 10_000
+    assert data["total_tokens"] == 140_000
+    assert data["total_cost_usd"] == 0.1515
+    assert data["budget_limits"]["max_total_tokens"] == 120_000
+

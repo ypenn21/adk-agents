@@ -162,6 +162,19 @@ def write_gate_reports(decision: QualityGateDecision, output_dir: str = "reports
 
 def parse_agent_structured_output(raw_output: Any, target_cls: Any) -> Any: ...
 
+def calculate_token_spend(
+    usage: Any,
+    model_name: str = "gemini-3.7-flash",
+) -> Dict[str, Any]: ...
+
+def write_token_usage_report(
+    usage_data: Dict[str, Any],
+    stop_reason: Optional[str] = None,
+    output_path: str = "reports/token-usage.json",
+    model: str = "gemini-3.7-flash",
+    budget_limits: Optional[Dict[str, Any]] = None,
+) -> None: ...
+
 async def run_pr_review(
     pr_number: Optional[str] = None,
     repo: Optional[str] = None,
@@ -221,6 +234,12 @@ async def evaluate_quality_gate(
 - Telemetry logs and all audit artifacts inside `reports/` are uploaded to Google Cloud Storage via `google-github-actions/upload-cloud-storage@v2`.
 - The downstream `build` containerization job executes only on `push` events to `refs/heads/main` after `scan-and-evaluate` succeeds.
 
+### 6. Proactive Token Budget Ceilings & Spend Governance (D-13, D-14)
+- PR Reviewer Agent configures `types.BudgetConfig` (`max_total_tokens`, `max_input_tokens`, `max_output_tokens`, `max_model_calls`, `max_tool_calls`) on `LocalAgentConfig`, guarded by `if types is not None and hasattr(types, 'BudgetConfig')`.
+- Dollar spend ceiling (`MAX_SPEND_USD`) dynamically bounds `max_total_tokens` using conservative upper-bound candidate/thinking pricing ($3.75 / 1M).
+- Cumulative token consumption is tracked from `agent.conversation.total_usage` or `response.usage_metadata` and serialized to `reports/token-usage.json`.
+- If turn halts early due to budget exhaustion (`StopReason` containing `EXCEEDED`), the agent bypasses `response.structured_output()`, writes reports, posts a review comment to the GitHub PR with status `ReviewStatus.COMMENT`, and exits gracefully preserving Quality Gate integrity.
+
 ---
 
 ## Out of scope
@@ -248,6 +267,8 @@ async def evaluate_quality_gate(
 | **D-10** | Core agent functions (`run_pr_review`, `evaluate_quality_gate`, `post_github_pr_review`) are async coroutines. Telemetry directories are created at `reports/telemetry/quality_gate_agent` and `reports/telemetry/pr_reviewer_agent`. Workflow archives `reports/` to Google Cloud Storage. | Async coroutine execution, telemetry directory layout, and GCS archival | Synchronous blocking calls vs async execution; missing telemetry directories vs guaranteed structure |
 | **D-11** | GitHub MCP server integration uses `ghcr.io/github/github-mcp-server:v0.27.0` configured in `.agents/mcp_config.json`. | Containerized MCP server integration | Unpinned container tags vs verified MCP image version |
 | **D-12** | Inline comment line numbers are validated against PR modified line mappings (`fetch_pr_modified_lines`); out-of-hunk findings are omitted from inline comments but kept in summary. | Diff hunk boundary enforcement | GitHub 422 reject for out-of-diff comments vs filtered inline comments |
+| **D-13** | Proactive budget ceiling via `types.BudgetConfig` (`max_total_tokens`, `max_input_tokens`, `max_output_tokens`, `max_model_calls`, `max_tool_calls`), with safe import resilience if `types is None`. Derived token ceiling from `MAX_SPEND_USD` using upper-bound output/thinking pricing ($3.75 / 1M tokens): $\lfloor(\text{MAX\_SPEND\_USD} / 3.75) \times 1{,}000{,}000\rfloor$, capping `max_total_tokens`. Configuration resolved in `resolve_env_config`. | Proactive budget controls and runaway turn protection | Runaway multi-turn tool loops exhausting token quota vs bounded session budget |
+| **D-14** | Usage telemetry and graceful early halt: when `stop_reason` indicates budget exhaustion (`MAX_TOTAL_TOKENS_EXCEEDED`, `MAX_INPUT_TOKENS_EXCEEDED`, `MAX_OUTPUT_TOKENS_EXCEEDED`, `MAX_MODEL_CALLS_EXCEEDED`, `MAX_TOOL_CALLS_EXCEEDED`), bypass `response.structured_output()`, generate fallback `PRReviewReport` with `overall_status = ReviewStatus.COMMENT`, write `reports/pr-review.json`, `reports/pr-review.txt`, write telemetry artifact `reports/token-usage.json` with pricing breakdown (prompt $0.75/1M, cached $0.075/1M, output/thinking $3.75/1M for Gemini 3.7/3.8 Flash), post review comment to GitHub PR, and preserve downstream Quality Gate integrity. | Graceful early termination and token spend observability | Crash on truncated response or silent review abort vs graceful comment and telemetry artifact |
 
 ---
 
@@ -261,4 +282,4 @@ async def evaluate_quality_gate(
 
 - **Status:** `Approved`
 - **Open questions:** Empty
-- **Testability:** Every rule and schema is verified by contract, unit, and acceptance tests in `.github/scripts/tests/`, `.github/tests/`, and `tests/` citing Decision IDs `D-1` through `D-12`.
+- **Testability:** Every rule and schema is verified by contract, unit, and acceptance tests in `.github/scripts/tests/`, `.github/tests/`, and `tests/` citing Decision IDs `D-1` through `D-14`.
