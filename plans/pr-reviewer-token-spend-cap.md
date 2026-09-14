@@ -1,225 +1,463 @@
-# Implementation Plan: Token Tracking and Spend Capping for PR Reviewer Agent
+# Feature Implementation Plan: Token Tracking and Spend Capping for PR Reviewer Agent
 
-## Overview
-Automated Pull Request code review agents powered by large language models (such as Gemini 3.7 Flash or Gemini 3.8 Flash) can encounter unbounded token consumption when analyzing large diffs, executing multi-turn tool loops via Model Context Protocol (MCP), or generating extensive chain-of-thought thinking tokens. Without token observability and budget ceilings, runaway executions risk exhausting API quotas and incurring high infrastructure costs in CI/CD pipelines.
-
-This plan establishes a mechanism within [`.github/scripts/pr_reviewer_agent.py`](file:///Users/yannipeng/git-projects/adk-agents/.github/scripts/pr_reviewer_agent.py) and [`.github/scripts/helper.py`](file:///Users/yannipeng/git-projects/adk-agents/.github/scripts/helper.py) to:
-1. Accurately track input, candidate output, thinking/reasoning, and total tokens across the agent session.
-2. Calculate estimated monetary cost (USD) based on model pricing.
-3. Enforce proactive token and spend caps via `types.BudgetConfig`.
-4. Halt the agent harness automatically when token or call limits are reached, reporting the exact `StopReason` to CI logs and GitHub Actions step summaries.
-
----
-
-## Research & Web Citations
-* > **Ref-1:** [Google Antigravity SDK: Session Budget Limits & Stop Reasons](file:///Users/yannipeng/.gemini/config/plugins/google-antigravity-sdk/skills/google-antigravity-sdk/examples/getting_started/budget_limits.md) — Demonstrates configuring `types.BudgetConfig` (`max_total_tokens`, `max_input_tokens`, `max_output_tokens`, `max_model_calls`, `max_tool_calls`) on `LocalAgentConfig` and handling `response.stop_reason` (such as `MAX_TOTAL_TOKENS_EXCEEDED`).
-* > **Ref-2:** [Google Antigravity SDK: Observability & Token Usage](file:///Users/yannipeng/.gemini/config/plugins/google-antigravity-sdk/skills/google-antigravity-sdk/references/observability.md) — Documents `agent.conversation.total_usage` returning `UsageMetadata` (`prompt_token_count`, `cached_content_token_count`, `candidates_token_count`, `thoughts_token_count`, `total_token_count`).
-* > **Ref-3:** [Google Antigravity SDK: Turn Cancellation](file:///Users/yannipeng/.gemini/config/plugins/google-antigravity-sdk/skills/google-antigravity-sdk/examples/getting_started/cancellation.md) — Outlines programmatic aborts using `await response.cancel()` and handling `AntigravityCancelledError`.
-* > **Ref-4:** [Google Gemini Pricing Specification](https://ai.google.dev/pricing) — Gemini 3.x Flash pricing: $0.75 / 1M prompt tokens, $3.75 / 1M candidate and thinking tokens, with 50% discount on batch/cached processing.
-* > **Ref-5:** [Google Cloud Vertex AI Interactions API Reference](https://cloud.google.com/vertex-ai) — Details server-side budget limits (`max_total_tokens`), returning `status: "incomplete"` when the ceiling is triggered.
+## 📋 Todo Checklist
+- [x] Task 1: Add pricing rate card `MODEL_PRICING` and `calculate_token_spend()` in [`.github/scripts/helper.py`](file:///Users/yannipeng/git-projects/adk-agents/.github/scripts/helper.py)
+- [x] Task 2: Add `write_token_usage_report()` in [`.github/scripts/helper.py`](file:///Users/yannipeng/git-projects/adk-agents/.github/scripts/helper.py)
+- [x] Task 3: Update `resolve_env_config()` in [`.github/scripts/helper.py`](file:///Users/yannipeng/git-projects/adk-agents/.github/scripts/helper.py) with budget limit parsing (`MAX_TOTAL_TOKENS`, `MAX_INPUT_TOKENS`, `MAX_OUTPUT_TOKENS`, `MAX_MODEL_CALLS`, `MAX_TOOL_CALLS`, `MAX_SPEND_USD`)
+- [x] Task 4: Add import resilience for `google.antigravity` in [`.github/scripts/pr_reviewer_agent.py`](file:///Users/yannipeng/git-projects/adk-agents/.github/scripts/pr_reviewer_agent.py) (`try ... except ImportError`)
+- [x] Task 5: Inject `types.BudgetConfig` into `LocalAgentConfig` in [`.github/scripts/pr_reviewer_agent.py`](file:///Users/yannipeng/git-projects/adk-agents/.github/scripts/pr_reviewer_agent.py)
+- [x] Task 6: Implement stop reason inspection and graceful early halt in [`.github/scripts/pr_reviewer_agent.py`](file:///Users/yannipeng/git-projects/adk-agents/.github/scripts/pr_reviewer_agent.py) (bypass `response.structured_output()`, generate `ReviewStatus.COMMENT` fallback, persist reports, post review comment to GitHub PR)
+- [x] Task 7: Persist telemetry metrics to `reports/token-usage.json` on both normal completion and budget exhaustion turns
+- [x] Task 8: Update GitHub Actions workflow [`.github/workflows/source-code-pii-review.yml`](file:///Users/yannipeng/git-projects/adk-agents/.github/workflows/source-code-pii-review.yml) to render formatted token usage and cost table in `$GITHUB_STEP_SUMMARY`
+- [x] Task 9: Implement unit tests in [`.github/scripts/tests/test_helper.py`](file:///Users/yannipeng/git-projects/adk-agents/.github/scripts/tests/test_helper.py) for pricing calculations, empty/none handling, environment resolution, and report file generation
+- [x] Task 10: Implement unit and contract tests in [`.github/scripts/tests/test_pr_reviewer_agent.py`](file:///Users/yannipeng/git-projects/adk-agents/.github/scripts/tests/test_pr_reviewer_agent.py) for budget halt handling, stop reason detection, fallback report construction, and GitHub review posting
 
 ---
 
-## Existing Codebase Analysis
+## 🔍 Analysis & Investigation
 
-### 1. Target Files & Integration Points
-* **[`.github/scripts/pr_reviewer_agent.py`](file:///Users/yannipeng/git-projects/adk-agents/.github/scripts/pr_reviewer_agent.py):**
-  - Instantiates `LocalAgentConfig` at lines 193–202 without a `budget_config`.
-  - Executes `response = await agent.chat(prompt)` at line 206.
-  - Currently parses structured output without checking `response.stop_reason` or reading `agent.conversation.total_usage`.
-  - On uncaught exceptions, falls back to deterministic rule-based review generation (lines 245–289).
-* **[`.github/scripts/helper.py`](file:///Users/yannipeng/git-projects/adk-agents/.github/scripts/helper.py):**
-  - Contains `resolve_env_config()` which parses CLI args and environment variables. Currently does not resolve token budget variables (`MAX_TOTAL_TOKENS`, `MAX_SPEND_USD`, `MAX_MODEL_CALLS`, `MAX_TOOL_CALLS`).
-  - Contains report writers (`write_pr_reports()`). Can be augmented to persist token usage telemetry in `reports/token-usage.json` and in PR review summary tables.
-* **[`.github/workflows/source-code-pii-review.yml`](file:///Users/yannipeng/git-projects/adk-agents/.github/workflows/source-code-pii-review.yml):**
-  - Invokes `python .github/scripts/pr_reviewer_agent.py` in line 137.
-  - Can supply optional workflow environment variables for spend caps (e.g., `MAX_TOTAL_TOKENS: 100000`, `MAX_SPEND_USD: 0.10`).
+### Codebase Structure
+The following files govern the PR review pipeline and token tracking:
 
-### 2. Architectural Design & Constraints
-* The code runs as an automated GitHub Actions step using Vertex AI ADC or API keys.
-* The agent uses `gemini-3.7-flash` (or `gemini-3.8-flash`), which incorporates extended reasoning (thoughts tokens). Thinking tokens can equal or exceed prompt token count, making `thoughts_token_count` tracking mandatory.
-* Any harness halt must exit gracefully: write telemetry reports, log explicit warnings indicating why the agent halted, and avoid corrupting the downstream Quality Gate decision.
+| File Path | Current Responsibility | Target Changes |
+| :--- | :--- | :--- |
+| [`.github/scripts/helper.py`](file:///Users/yannipeng/git-projects/adk-agents/.github/scripts/helper.py) | Shared utilities for GitHub REST API, report serialization, environment resolution (`resolve_env_config`), and streaming. | Add rate card `MODEL_PRICING`, `calculate_token_spend()`, `write_token_usage_report()`, and budget parameter parsing in `resolve_env_config()`. |
+| [`.github/scripts/pr_reviewer_agent.py`](file:///Users/yannipeng/git-projects/adk-agents/.github/scripts/pr_reviewer_agent.py) | Main agent runner executing `Agent(LocalAgentConfig)` with Vertex AI and GitHub MCP server. | Guard SDK imports with fallback, pass `types.BudgetConfig`, evaluate `response.stop_reason`, record telemetry, and handle graceful early halt with GitHub PR comment. |
+| [`.github/workflows/source-code-pii-review.yml`](file:///Users/yannipeng/git-projects/adk-agents/.github/workflows/source-code-pii-review.yml) | GitHub Actions workflow defining pipeline steps, secrets, Cloud DLP scan, agent invocations, and summary output. | Augment `Generate GitHub Actions Job Summary` step to parse `reports/token-usage.json` and output a Markdown summary table to `$GITHUB_STEP_SUMMARY`. |
+| [`docs/spec.md`](file:///Users/yannipeng/git-projects/adk-agents/docs/spec.md) | Governing architectural specification and decision log (D-1 through D-12). | Add D-13 (proactive budget controls) and D-14 (graceful halt & usage telemetry), function signatures, and Rule 6. |
+| [`.github/scripts/tests/test_helper.py`](file:///Users/yannipeng/git-projects/adk-agents/.github/scripts/tests/test_helper.py) | Unit test suite for helper utilities. | Add tests for token calculations, pricing cards, env resolution, and usage report generation. |
+| [`.github/scripts/tests/test_pr_reviewer_agent.py`](file:///Users/yannipeng/git-projects/adk-agents/.github/scripts/tests/test_pr_reviewer_agent.py) | Acceptance and contract tests for PR Reviewer Agent. | Add tests for `BudgetConfig` instantiation, `StopReason` early halts, `COMMENT` report fallback, and PR review submission on halt. |
+
+### Current Architecture
+1. **GitHub Actions Trigger:** Triggered on pull request events (`opened`, `synchronize`). Executes Cloud DLP scan writing `reports/pii-scan.txt`.
+2. **PR Reviewer Agent Execution:** `run_pr_review()` in `.github/scripts/pr_reviewer_agent.py` initializes `LocalAgentConfig` with Vertex AI authentication (`vertex=True`), connects to `github-mcp-server`, and invokes `Agent(config)`.
+3. **Absence of Proactive Budget Limits:** Currently, `LocalAgentConfig` does not specify `budget_config`. A runaway tool loop or massive PR diff can consume hundreds of thousands of tokens without hitting a ceiling.
+4. **Structured Output Fragility on Halts:** The agent directly calls `await response.structured_output()`. If a turn is interrupted or truncated by a model or token limit, `structured_output()` fails or raises a deserialization exception rather than recovering cleanly.
+5. **Quality Gate Dependency:** The downstream Quality Gate Decision Agent (`quality_gate_agent.py`) reads `reports/pr-review.txt` and `reports/pii-scan.txt`. If `reports/pr-review.txt` is missing on an active PR, the gate fails closed (`passed=False`, `SeverityLevel.HIGH/CRITICAL`).
+
+### Dependencies & Integration Points
+- **Google Antigravity SDK (`google.antigravity`):** Provides `LocalAgentConfig`, `Agent`, `types.BudgetConfig`, `types.StopReason`, `agent.conversation.total_usage`, and `response.usage_metadata`.
+- **Google Gemini 3.x Flash Models:** Target models `gemini-3.7-flash` and `gemini-3.8-flash`. Pricing rate card: $0.75 / 1M prompt tokens, $0.075 / 1M cached prompt tokens, $3.75 / 1M candidate generation and thinking tokens. Models below Gemini 3.5 are prohibited.
+- **GitHub REST API:** `POST /repos/{owner}/{repo}/pulls/{number}/reviews` and fallback `/issues/{number}/comments`. Used to post the review comment informing authors of early halt.
+- **GitHub Actions `$GITHUB_STEP_SUMMARY`:** Step summary markdown surface for CI observability.
+
+### Considerations & Challenges
+1. **Conditional Import Resilience (Spec Rule 1):** In developer test environments or standard virtualenvs where `google-antigravity` is not installed, `from google.antigravity import ...` raises `ModuleNotFoundError`. All SDK imports must use `try ... except ImportError: types = None, Agent = None, LocalAgentConfig = None`. All references to `types.BudgetConfig` or `types.StopReason` must be guarded by `if types is not None and hasattr(types, ...)`.
+2. **Thinking Token Cost Impact:** Gemini 3.7 and 3.8 thinking models emit reasoning tokens (`thoughts_token_count`) that are priced at the candidate output rate ($3.75 / 1M). A prompt with 1,000 output tokens and 9,000 thought tokens uses 10,000 billable generation tokens. The calculation must combine `candidate_tokens + thought_tokens` when multiplying by `output_per_m`.
+3. **Conservative Dollar-to-Token Conversion:** When `MAX_SPEND_USD` is defined, the ceiling must assume the highest price tier ($3.75 / 1M tokens) to prevent exceeding the financial cap:
+   $$\text{spend\_derived\_tokens} = \left\lfloor \frac{\text{MAX\_SPEND\_USD}}{3.75} \times 1{,}000{,}000 \right\rfloor$$
+   The effective `max_total_tokens` is $\min(\text{max\_total\_tokens}, \text{spend\_derived\_tokens})$.
+4. **Early Halt Handling Order:** If `budget_halted` is detected, `await response.structured_output()` must NOT be called. A fallback `PRReviewReport` with `overall_status = ReviewStatus.COMMENT` must be created.
+5. **Quality Gate Release Safety:** Using `ReviewStatus.COMMENT` with `findings: []` prevents false CI build blockers while alerting PR authors. Cloud DLP continues to enforce zero-tolerance security gate checks independently.
+6. **Double Review Avoidance:** The agent must post the fallback review comment to the GitHub PR before returning so the author is immediately notified why the review stopped.
 
 ---
 
-## 📋 Checklist
-- [ ] Step 1: Update `resolve_env_config` in `helper.py` to parse token budget and spend cap settings from environment variables (`MAX_TOTAL_TOKENS`, `MAX_INPUT_TOKENS`, `MAX_OUTPUT_TOKENS`, `MAX_MODEL_CALLS`, `MAX_TOOL_CALLS`, `MAX_SPEND_USD`).
-- [ ] Step 2: Implement token calculation and cost estimation utility `calculate_token_spend(usage, model)` in `helper.py`.
-- [ ] Step 3: Implement `write_token_usage_report(usage, cost_info, stop_reason)` in `helper.py` to persist telemetry to `reports/token-usage.json`.
-- [ ] Step 4: Configure `budget_config=types.BudgetConfig(...)` in `pr_reviewer_agent.py` within `LocalAgentConfig`.
-- [ ] Step 5: Add post-generation inspection in `pr_reviewer_agent.py` for `response.stop_reason` (`MAX_TOTAL_TOKENS_EXCEEDED`, `MAX_INPUT_TOKENS_EXCEEDED`, `MAX_OUTPUT_TOKENS_EXCEEDED`, `MAX_MODEL_CALLS_EXCEEDED`, `MAX_TOOL_CALLS_EXCEEDED`).
-- [ ] Step 6: On budget halt, log diagnostic metrics, record the budget exhaustion event in the PR report, and stop further agent operations safely.
-- [ ] Step 7: Add unit and contract tests in [`.github/scripts/tests/test_pr_reviewer_agent.py`](file:///Users/yannipeng/git-projects/adk-agents/.github/scripts/tests/test_pr_reviewer_agent.py) covering budget enforcement, stop reason triggers, and cost calculation.
+## 📐 Technical Specification & Design
 
----
+### Component Architecture
 
-## Proposed Changes
+```
+                  ┌────────────────────────────────────────────────────────┐
+                  │              resolve_env_config()                      │
+                  │  CLI Args > Env Vars (MAX_TOTAL_TOKENS, etc.) > Default │
+                  └──────────────────────────┬─────────────────────────────┘
+                                             │
+                                             ▼
+                  ┌────────────────────────────────────────────────────────┐
+                  │                 LocalAgentConfig                       │
+                  │   budget_config = types.BudgetConfig(                  │
+                  │       max_total_tokens, max_input_tokens,             │
+                  │       max_output_tokens, max_model_calls,             │
+                  │       max_tool_calls                                  │
+                  │   )                                                    │
+                  └──────────────────────────┬─────────────────────────────┘
+                                             │
+                                             ▼
+                  ┌────────────────────────────────────────────────────────┐
+                  │                 Agent Execution                        │
+                  │   async with Agent(config) as agent:                  │
+                  │       response = await agent.chat(prompt)              │
+                  └──────────────────────────┬─────────────────────────────┘
+                                             │
+                      ┌──────────────────────┴──────────────────────┐
+                      ▼                                             ▼
+       ┌──────────────────────────────┐              ┌──────────────────────────────┐
+       │   Budget Exceeded (Halt)     │              │     Normal Completion        │
+       │   stop_reason in StopReason  │              │     stop_reason == None or   │
+       │   or "EXCEEDED" in name      │              │     "COMPLETED"              │
+       └──────────────┬───────────────┘              └──────────────┬───────────────┘
+                      │                                             │
+                      ▼                                             ▼
+       ┌──────────────────────────────┐              ┌──────────────────────────────┐
+       │ 1. calculate_token_spend()   │              │ 1. calculate_token_spend()   │
+       │ 2. write_token_usage_report()│              │ 2. write_token_usage_report()│
+       │ 3. Fallback PRReviewReport   │              │ 3. response.structured_output│
+       │    (status: COMMENT)         │              │ 4. parse PRReviewReport      │
+       │ 4. write_pr_reports()        │              │ 5. write_pr_reports()        │
+       │ 5. post_github_pr_review()   │              │ 6. post_github_pr_review()   │
+       │ 6. Return report             │              │ 7. Return report             │
+       └──────────────────────────────┘              └──────────────────────────────┘
+```
 
-### 1. File: [`.github/scripts/helper.py`](file:///Users/yannipeng/git-projects/adk-agents/.github/scripts/helper.py)
+### Mermaid Diagram
+```mermaid
+sequenceDiagram
+    autonumber
+    participant GHA as GitHub Actions Runner
+    participant Script as pr_reviewer_agent.py
+    participant Helper as helper.py
+    participant SDK as Antigravity Agent & Gemini
+    participant GH as GitHub REST API
+    participant Disk as reports/ Directory
 
-#### Change Description:
-Add budget environment variable resolution to `resolve_env_config()`. Add cost calculation and token telemetry persistence functions.
+    GHA->>Script: Run agent (env: MAX_TOTAL_TOKENS, MAX_SPEND_USD)
+    Script->>Helper: resolve_env_config(...)
+    Helper-->>Script: Resolved cfg (tokens, calls, spend ceilings)
+    Script->>SDK: Agent(LocalAgentConfig(budget_config=BudgetConfig(...)))
+    SDK->>SDK: Execute chat & tool turns
+    alt Budget Exceeded during execution
+        SDK-->>Script: response (stop_reason=MAX_TOTAL_TOKENS_EXCEEDED)
+        Script->>Helper: calculate_token_spend(agent.conversation.total_usage)
+        Helper-->>Script: usage_stats
+        Script->>Helper: write_token_usage_report(usage_stats, stop_reason, ...)
+        Helper->>Disk: Persist reports/token-usage.json
+        Script->>Script: Construct fallback PRReviewReport(status=COMMENT)
+        Script->>Helper: write_pr_reports(report)
+        Helper->>Disk: Persist reports/pr-review.json & .txt
+        Script->>Helper: post_github_pr_review(report)
+        Helper->>GH: POST /repos/{owner}/{repo}/pulls/{number}/reviews
+        Script-->>GHA: Exit 0 (graceful return)
+    else Normal Execution
+        SDK-->>Script: response (stop_reason=None)
+        Script->>Helper: calculate_token_spend(agent.conversation.total_usage)
+        Helper-->>Script: usage_stats
+        Script->>Helper: write_token_usage_report(usage_stats, "COMPLETED", ...)
+        Helper->>Disk: Persist reports/token-usage.json
+        Script->>SDK: await response.structured_output()
+        SDK-->>Script: raw_output
+        Script->>Helper: parse_agent_structured_output(raw_output)
+        Script->>Helper: write_pr_reports(report)
+        Helper->>Disk: Persist reports/pr-review.json & .txt
+        Script->>Helper: post_github_pr_review(report)
+        Helper->>GH: POST review with inline comments
+        Script-->>GHA: Exit 0
+    end
+    GHA->>Disk: Read reports/token-usage.json
+    GHA->>GHA: Render Markdown cost table in $GITHUB_STEP_SUMMARY
+```
 
-#### Sample Code:
+### Schemas & Models
+
+#### 1. Rate Card Configuration (`helper.py`)
 ```python
-# Rate card per 1,000,000 tokens (Gemini Flash defaults)
-MODEL_PRICING = {
-    "gemini-3.7-flash": {"input_per_m": 0.75, "output_per_m": 3.75, "cached_per_m": 0.075},
-    "gemini-3.8-flash": {"input_per_m": 0.75, "output_per_m": 3.75, "cached_per_m": 0.075},
-    "gemini-2.5-flash": {"input_per_m": 0.30, "output_per_m": 2.50, "cached_per_m": 0.03},
-    "default": {"input_per_m": 0.75, "output_per_m": 3.75, "cached_per_m": 0.075},
+MODEL_PRICING: dict[str, dict[str, float]] = {
+    "gemini-3.7-flash": {
+        "input_per_m": 0.75,
+        "output_per_m": 3.75,
+        "cached_per_m": 0.075,
+    },
+    "gemini-3.8-flash": {
+        "input_per_m": 0.75,
+        "output_per_m": 3.75,
+        "cached_per_m": 0.075,
+    },
+    "default": {
+        "input_per_m": 0.75,
+        "output_per_m": 3.75,
+        "cached_per_m": 0.075,
+    },
 }
+```
 
-
-def calculate_token_spend(usage: Any, model_name: str = "gemini-3.7-flash") -> dict[str, Any]:
-    """Calculates approximate spend in USD from SDK UsageMetadata."""
-    rates = MODEL_PRICING.get(model_name, MODEL_PRICING["default"])
-    prompt_tokens = getattr(usage, "prompt_token_count", 0) or 0
-    cached_tokens = getattr(usage, "cached_content_token_count", 0) or 0
-    candidate_tokens = getattr(usage, "candidates_token_count", 0) or 0
-    thought_tokens = getattr(usage, "thoughts_token_count", 0) or 0
-    total_tokens = getattr(usage, "total_token_count", 0) or (prompt_tokens + candidate_tokens + thought_tokens)
-
-    # Net uncached input tokens
-    net_input = max(0, prompt_tokens - cached_tokens)
-    cost_input = (net_input / 1_000_000) * rates["input_per_m"]
-    cost_cached = (cached_tokens / 1_000_000) * rates["cached_per_m"]
-    cost_output = ((candidate_tokens + thought_tokens) / 1_000_000) * rates["output_per_m"]
-    total_cost_usd = cost_input + cost_cached + cost_output
-
-    return {
-        "prompt_tokens": prompt_tokens,
-        "cached_tokens": cached_tokens,
-        "candidate_tokens": candidate_tokens,
-        "thought_tokens": thought_tokens,
-        "total_tokens": total_tokens,
-        "total_cost_usd": round(total_cost_usd, 6),
+#### 2. Telemetry Artifact Schema: `reports/token-usage.json`
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TokenUsageReport",
+  "type": "object",
+  "required": [
+    "model",
+    "stop_reason",
+    "budget_exceeded",
+    "prompt_tokens",
+    "cached_tokens",
+    "candidate_tokens",
+    "thought_tokens",
+    "total_tokens",
+    "total_cost_usd",
+    "budget_limits"
+  ],
+  "properties": {
+    "model": { "type": "string" },
+    "stop_reason": { "type": "string" },
+    "budget_exceeded": { "type": "boolean" },
+    "prompt_tokens": { "type": "integer" },
+    "cached_tokens": { "type": "integer" },
+    "candidate_tokens": { "type": "integer" },
+    "thought_tokens": { "type": "integer" },
+    "total_tokens": { "type": "integer" },
+    "total_cost_usd": { "type": "number" },
+    "budget_limits": {
+      "type": "object",
+      "properties": {
+        "max_total_tokens": { "type": "integer" },
+        "max_input_tokens": { "type": "integer" },
+        "max_output_tokens": { "type": "integer" },
+        "max_model_calls": { "type": "integer" },
+        "max_tool_calls": { "type": "integer" },
+        "max_spend_usd": { "type": ["number", "null"] }
+      }
     }
+  }
+}
+```
 
+### API & Code Signatures
 
+#### `calculate_token_spend` in `.github/scripts/helper.py`
+```python
+def calculate_token_spend(
+    usage: Any,
+    model_name: str = "gemini-3.7-flash",
+) -> dict[str, Any]:
+    """Calculates approximate spend in USD from SDK UsageMetadata or response metadata.
+
+    Accounts for prompt caching discounts and prices extended thinking tokens
+    at the candidate generation rate ($3.75/1M). Safely returns 0 values if usage is None.
+
+    Args:
+        usage: SDK UsageMetadata instance or response object containing token counts.
+        model_name: Identifier of the Gemini model used.
+
+    Returns:
+        dict containing:
+            prompt_tokens (int)
+            cached_tokens (int)
+            candidate_tokens (int)
+            thought_tokens (int)
+            total_tokens (int)
+            total_cost_usd (float rounded to 6 decimals)
+    """
+```
+
+#### `write_token_usage_report` in `.github/scripts/helper.py`
+```python
 def write_token_usage_report(
     usage_data: dict[str, Any],
     stop_reason: Optional[str] = None,
     output_path: str = "reports/token-usage.json",
+    model: str = "gemini-3.7-flash",
+    budget_limits: Optional[dict[str, Any]] = None,
 ) -> None:
-    """Persists token usage and cost metrics to reports directory."""
-    path = Path(output_path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    payload = {
-        **usage_data,
-        "stop_reason": stop_reason or "COMPLETED",
-    }
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(payload, f, indent=2)
+    """Persists structured token usage and cost metrics to reports directory (Decision D-14).
+
+    Args:
+        usage_data: Dictionary returned by calculate_token_spend.
+        stop_reason: String name or value of turn StopReason.
+        output_path: Target path for JSON persistence.
+        model: Model identifier string.
+        budget_limits: Dict of configured budget thresholds.
+    """
 ```
 
----
-
-### 2. File: [`.github/scripts/pr_reviewer_agent.py`](file:///Users/yannipeng/git-projects/adk-agents/.github/scripts/pr_reviewer_agent.py)
-
-#### Change Description:
-1. Configure `types.BudgetConfig` in `LocalAgentConfig` using values resolved from environment variables (`MAX_TOTAL_TOKENS`, `MAX_INPUT_TOKENS`, `MAX_OUTPUT_TOKENS`, `MAX_MODEL_CALLS`, `MAX_TOOL_CALLS`).
-2. If `MAX_SPEND_USD` is set, convert it to a conservative total token budget ceiling if `MAX_TOTAL_TOKENS` is not explicitly set.
-3. Inspect `response.stop_reason` following generation. If a budget limit halted the harness, log the event, generate a graceful budget-halt report, record the telemetry, and stop further operations.
-4. Extract `agent.conversation.total_usage`, format the token summary table in the logs, and persist `reports/token-usage.json`.
-
-#### Sample Code:
+#### `resolve_env_config` signature update in `.github/scripts/helper.py`
 ```python
-        # 1. Resolve budget limits from configuration / environment
-        max_total_tokens = int(cfg.get("max_total_tokens") or os.environ.get("MAX_TOTAL_TOKENS", 120_000))
-        max_input_tokens = int(cfg.get("max_input_tokens") or os.environ.get("MAX_INPUT_TOKENS", 100_000))
-        max_output_tokens = int(cfg.get("max_output_tokens") or os.environ.get("MAX_OUTPUT_TOKENS", 25_000))
-        max_model_calls = int(cfg.get("max_model_calls") or os.environ.get("MAX_MODEL_CALLS", 10))
-        max_tool_calls = int(cfg.get("max_tool_calls") or os.environ.get("MAX_TOOL_CALLS", 25))
-
-        # Support optional dollar spend cap conversion (e.g. MAX_SPEND_USD=0.25)
-        max_spend_usd = os.environ.get("MAX_SPEND_USD")
-        if max_spend_usd:
-            # Conservative bound: assumed $3.75 / 1M tokens upper rate
-            spend_derived_tokens = int((float(max_spend_usd) / 3.75) * 1_000_000)
-            max_total_tokens = min(max_total_tokens, spend_derived_tokens)
-
-        budget_config = types.BudgetConfig(
-            max_total_tokens=max_total_tokens,
-            max_input_tokens=max_input_tokens,
-            max_output_tokens=max_output_tokens,
-            max_model_calls=max_model_calls,
-            max_tool_calls=max_tool_calls,
-        )
-
-        config = LocalAgentConfig(
-            vertex=True,
-            project=cfg["project_id"],
-            location=cfg["location"],
-            model=cfg["model"],
-            budget_config=budget_config,
-            response_schema=PRReviewReport,
-            mcp_servers=[mcp_server] if mcp_server else [],
-            app_data_dir=telemetry_dir,
-            system_instructions=SYSTEM_INSTRUCTIONS,
-        )
-
-        async with Agent(config) as agent:
-            response = await agent.chat(prompt)
-
-            # Check if harness was halted due to budget ceiling
-            stop_reason = getattr(response, "stop_reason", None)
-            budget_halted = stop_reason in (
-                types.StopReason.MAX_TOTAL_TOKENS_EXCEEDED,
-                types.StopReason.MAX_INPUT_TOKENS_EXCEEDED,
-                types.StopReason.MAX_OUTPUT_TOKENS_EXCEEDED,
-                types.StopReason.MAX_MODEL_CALLS_EXCEEDED,
-                types.StopReason.MAX_TOOL_CALLS_EXCEEDED,
-            )
-
-            # Record token telemetry
-            usage = getattr(agent.conversation, "total_usage", None)
-            usage_stats = calculate_token_spend(usage, cfg["model"] or "gemini-3.7-flash")
-            write_token_usage_report(usage_stats, stop_reason=str(stop_reason))
-
-            print("\n📊 TOKEN USAGE & ESTIMATED SPEND:")
-            print(f"  • Prompt Tokens:     {usage_stats['prompt_tokens']:,}")
-            print(f"  • Cached Tokens:     {usage_stats['cached_tokens']:,}")
-            print(f"  • Candidate Tokens:  {usage_stats['candidate_tokens']:,}")
-            print(f"  • Thought Tokens:    {usage_stats['thought_tokens']:,}")
-            print(f"  • Total Tokens:      {usage_stats['total_tokens']:,} (Cap: {max_total_tokens:,})")
-            print(f"  • Estimated Cost:    ${usage_stats['total_cost_usd']:.6f} USD")
-
-            if budget_halted:
-                print(f"\n🛑 [BUDGET CAP TRIGGERED] Agent harness halted early. StopReason: {stop_reason}")
-                report = PRReviewReport(
-                    overall_status=ReviewStatus.COMMENT,
-                    summary=(
-                        f"⚠️ PR review halted early: Model execution exceeded token/budget limit "
-                        f"({stop_reason}). Processed {usage_stats['total_tokens']:,} tokens "
-                        f"(${usage_stats['total_cost_usd']:.4f} USD)."
-                    ),
-                    findings=[],
-                )
-                write_pr_reports(report)
-                return report
-
-            # Normal path: parse structured output
-            raw_output = await response.structured_output()
-            report = parse_agent_structured_output(raw_output, PRReviewReport)
-            ...
+def resolve_env_config(
+    pr_number: Optional[str] = None,
+    repo: Optional[str] = None,
+    token: Optional[str] = None,
+    project_id: Optional[str] = None,
+    location: str = "us-central1",
+    model: Optional[str] = None,
+    max_total_tokens: Optional[int] = None,
+    max_input_tokens: Optional[int] = None,
+    max_output_tokens: Optional[int] = None,
+    max_model_calls: Optional[int] = None,
+    max_tool_calls: Optional[int] = None,
+    max_spend_usd: Optional[float] = None,
+) -> dict[str, Any]:
+    """Resolves configuration and token budget parameters (Decision D-4, D-13)."""
 ```
 
 ---
 
-## Trade-offs & Considerations
+## 📝 Step-by-Step Implementation Steps
 
-1. **Proactive `BudgetConfig` vs. Reactive Turn Cancellation:**
-   - *Proactive `BudgetConfig` (Recommended):* The SDK enforces checks directly in the invocation engine before token counts run wild. Stops both infinite tool calls and token explosions at the root.
-   - *Reactive `response.cancel()` (Supplemental):* Useful if a timeout or stream chunk monitoring threshold is breached, but requires external concurrency monitors.
-2. **Hard Capping vs. Partial Reviews:**
-   - When the token cap is hit, the structured JSON payload might be truncated or empty. Setting `overall_status=ReviewStatus.COMMENT` prevents false APPROVEs or false BLOCKERs while notifying the pull request author.
-3. **Thinking Tokens Impact:**
-   - Reasoning models (Gemini 3.7 / 3.8 Flash) emit thinking tokens that count toward output budget. Setting `max_output_tokens` too low (e.g. < 4,000) could cause premature halts before code review findings are composed. A recommended default is `max_output_tokens=25_000` and `max_total_tokens=120_000`.
+### Step 1: Pricing Rate Card & Cost Math in `helper.py`
+- **Files to modify/create:** [`.github/scripts/helper.py`](file:///Users/yannipeng/git-projects/adk-agents/.github/scripts/helper.py)
+- **Changes needed:**
+  1. Define `MODEL_PRICING` mapping for `gemini-3.7-flash`, `gemini-3.8-flash`, and `default`.
+  2. Implement `calculate_token_spend(usage: Any, model_name: str = "gemini-3.7-flash") -> dict[str, Any]`.
+     - Extract `prompt_token_count`, `cached_content_token_count`, `candidates_token_count`, `thoughts_token_count`, `total_token_count` via `getattr(usage, ..., 0)`.
+     - Net input = `max(0, prompt_tokens - cached_tokens)`.
+     - Output tokens = `candidate_tokens + thought_tokens`.
+     - Calculate cost and round `total_cost_usd` to 6 decimal places.
+  3. Implement `write_token_usage_report(usage_data, stop_reason, output_path, model, budget_limits)`.
+     - Ensure parent directory exists.
+     - Dump structured JSON payload conforming to schema.
+- **Implementation Notes:** Safe extraction with `getattr(..., 0) or 0` avoids exceptions if `usage` is `None` or missing fields.
+- **Status:** `[x] Complete`
+
+### Step 2: Configuration & Environment Parsing in `helper.py`
+- **Files to modify/create:** [`.github/scripts/helper.py`](file:///Users/yannipeng/git-projects/adk-agents/.github/scripts/helper.py)
+- **Changes needed:**
+  1. Update `resolve_env_config()` signature to take budget arguments.
+  2. Add integer environment variable parsers with fallback defaults:
+     - `MAX_TOTAL_TOKENS` -> default `120_000`
+     - `MAX_INPUT_TOKENS` -> default `100_000`
+     - `MAX_OUTPUT_TOKENS` -> default `25_000`
+     - `MAX_MODEL_CALLS` -> default `10`
+     - `MAX_TOOL_CALLS` -> default `25`
+  3. Add float environment variable parser for `MAX_SPEND_USD` (default `None`).
+  4. If `resolved_spend_usd` is defined and `> 0`:
+     - Calculate `spend_derived_tokens = int((resolved_spend_usd / 3.75) * 1_000_000)`.
+     - Set `resolved_total_tokens = min(resolved_total_tokens, spend_derived_tokens)`.
+  5. Include all resolved budget parameters in the returned dictionary.
+- **Implementation Notes:** Handle `ValueError` / `TypeError` gracefully when parsing integers or floats from environment variables.
+- **Status:** `[x] Complete`
+
+### Step 3: Agent Budget Enforcement, Telemetry & Early Halt in `pr_reviewer_agent.py`
+- **Files to modify/create:** [`.github/scripts/pr_reviewer_agent.py`](file:///Users/yannipeng/git-projects/adk-agents/.github/scripts/pr_reviewer_agent.py)
+- **Changes needed:**
+  1. Wrap `google.antigravity` import in `try ... except ImportError` to set `Agent = None`, `LocalAgentConfig = None`, `types = None`.
+  2. In `run_pr_review()`, if `types is not None and hasattr(types, "BudgetConfig")`:
+     - Instantiate `budget_config = types.BudgetConfig(max_total_tokens=..., max_input_tokens=..., max_output_tokens=..., max_model_calls=..., max_tool_calls=...)`.
+     - Pass `budget_config` to `LocalAgentConfig`.
+  3. Execute `response = await agent.chat(prompt)`.
+  4. Stream response chunks if available.
+  5. Inspect `stop_reason = getattr(response, "stop_reason", None)`.
+     - Detect `budget_halted = "EXCEEDED" in stop_reason_str or (types is not None and hasattr(types, "StopReason") and stop_reason in (...))`.
+  6. Extract usage metadata from `getattr(agent.conversation, "total_usage", None) or getattr(response, "usage_metadata", None)`.
+  7. Compute spend via `calculate_token_spend(usage, cfg["model"])`.
+  8. Call `write_token_usage_report(...)` to save `reports/token-usage.json`.
+  9. Print token usage and estimated spend breakdown to stdout.
+  10. **Early Halt Branch:**
+      - If `budget_halted`:
+        - Do NOT call `await response.structured_output()`.
+        - Create fallback report:
+          ```python
+          report = PRReviewReport(
+              overall_status=ReviewStatus.COMMENT,
+              summary=(
+                  f"⚠️ PR review halted early: Model execution exceeded configured budget limit "
+                  f"({stop_reason_str}). Processed {usage_stats['total_tokens']:,} tokens "
+                  f"(${usage_stats['total_cost_usd']:.4f} USD)."
+              ),
+              findings=[],
+          )
+          ```
+        - Call `write_pr_reports(report)`.
+        - If `pr_num`: await `post_github_pr_review(...)`.
+        - Return `report`.
+  11. **Normal Branch:**
+      - Call `await response.structured_output()`.
+      - Parse structured output, write PR reports, post GitHub review, return report.
+- **Implementation Notes:** In the fallback branch, posting to GitHub ensures developers receive actionable feedback on why the review terminated.
+- **Status:** `[x] Complete`
+
+### Step 4: GitHub Actions Workflow Summary Integration in `source-code-pii-review.yml`
+- **Files to modify/create:** [`.github/workflows/source-code-pii-review.yml`](file:///Users/yannipeng/git-projects/adk-agents/.github/workflows/source-code-pii-review.yml)
+- **Changes needed:**
+  - Update `Generate GitHub Actions Job Summary` step to inspect `reports/token-usage.json` and append a markdown summary table to `$GITHUB_STEP_SUMMARY`:
+    ```bash
+    if [ -f reports/token-usage.json ]; then
+      echo "" >> $GITHUB_STEP_SUMMARY
+      echo "### 📊 PR Reviewer Token Usage & Estimated Spend" >> $GITHUB_STEP_SUMMARY
+      python -c "
+    import json
+    with open('reports/token-usage.json') as f:
+        d = json.load(f)
+    model = d.get('model', 'gemini-3.7-flash')
+    prompt = d.get('prompt_tokens', 0)
+    cached = d.get('cached_tokens', 0)
+    candidate = d.get('candidate_tokens', 0)
+    thought = d.get('thought_tokens', 0)
+    total = d.get('total_tokens', 0)
+    cost = d.get('total_cost_usd', 0.0)
+    stop = d.get('stop_reason', 'COMPLETED')
+    halted = '⚠️ **BUDGET EXCEEDED**' if d.get('budget_exceeded') else '✅ Normal'
+
+    print(f'| Metric | Value |')
+    print(f'| :--- | :--- |')
+    print(f'| **Model** | \`{model}\` |')
+    print(f'| **Execution Status** | {halted} (\`{stop}\`) |')
+    print(f'| **Prompt Tokens (Uncached)** | {prompt - cached:,} |')
+    print(f'| **Cached Prompt Tokens** | {cached:,} |')
+    print(f'| **Candidate Generation Tokens** | {candidate:,} |')
+    print(f'| **Reasoning / Thought Tokens** | {thought:,} |')
+    print(f'| **Total Tokens Billed** | **{total:,}** |')
+    print(f'| **Estimated Spend (USD)** | **\${cost:.6f}** |')
+    " >> $GITHUB_STEP_SUMMARY
+    fi
+    ```
+- **Implementation Notes:** Use `if [ -f reports/token-usage.json ]` check so summary generation never fails if the file is absent on skipped runs.
+- **Status:** `[x] Complete`
+
+### Step 5: Comprehensive Unit, Acceptance, and Contract Test Suite
+- **Files to modify/create:**
+  - [`.github/scripts/tests/test_helper.py`](file:///Users/yannipeng/git-projects/adk-agents/.github/scripts/tests/test_helper.py)
+  - [`.github/scripts/tests/test_pr_reviewer_agent.py`](file:///Users/yannipeng/git-projects/adk-agents/.github/scripts/tests/test_pr_reviewer_agent.py)
+- **Changes needed:**
+  1. Add tests in `test_helper.py`:
+     - `test_calculate_token_spend_standard_usage`: Validates cost math with prompt, cached, candidate, and thinking tokens for `gemini-3.7-flash` and `gemini-3.8-flash`.
+     - `test_calculate_token_spend_empty_or_none`: Confirms `None`, empty objects, or missing fields return zero token counts and `0.0` cost.
+     - `test_resolve_env_config_budget_defaults_and_env`: Validates default budget numbers and environment variable overrides (`MAX_TOTAL_TOKENS`, `MAX_MODEL_CALLS`).
+     - `test_resolve_env_config_max_spend_usd_derived_ceiling`: Verifies `MAX_SPEND_USD=0.375` caps `max_total_tokens` to `100_000`.
+     - `test_write_token_usage_report_file_generation`: Verifies file creation at `reports/token-usage.json` with correct JSON keys.
+  2. Add tests in `test_pr_reviewer_agent.py`:
+     - `test_run_pr_review_budget_halt_flow`: Mocks `agent.chat` returning `response.stop_reason = MAX_TOTAL_TOKENS_EXCEEDED`. Asserts that:
+       - Status is `ReviewStatus.COMMENT`.
+       - `write_pr_reports()` is called.
+       - `post_github_pr_review()` is called with the fallback report.
+       - `reports/token-usage.json` records `budget_exceeded: true`.
+       - Function returns gracefully without throwing exceptions.
+     - `test_run_pr_review_normal_flow_records_telemetry`: Verifies successful reviews log token stats and record `stop_reason = COMPLETED`.
+- **Implementation Notes:** Ensure all tests run with `uv run pytest .github/scripts/tests/`.
+- **Status:** `[x] Complete`
 
 ---
 
-## Next Steps
-1. Review the plan and approve token budget thresholds and cost rates.
-2. Delegate implementation to the Software Engineer subagent according to the Multi-Agent Development Workflow.
-3. Run test verification and validate against `.github/scripts/tests/test_pr_reviewer_agent.py`.
+## 🧪 Verification & Testing Strategy
+
+### Unit/Integration Tests
+1. **Helper Token Math Tests (`.github/scripts/tests/test_helper.py`):**
+   - Assert `calculate_token_spend` outputs exact expected dollar values based on rate card:
+     - 100,000 prompt tokens (0 cached) at $0.75/1M = $0.075
+     - 20,000 cached tokens at $0.075/1M = $0.0015
+     - 10,000 candidate + 10,000 thinking tokens at $3.75/1M = $0.075
+     - Total = $0.1515
+   - Assert `resolve_env_config` caps `max_total_tokens` when `MAX_SPEND_USD` is passed.
+2. **PR Reviewer Agent Budget Halt Tests (`.github/scripts/tests/test_pr_reviewer_agent.py`):**
+   - Mock `Agent` and `ChatResponse` with `stop_reason = "MAX_TOTAL_TOKENS_EXCEEDED"`.
+   - Assert that `structured_output()` is never awaited.
+   - Assert `post_github_pr_review` is called with report summary containing "PR review halted early".
+   - Assert that `overall_status == ReviewStatus.COMMENT`.
+   - Assert `reports/token-usage.json` exists with `budget_exceeded: true`.
+
+### Commands
+Execute the automated test suites using `uv run pytest`:
+```bash
+# 1. Run helper unit tests
+uv run pytest .github/scripts/tests/test_helper.py -v
+
+# 2. Run PR reviewer agent contract & acceptance tests
+uv run pytest .github/scripts/tests/test_pr_reviewer_agent.py -v
+
+# 3. Run full test suite across the project
+uv run pytest tests/ .github/scripts/tests/ -v
+```
+
+### Expected Results
+- All unit and contract tests pass with 0 failures and 0 collection errors.
+- `reports/token-usage.json` matches the specified JSON schema.
+- Mocked budget halt turns return cleanly with exit code 0, status `COMMENT`, and publish an informative review comment to GitHub PR.
+
+---
+
+## 🎯 Success Criteria
+1. **Proactive Budget Enforcement:** `types.BudgetConfig` is correctly populated and passed to `LocalAgentConfig`, enforcing limits on total tokens, input tokens, output tokens, model calls, and tool calls.
+2. **Safe Import Resilience:** All SDK imports and type references handle `google.antigravity` absence cleanly with zero `ModuleNotFoundError` or `AttributeError` in test environments.
+3. **Accurate Cost Telemetry:** `reports/token-usage.json` is generated on every run, capturing uncached prompt, cached, candidate, and thinking tokens with verified Gemini 3.7/3.8 Flash pricing rates.
+4. **Resilient Early Halt & PR Notification:** When a budget cap is hit, the agent bypasses `structured_output()`, writes reports, posts a clear `ReviewStatus.COMMENT` review to the GitHub PR, and exits cleanly without failing the CI step.
+5. **Complete Test Coverage:** 100% of newly added functions and branches are verified with passing tests in `test_helper.py` and `test_pr_reviewer_agent.py`.

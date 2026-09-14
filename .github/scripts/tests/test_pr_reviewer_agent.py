@@ -1298,3 +1298,207 @@ async def test_run_pr_review_auto_fetches_comments_if_omitted():
 
     assert report is not None  # D-1
     mock_fetch.assert_called_once_with("owner", "repo", "42", "mock-token")  # D-1
+
+
+# =====================================================================
+# Decision D-13, D-14: Budget Caps and Token Spend Governance
+# =====================================================================
+
+class MockUsage:
+    """Mock usage object mimicking SDK UsageMetadata."""
+    def __init__(
+        self,
+        prompt_token_count: int = 0,
+        cached_content_token_count: int = 0,
+        candidates_token_count: int = 0,
+        thoughts_token_count: int = 0,
+        total_token_count: int = 0,
+    ):
+        self.prompt_token_count = prompt_token_count
+        self.cached_content_token_count = cached_content_token_count
+        self.candidates_token_count = candidates_token_count
+        self.thoughts_token_count = thoughts_token_count
+        self.total_token_count = total_token_count
+
+
+@pytest.mark.asyncio
+async def test_run_pr_review_budget_halt_flow(tmp_path, monkeypatch):
+    """Decision D-13, D-14: When stop_reason indicates budget exceeded, halts early with COMMENT review and records usage."""
+    monkeypatch.chdir(tmp_path)
+    reports_dir = tmp_path / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+
+    mock_response = MagicMock()
+    mock_response.stop_reason = "MAX_TOTAL_TOKENS_EXCEEDED"
+    mock_response.usage_metadata = MockUsage(
+        prompt_token_count=120_000,
+        cached_content_token_count=20_000,
+        candidates_token_count=10_000,
+        thoughts_token_count=10_000,
+        total_token_count=140_000,
+    )
+    mock_response.chunks = []
+    mock_response.structured_output = AsyncMock()
+
+    mock_agent_instance = MagicMock()
+    mock_agent_instance.__aenter__ = AsyncMock(return_value=mock_agent_instance)
+    mock_agent_instance.__aexit__ = AsyncMock(return_value=None)
+    mock_agent_instance.chat = AsyncMock(return_value=mock_response)
+    mock_agent_instance.conversation = None
+
+    with patch.object(pr_reviewer_agent, "Agent", return_value=mock_agent_instance), \
+         patch.object(pr_reviewer_agent, "post_github_pr_review", new_callable=AsyncMock) as mock_post_review:
+        mock_post_review.return_value = True
+
+        report = await run_pr_review(
+            pr_number="42",
+            repo="owner/repo",
+            token="mock-token",
+            pii_report_path=str(reports_dir / "pii-scan.txt"),
+            project_id="test-proj",
+            location="us-central1",
+            max_total_tokens=100_000,
+        )
+
+    # structured_output must NOT be called on budget exceeded
+    mock_response.structured_output.assert_not_called()
+
+    assert report is not None
+    assert report.overall_status == ReviewStatus.COMMENT
+    assert "PR review halted early" in report.summary
+    assert report.findings == []
+
+    # Verify post_github_pr_review was invoked with the fallback report
+    mock_post_review.assert_called_once()
+    posted_report = mock_post_review.call_args[1]["report"]
+    assert posted_report.overall_status == ReviewStatus.COMMENT
+
+    # Verify token-usage.json was persisted
+    token_usage_path = tmp_path / "reports" / "token-usage.json"
+    assert token_usage_path.exists()
+    with open(token_usage_path, "r", encoding="utf-8") as f:
+        usage_data = json.load(f)
+
+    assert usage_data["budget_exceeded"] is True
+    assert usage_data["stop_reason"] == "MAX_TOTAL_TOKENS_EXCEEDED"
+    assert usage_data["total_tokens"] == 140_000
+    assert usage_data["total_cost_usd"] == 0.1515
+    assert usage_data["budget_limits"]["max_total_tokens"] == 100_000
+
+
+@pytest.mark.asyncio
+async def test_run_pr_review_normal_flow_records_telemetry(tmp_path, monkeypatch):
+    """Decision D-14: Normal review execution calls structured_output and records token telemetry."""
+    monkeypatch.chdir(tmp_path)
+    reports_dir = tmp_path / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+
+    expected_report = PRReviewReport(
+        overall_status=ReviewStatus.APPROVE,
+        summary="PR approved.",
+        findings=[],
+    )
+
+    mock_response = MagicMock()
+    mock_response.stop_reason = None
+    mock_response.usage_metadata = MockUsage(
+        prompt_token_count=50_000,
+        cached_content_token_count=10_000,
+        candidates_token_count=5_000,
+        thoughts_token_count=5_000,
+        total_token_count=60_000,
+    )
+    mock_response.chunks = []
+    mock_response.structured_output = AsyncMock(return_value=expected_report)
+
+    mock_agent_instance = MagicMock()
+    mock_agent_instance.__aenter__ = AsyncMock(return_value=mock_agent_instance)
+    mock_agent_instance.__aexit__ = AsyncMock(return_value=None)
+    mock_agent_instance.chat = AsyncMock(return_value=mock_response)
+    mock_agent_instance.conversation = None
+
+    with patch.object(pr_reviewer_agent, "Agent", return_value=mock_agent_instance), \
+         patch.object(pr_reviewer_agent, "post_github_pr_review", new_callable=AsyncMock) as mock_post_review:
+        mock_post_review.return_value = True
+
+        report = await run_pr_review(
+            pr_number="42",
+            repo="owner/repo",
+            token="mock-token",
+            pii_report_path=str(reports_dir / "pii-scan.txt"),
+            project_id="test-proj",
+            location="us-central1",
+        )
+
+    mock_response.structured_output.assert_called_once()
+    assert report is not None
+    assert report.overall_status == ReviewStatus.APPROVE
+
+    token_usage_path = tmp_path / "reports" / "token-usage.json"
+    assert token_usage_path.exists()
+    with open(token_usage_path, "r", encoding="utf-8") as f:
+        usage_data = json.load(f)
+
+    assert usage_data["budget_exceeded"] is False
+    assert usage_data["stop_reason"] == "COMPLETED"
+    assert usage_data["total_tokens"] == 60_000
+    assert usage_data["prompt_tokens"] == 50_000
+
+
+@pytest.mark.asyncio
+async def test_run_pr_review_passes_budget_config_to_local_agent_config(tmp_path, monkeypatch):
+    """Decision D-13: Verifies BudgetConfig is constructed and passed to LocalAgentConfig."""
+    monkeypatch.chdir(tmp_path)
+    reports_dir = tmp_path / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+
+    expected_report = PRReviewReport(
+        overall_status=ReviewStatus.APPROVE,
+        summary="PR approved.",
+        findings=[],
+    )
+
+    mock_response = MagicMock()
+    mock_response.stop_reason = None
+    mock_response.usage_metadata = MockUsage(total_token_count=100)
+    mock_response.chunks = []
+    mock_response.structured_output = AsyncMock(return_value=expected_report)
+
+    mock_agent_instance = MagicMock()
+    mock_agent_instance.__aenter__ = AsyncMock(return_value=mock_agent_instance)
+    mock_agent_instance.__aexit__ = AsyncMock(return_value=None)
+    mock_agent_instance.chat = AsyncMock(return_value=mock_response)
+
+    mock_types = MagicMock()
+    mock_budget_config_instance = MagicMock()
+    mock_types.BudgetConfig.return_value = mock_budget_config_instance
+
+    with patch.object(pr_reviewer_agent, "types", mock_types), \
+         patch.object(pr_reviewer_agent, "Agent", return_value=mock_agent_instance), \
+         patch.object(pr_reviewer_agent, "LocalAgentConfig") as mock_local_config_cls, \
+         patch.object(pr_reviewer_agent, "post_github_pr_review", new_callable=AsyncMock):
+
+        await run_pr_review(
+            pr_number="42",
+            repo="owner/repo",
+            token="mock-token",
+            pii_report_path=str(reports_dir / "pii-scan.txt"),
+            project_id="test-proj",
+            location="us-central1",
+            max_total_tokens=80_000,
+            max_input_tokens=70_000,
+            max_output_tokens=15_000,
+            max_model_calls=6,
+            max_tool_calls=18,
+        )
+
+        mock_types.BudgetConfig.assert_called_once_with(
+            max_total_tokens=80_000,
+            max_input_tokens=70_000,
+            max_output_tokens=15_000,
+            max_model_calls=6,
+            max_tool_calls=18,
+        )
+        mock_local_config_cls.assert_called_once()
+        assert mock_local_config_cls.call_args[1]["budget_config"] == mock_budget_config_instance
+
