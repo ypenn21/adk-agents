@@ -105,7 +105,116 @@ sequenceDiagram
 
 ---
 
-## 5. Repository Directory Layout
+## 5. Agent Tokenomics, Budget Limits & Observability
+
+To prevent unexpected API spend and protect against runaway execution loops during multi-turn GitHub MCP interactions, the PR Reviewer Agent enforces proactive token budgets, invocation dials, and real-time cost telemetry.
+
+### 5.1 Pricing Rate Card (`gemini-3.7-flash` & `gemini-3.8-flash`)
+
+The cost calculation engine in [`helper.py`](scripts/helper.py) utilizes Google Cloud Vertex AI rate cards for Gemini Flash models:
+
+| Metric Type | Rate per Million Tokens | Cost per Token | Description |
+| :--- | :--- | :--- | :--- |
+| **Uncached Input Prompt** | **$0.75 / 1M** | `$0.00000075` | Initial prompt and novel tokens sent to the model |
+| **Cached Input Prompt** | **$0.075 / 1M** | `$0.000000075` | Context-cached system prompt and multi-turn history (90% discount) |
+| **Candidate Output** | **$3.75 / 1M** | `$0.00000375` | Generated text and review findings |
+| **Reasoning / Thinking** | **$3.75 / 1M** | `$0.00000375` | Extended internal reasoning tokens (`thoughts_token_count`) |
+
+---
+
+### 5.2 Session Budget Controls (`BudgetConfig`)
+
+Session limits are enforced directly at the Google Antigravity SDK harness layer via `types.BudgetConfig`:
+
+| Configuration Dial | Default Value | Environment Variable | Purpose |
+| :--- | :--- | :--- | :--- |
+| `max_total_tokens` | **1,100,000** | `MAX_TOTAL_TOKENS` | Caps cumulative net token consumption (`net_input + output`) |
+| `max_input_tokens` | **800,000** | `MAX_INPUT_TOKENS` | Caps cumulative net uncached prompt tokens |
+| `max_output_tokens` | **200,000** | `MAX_OUTPUT_TOKENS` | Caps cumulative generated tokens (candidates + thinking) |
+| `max_model_calls` | **100** | `MAX_MODEL_CALLS` | Caps generator round-trips with LLM (guards MCP loops) |
+| `max_tool_calls` | **50** | `MAX_TOOL_CALLS` | Caps total tool executions across GitHub MCP |
+| `max_spend_usd` | `None` (Unset) | `MAX_SPEND_USD` | Optional hard dollar cap (e.g. `0.25`, `0.50`) |
+
+#### Dynamic Dollar Cap Derivation
+When `MAX_SPEND_USD` is defined in repository variables or workflow secrets, the system calculates a worst-case token ceiling:
+$$\text{spend\_derived\_tokens} = \left\lfloor \frac{\text{MAX\_SPEND\_USD}}{3.75} \times 1{,}000{,}000 \right\rfloor$$
+and constrains `max_total_tokens = min(max_total_tokens, spend_derived_tokens)`.
+
+---
+
+### 5.3 Cost Scenarios & Upper Bounds
+
+Because `MAX_INPUT_TOKENS` is capped at 800,000 and `MAX_OUTPUT_TOKENS` is capped at 200,000, their sum ($1{,}000{,}000$) fits comfortably inside the 1.1M total token ceiling:
+
+| Scenario | Input Tokens Breakdown | Output Tokens | Total Tokens | Max Cost / Run |
+| :--- | :--- | :--- | :--- | :--- |
+| **Absolute Worst-Case Ceiling**<br/>*(0% Cache Hits — 100% Uncached)* | 800,000 uncached @ $0.75/1M ($0.60) | 200,000 @ $3.75/1M ($0.75) | 1,000,000 | **$1.35 USD** |
+| **Typical Context Caching**<br/>*(~85% Cached Prompt)* | 680,000 cached ($0.051)<br/>+ 120,000 uncached ($0.090) | 200,000 @ $3.75/1M ($0.75) | 1,000,000 | **~$0.89 USD** |
+| **High Context Caching**<br/>*(~95% Cached Prompt)* | 760,000 cached ($0.057)<br/>+ 40,000 uncached ($0.030) | 200,000 @ $3.75/1M ($0.75) | 1,000,000 | **~$0.84 USD** |
+| **Routine Clean / Moderate PR**<br/>*(Typical 3–6 MCP turns)* | ~30,000 – 120,000 cached<br/>+ ~5,000 uncached | ~1,000 – 4,000 candidates<br/>+ ~1,500 thinking | ~35,000 – 130,000 | **$0.01 – $0.05 USD** |
+
+> [!NOTE]
+> Even if an extensive review runs for all 100 model calls and exhausts both the 800k input and 200k output ceilings, the maximum possible cost per run cannot exceed **$1.35 USD**. Under normal multi-turn context caching, the cost is typically under **$0.90 USD**.
+
+---
+
+### 5.4 Multi-Turn Context Caching & Zero-Clamping
+
+During multi-turn agent execution with GitHub MCP tools:
+1. **Repeated Cache Hits:** Gemini automatically caches the conversation prefix once it exceeds 32k tokens. Each subsequent tool turn re-reads the conversation history from cache at the 90% discounted rate ($0.075/1M).
+2. **Cumulative Cache Metric:** `cached_tokens` reported in session telemetry represents the **sum of cache reads across all turns**. In long sessions, this cumulative number can surpass the base prompt token count.
+3. **Net Input Clamping:** Net novel input is calculated using $\max(0, \text{prompt\_tokens} - \text{cached\_tokens})$ to ensure accurate pricing and prevent negative token counts.
+
+---
+
+### 5.5 Stop Reason Detection & Graceful Fallback (Decision D-13)
+
+When any budget dial is hit, the Google Antigravity SDK halts generation with a dedicated `stop_reason`:
+* `MAX_MODEL_CALLS_EXCEEDED`: Hit generator turn ceiling.
+* `MAX_TOOL_CALLS_EXCEEDED`: Hit MCP tool execution ceiling.
+* `MAX_TOTAL_TOKENS_EXCEEDED`: Hit cumulative total token ceiling.
+* `MAX_INPUT_TOKENS_EXCEEDED`: Hit input prompt ceiling.
+* `MAX_OUTPUT_TOKENS_EXCEEDED`: Hit candidate/thinking token ceiling.
+
+When a budget halt occurs, [`pr_reviewer_agent.py`](scripts/pr_reviewer_agent.py):
+1. Detects `budget_halted = True`.
+2. Bypasses `response.structured_output()` to prevent JSON decode exceptions on truncated responses.
+3. Generates a graceful fallback review with `ReviewStatus.COMMENT` notifying the PR author that the review was halted early due to budget constraints.
+4. Records full token telemetry and submits the review to GitHub.
+
+---
+
+### 5.6 Telemetry & Audit Artifacts (Decision D-14)
+
+Every review run writes structured telemetry to `reports/token-usage.json`:
+```json
+{
+  "timestamp": "2026-09-14T17:25:31Z",
+  "model": "gemini-3.7-flash",
+  "stop_reason": "COMPLETED",
+  "prompt_tokens": 216261,
+  "cached_tokens": 251426,
+  "candidate_tokens": 3721,
+  "thought_tokens": 1457,
+  "total_tokens": 221439,
+  "net_input_tokens": 0,
+  "total_cost_usd": 0.038274,
+  "budget_limits": {
+    "max_total_tokens": 1100000,
+    "max_input_tokens": 800000,
+    "max_output_tokens": 200000,
+    "max_model_calls": 100,
+    "max_tool_calls": 50,
+    "max_spend_usd": null
+  }
+}
+```
+
+The GitHub Actions workflow parses this file and publishes the **Token Usage & Estimated Spend** table directly into the GitHub Job Summary.
+
+---
+
+## 6. Repository Directory Layout
 
 ```
 .github/
@@ -130,7 +239,7 @@ sequenceDiagram
 
 ---
 
-## 6. Infrastructure as Code: Terraform Setup & Deployment
+## 7. Infrastructure as Code: Terraform Setup & Deployment
 
 The [`terraform/`](terraform/) directory provisions the Google Cloud infrastructure required for the GitHub Actions pipeline.
 
@@ -193,10 +302,16 @@ After running Terraform, configure the following secrets/variables in **GitHub R
 | `APP_ID` | Secret (Optional) | GitHub App ID for authenticated PR reviews |
 | `APP_PRIVATE_KEY` | Secret (Optional) | GitHub App Private Key for token generation |
 | `G_PAT_TOKEN` | Secret (Optional) | GitHub Personal Access Token (fallback for PR comments) |
+| `MAX_TOTAL_TOKENS` | Variable (Optional) | Cumulative net token ceiling (default: `1100000`) |
+| `MAX_INPUT_TOKENS` | Variable (Optional) | Cumulative net prompt token ceiling (default: `800000`) |
+| `MAX_OUTPUT_TOKENS` | Variable (Optional) | Cumulative generated candidate & thought ceiling (default: `200000`) |
+| `MAX_MODEL_CALLS` | Variable (Optional) | Maximum LLM model round-trips (default: `100`) |
+| `MAX_TOOL_CALLS` | Variable (Optional) | Maximum MCP tool execution turns (default: `50`) |
+| `MAX_SPEND_USD` | Variable (Optional) | Hard spend cap in USD (e.g. `0.25`, `0.50`, default: unset) |
 
 ---
 
-## 7. Local Testing & Verification
+## 8. Local Testing & Verification
 
 You can execute the test suites locally using `uv`:
 
