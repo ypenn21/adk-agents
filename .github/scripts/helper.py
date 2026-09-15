@@ -50,8 +50,12 @@ def resolve_env_config(
     max_model_calls: Optional[int] = None,
     max_tool_calls: Optional[int] = None,
     max_spend_usd: Optional[float] = None,
+    pr_review_prompt_version: Optional[str] = None,
+    quality_gate_prompt_version: Optional[str] = None,
+    pr_review_prompt_path: Optional[str] = None,
+    quality_gate_prompt_path: Optional[str] = None,
 ) -> dict[str, Any]:
-    """Resolves configuration and token budget parameters (Decision D-4, D-13)."""
+    """Resolves configuration, token budget, and prompt template parameters (Decision D-4, D-13, D-19)."""
     resolved_pr = pr_number or os.environ.get("PULL_REQUEST_NUMBER") or os.environ.get("PR_NUMBER")
     if resolved_pr is not None:
         resolved_pr = str(resolved_pr).strip()
@@ -98,6 +102,36 @@ def resolve_env_config(
         or os.environ.get("LLM_MODEL")
         or "gemini-3.7-flash"
     )
+
+    resolved_pr_review_prompt_version = (
+        pr_review_prompt_version
+        or os.environ.get("PR_REVIEW_PROMPT_VERSION")
+        or "1.0.0"
+    )
+    if resolved_pr_review_prompt_version:
+        resolved_pr_review_prompt_version = str(resolved_pr_review_prompt_version).strip() or "1.0.0"
+
+    resolved_quality_gate_prompt_version = (
+        quality_gate_prompt_version
+        or os.environ.get("QUALITY_GATE_PROMPT_VERSION")
+        or "1.0.0"
+    )
+    if resolved_quality_gate_prompt_version:
+        resolved_quality_gate_prompt_version = str(resolved_quality_gate_prompt_version).strip() or "1.0.0"
+
+    resolved_pr_review_prompt_path = (
+        pr_review_prompt_path
+        or os.environ.get("PR_REVIEW_PROMPT_PATH")
+    )
+    if resolved_pr_review_prompt_path:
+        resolved_pr_review_prompt_path = str(resolved_pr_review_prompt_path).strip() or None
+
+    resolved_quality_gate_prompt_path = (
+        quality_gate_prompt_path
+        or os.environ.get("QUALITY_GATE_PROMPT_PATH")
+    )
+    if resolved_quality_gate_prompt_path:
+        resolved_quality_gate_prompt_path = str(resolved_quality_gate_prompt_path).strip() or None
 
     # Budget limits resolution (D-13)
     def _parse_int_env(val: Optional[int], env_name: str, default: int) -> int:
@@ -152,6 +186,10 @@ def resolve_env_config(
         "max_model_calls": resolved_model_calls,
         "max_tool_calls": resolved_tool_calls,
         "max_spend_usd": resolved_spend_usd,
+        "pr_review_prompt_version": resolved_pr_review_prompt_version,
+        "quality_gate_prompt_version": resolved_quality_gate_prompt_version,
+        "pr_review_prompt_path": resolved_pr_review_prompt_path,
+        "quality_gate_prompt_path": resolved_quality_gate_prompt_path,
     }
 
 
@@ -691,8 +729,11 @@ def write_pr_reports(report: Any) -> None:
     )
 
 
-def write_gate_reports(decision: Any) -> None:
-    """Writes reports/gate-decision.json and reports/decision.txt."""
+def write_gate_reports(
+    decision: Any,
+    prompt_metadata: Optional[dict[str, Any]] = None,
+) -> None:
+    """Writes reports/gate-decision.json, reports/decision.txt, and prompt metadata telemetry (Decision D-7, D-19)."""
     text_content = format_text_decision(decision)
     write_json_and_text_reports(
         json_path="reports/gate-decision.json",
@@ -700,6 +741,11 @@ def write_gate_reports(decision: Any) -> None:
         text_path="reports/decision.txt",
         text_content=text_content,
     )
+    if prompt_metadata is not None:
+        telemetry_file = Path("reports/telemetry/quality_gate_agent/prompt-metadata.json")
+        telemetry_file.parent.mkdir(parents=True, exist_ok=True)
+        telemetry_file.write_text(json.dumps(prompt_metadata, indent=2), encoding="utf-8")
+
 
 
 # =====================================================================
@@ -904,8 +950,9 @@ def write_token_usage_report(
     output_path: str = "reports/token-usage.json",
     model: str = "gemini-3.7-flash",
     budget_limits: Optional[dict[str, Any]] = None,
+    prompt_metadata: Optional[dict[str, Any]] = None,
 ) -> None:
-    """Persists structured token usage and cost metrics to reports directory (Decision D-14).
+    """Persists structured token usage and cost metrics to reports directory (Decision D-14, D-19).
 
     Args:
         usage_data: Dictionary returned by calculate_token_spend.
@@ -913,6 +960,7 @@ def write_token_usage_report(
         output_path: Target path for JSON persistence.
         model: Model identifier string.
         budget_limits: Dict of configured budget thresholds.
+        prompt_metadata: Optional dict of prompt template audit telemetry.
     """
     if stop_reason is not None and not hasattr(stop_reason, "_mock_name") and type(stop_reason).__name__ not in ("MagicMock", "Mock", "AsyncMock"):
         stop_reason_val = getattr(stop_reason, "name", str(stop_reason))
@@ -940,6 +988,9 @@ def write_token_usage_report(
         "total_cost_usd": float(usage_data.get("total_cost_usd", 0.0)),
         "budget_limits": budget_limits or {},
     }
+    if prompt_metadata is not None:
+        payload["prompt_template"] = prompt_metadata
+
 
     out_file = Path(output_path)
     out_file.parent.mkdir(parents=True, exist_ok=True)

@@ -27,6 +27,8 @@ env:
   MAX_MODEL_CALLS: ${{ vars.MAX_MODEL_CALLS || secrets.MAX_MODEL_CALLS || '100' }}
   MAX_TOOL_CALLS: ${{ vars.MAX_TOOL_CALLS || secrets.MAX_TOOL_CALLS || '50' }}
   MAX_SPEND_USD: ${{ vars.MAX_SPEND_USD || secrets.MAX_SPEND_USD || '' }}
+  PR_REVIEW_PROMPT_VERSION: ${{ vars.PR_REVIEW_PROMPT_VERSION || secrets.PR_REVIEW_PROMPT_VERSION || '1.0.0' }}
+  QUALITY_GATE_PROMPT_VERSION: ${{ vars.QUALITY_GATE_PROMPT_VERSION || secrets.QUALITY_GATE_PROMPT_VERSION || '1.0.0' }}
 
 jobs:
   scan-and-evaluate:
@@ -198,6 +200,40 @@ jobs:
           print(f'| **Estimated Spend (USD)** | **\${cost:.6f}** |')
           " >> $GITHUB_STEP_SUMMARY
           fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📝 Prompt Template Audit" >> $GITHUB_STEP_SUMMARY
+          python -c "
+          import json, os
+
+          rows = []
+          for agent, paths in [
+              ('PR Reviewer Agent', ['reports/telemetry/pr_reviewer_agent/prompt-metadata.json', 'reports/telemetry/pr_review_agent/prompt-metadata.json']),
+              ('Quality Gate Agent', ['reports/telemetry/quality_gate_agent/prompt-metadata.json'])
+          ]:
+              meta = None
+              for p in paths:
+                  if os.path.exists(p):
+                      try:
+                          with open(p) as f:
+                              meta = json.load(f)
+                              break
+                      except Exception:
+                          pass
+              if meta:
+                  ver = meta.get('version', 'unknown')
+                  sha = meta.get('sha256', 'none')
+                  sha_short = sha[:12] + '...' if len(sha) > 12 else sha
+                  mode = 'Fallback (Built-in)' if meta.get('is_fallback') else 'Standard'
+                  rows.append(f'| **{agent}** | \`{ver}\` | \`{sha_short}\` | {mode} |')
+
+          if rows:
+              print('| Agent | Version | Checksum (SHA256) | Mode |')
+              print('| :--- | :--- | :--- | :--- |')
+              for r in rows:
+                  print(r)
+          else:
+              print('_No prompt metadata recorded for this run._')
+          " >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 📦 Archived Artifacts" >> $GITHUB_STEP_SUMMARY
           echo "GCS Destination: \`gs://${{ env.GOOGLE_CLOUD_PROJECT }}-scan-reports/${{ github.run_id }}_${{ github.run_attempt }}\`" >> $GITHUB_STEP_SUMMARY
