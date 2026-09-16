@@ -137,7 +137,7 @@ Session limits are enforced directly at the Google Antigravity SDK harness layer
 
 #### Dynamic Dollar Cap Derivation
 When `MAX_SPEND_USD` is defined in repository variables or workflow secrets, the system calculates a worst-case token ceiling:
-$$\text{spend\_derived\_tokens} = \left\lfloor \frac{\text{MAX\_SPEND\_USD}}{3.75} \times 1{,}000{,}000 \right\rfloor$$
+`spend_derived_tokens = floor((MAX_SPEND_USD / 3.75) * 1,000,000)`
 and constrains `max_total_tokens = min(max_total_tokens, spend_derived_tokens)`.
 
 ---
@@ -163,7 +163,7 @@ Because `MAX_INPUT_TOKENS` is capped at 800,000 and `MAX_OUTPUT_TOKENS` is cappe
 During multi-turn agent execution with GitHub MCP tools:
 1. **Repeated Cache Hits:** Gemini automatically caches the conversation prefix once it exceeds 32k tokens. Each subsequent tool turn re-reads the conversation history from cache at the 90% discounted rate ($0.075/1M).
 2. **Cumulative Cache Metric:** `cached_tokens` reported in session telemetry represents the **sum of cache reads across all turns**. In long sessions, this cumulative number can surpass the base prompt token count.
-3. **Net Input Clamping:** Net novel input is calculated using $\max(0, \text{prompt\_tokens} - \text{cached\_tokens})$ to ensure accurate pricing and prevent negative token counts.
+3. **Net Input Clamping:** Net novel input is calculated using `max(0, prompt_tokens - cached_tokens)` to ensure accurate pricing and prevent negative token counts.
 
 ---
 
