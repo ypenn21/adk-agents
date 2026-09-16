@@ -120,10 +120,10 @@ sequenceDiagram
         Main->>Agent: Create fresh Agent(LocalAgentConfig)
         Main->>Agent: chat(batch_prompt_with_diffs)
         Agent-->>Main: BatchReviewResult(batch_summary, findings)
-        Note over Agent,Main: Session closed; raw diffs discarded from context
+        Main-->>Agent: Close session (discard raw diffs from context)
     end
 
-    Main->>Main: Aggregate findings & check cumulative budget
+    Main->>Main: Aggregate findings and check cumulative budget
     Main->>Helper: synthesize_final_review_report(all_findings, triage_meta)
     Main->>Helper: write_pr_reports(final_report)
     Main->>Helper: post_github_pr_review(final_report)
