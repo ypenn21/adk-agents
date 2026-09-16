@@ -15,7 +15,7 @@ from enum import Enum
 from typing import Optional, Any
 from pydantic import BaseModel, Field, model_validator
 
-from prompt_loader import load_prompt_bundle
+from prompt_loader import load_prompt_bundle, PromptBundle
 
 try:
     from google.antigravity import Agent, LocalAgentConfig, types
@@ -85,6 +85,8 @@ __all__ = [
     "synthesize_final_review_report",
     "run_pr_review",
     "build_pr_review_prompt",
+    "SYSTEM_INSTRUCTIONS",
+    "BATCH_SYSTEM_INSTRUCTIONS",
     "main",
 ]
 
@@ -152,6 +154,9 @@ class PRReviewReport(BaseModel):
 _DEFAULT_BUNDLE = load_prompt_bundle("pr_reviewer")
 SYSTEM_INSTRUCTIONS = _DEFAULT_BUNDLE.system_instructions
 
+_DEFAULT_BATCH_BUNDLE = load_prompt_bundle("batch_pr_reviewer")
+BATCH_SYSTEM_INSTRUCTIONS = _DEFAULT_BATCH_BUNDLE.system_instructions
+
 
 def extract_batch_pii_context(batch: ReviewBatch, pii_context: str) -> str:
     """Extracts Cloud DLP findings relevant to files in this batch (Decision D-17)."""
@@ -181,8 +186,25 @@ def build_batch_review_prompt(
     pr_number: str,
     repo: str,
     pii_context_subset: str,
+    version: Optional[str] = None,
+    prompt_path: Optional[str] = None,
+    bundle: Optional[PromptBundle] = None,
 ) -> str:
-    """Builds the user prompt for a single ReviewBatch in isolated context (Decision D-17)."""
+    """Builds the user prompt for a single ReviewBatch in isolated context using PromptLoader (Decision D-17, D-19).
+
+    Args:
+        batch: The ReviewBatch containing the subset of FileDiffItems.
+        pr_number: The pull request number string.
+        repo: The repository in "owner/repo" format.
+        pii_context_subset: Cloud DLP findings relevant to files in this batch.
+        version: Optional semantic version string (e.g. "1.0.0", "latest").
+        prompt_path: Optional explicit file path to a prompt template.
+        bundle: Optional pre-loaded PromptBundle. If None or non-batch bundle,
+            loaded automatically via load_prompt_bundle("batch_pr_reviewer").
+
+    Returns:
+        Rendered user prompt string ready for agent execution.
+    """
     diff_sections = []
     for f in batch.files:
         diff_sections.append(
@@ -191,22 +213,19 @@ def build_batch_review_prompt(
         )
     diffs_text = "\n\n".join(diff_sections) if diff_sections else "No modified files in this batch."
 
-    return (
-        f"Perform an automated code review on Pull Request #{pr_number} in repository {repo}.\n"
-        f"This is Review Batch {batch.batch_index} of {batch.total_batches} "
-        f"({len(batch.files)} files, ~{batch.total_estimated_tokens} tokens).\n\n"
-        f"### Cloud DLP Sensitive Data & PII Scan Findings (Relevant Subset):\n"
-        f"{pii_context_subset or 'No DLP findings detected.'}\n\n"
-        f"### Modified Files & Diff Hunks for this Batch:\n"
-        f"{diffs_text}\n\n"
-        f"### Review Instructions for this Batch:\n"
-        f"1. Review the diff hunks strictly within this batch against the review criteria "
-        f"(logic correctness, REST API CRUD design & HTTP semantics, runtime performance & Big O, "
-        f"memory management, infinite loops / recursion, SOLID patterns, type safety, security / PII leaks, error handling, PEP 8).\n"
-        f"2. For any defect found in this batch's diff hunks, provide line-level findings specifying exact `file_path`, `line_number`, `severity` (BLOCKER, WARNING, SUGGESTION, INFO), `title`, `details`, and `suggestion`.\n"
-        f"3. For any files or lines flagged with sensitive data, credentials, or PII leaks, create a BLOCKER finding with `pii_leak: true`.\n"
-        f"4. Provide a clear and concise `batch_summary` summarizing the review of this batch.\n"
-        f"5. Return output strictly conforming to the BatchReviewResult schema."
+    # Disambiguate and resolve batch bundle (Decision D-17, D-19)
+    if bundle is None or getattr(getattr(bundle, "metadata", None), "name", None) == "pr_reviewer":
+        bundle = load_prompt_bundle("batch_pr_reviewer", version=version, prompt_path=prompt_path)
+
+    return bundle.render_user_prompt(
+        pr_number=pr_number,
+        repo=repo,
+        batch_index=batch.batch_index,
+        total_batches=batch.total_batches,
+        files_count=len(batch.files),
+        total_estimated_tokens=batch.total_estimated_tokens,
+        pii_context_subset=pii_context_subset or "No DLP findings detected.",
+        diffs_text=diffs_text,
     )
 
 
@@ -225,11 +244,20 @@ async def review_batch_with_isolated_context(
     repository = cfg.get("repo") or ""
     auth_token = cfg.get("token") or ""
 
+    batch_bundle = bundle
+    if batch_bundle is None or getattr(getattr(batch_bundle, "metadata", None), "name", None) != "batch_pr_reviewer":
+        batch_bundle = load_prompt_bundle(
+            "batch_pr_reviewer",
+            version=cfg.get("batch_pr_review_prompt_version"),
+            prompt_path=cfg.get("batch_pr_review_prompt_path"),
+        )
+
     batch_prompt = build_batch_review_prompt(
         batch=batch,
         pr_number=pr_num,
         repo=repository,
         pii_context_subset=pii_context_subset,
+        bundle=batch_bundle,
     )
 
     batch_telemetry_dir = ensure_directory(os.path.join(telemetry_dir, f"batch_{batch.batch_index}"))
@@ -243,7 +271,7 @@ async def review_batch_with_isolated_context(
         "response_schema": BatchReviewResult,
         "mcp_servers": [mcp_server] if mcp_server else [],
         "app_data_dir": batch_telemetry_dir,
-        "system_instructions": bundle.system_instructions if bundle else SYSTEM_INSTRUCTIONS,
+        "system_instructions": batch_bundle.system_instructions if batch_bundle else BATCH_SYSTEM_INSTRUCTIONS,
     }
 
     if types is not None and hasattr(types, "BudgetConfig"):
@@ -456,6 +484,8 @@ async def run_pr_review(
     max_spend_usd: Optional[float] = None,
     prompt_version: Optional[str] = None,
     prompt_path: Optional[str] = None,
+    batch_prompt_version: Optional[str] = None,
+    batch_prompt_path: Optional[str] = None,
     batch_max_files: Optional[int] = None,
     batch_max_tokens: Optional[int] = None,
     max_review_files_cap: Optional[int] = None,
@@ -476,6 +506,8 @@ async def run_pr_review(
         max_spend_usd=max_spend_usd,
         pr_review_prompt_version=prompt_version,
         pr_review_prompt_path=prompt_path,
+        batch_pr_review_prompt_version=batch_prompt_version,
+        batch_pr_review_prompt_path=batch_prompt_path,
         batch_max_files=batch_max_files,
         batch_max_tokens=batch_max_tokens,
         max_review_files_cap=max_review_files_cap,
@@ -504,6 +536,12 @@ async def run_pr_review(
     bundle = load_prompt_bundle("pr_reviewer", version=resolved_prompt_ver, prompt_path=resolved_prompt_p)
     prompt_metadata_audit = bundle.to_audit_dict()
 
+    # Load batch prompt bundle (Decision D-17, D-19)
+    resolved_batch_prompt_ver = batch_prompt_version or cfg.get("batch_pr_review_prompt_version")
+    resolved_batch_prompt_p = batch_prompt_path or cfg.get("batch_pr_review_prompt_path")
+    batch_bundle = load_prompt_bundle("batch_pr_reviewer", version=resolved_batch_prompt_ver, prompt_path=resolved_batch_prompt_p)
+    batch_prompt_metadata_audit = batch_bundle.to_audit_dict()
+
     # Persist prompt metadata telemetry
     prompt_meta_dir = ensure_directory("reports/telemetry/pr_reviewer_agent")
     Path("reports/telemetry/pr_reviewer_agent/prompt-metadata.json").write_text(
@@ -512,6 +550,13 @@ async def run_pr_review(
     ensure_directory("reports/telemetry/pr_review_agent")
     Path("reports/telemetry/pr_review_agent/prompt-metadata.json").write_text(
         json.dumps(prompt_metadata_audit, indent=2), encoding="utf-8"
+    )
+    Path("reports/telemetry/pr_review_agent/batch-prompt-metadata.json").write_text(
+        json.dumps(batch_prompt_metadata_audit, indent=2), encoding="utf-8"
+    )
+    ensure_directory("reports/telemetry/batch_pr_reviewer_agent")
+    Path("reports/telemetry/batch_pr_reviewer_agent/prompt-metadata.json").write_text(
+        json.dumps(batch_prompt_metadata_audit, indent=2), encoding="utf-8"
     )
 
     telemetry_dir = ensure_directory("reports/telemetry/pr_review_agent")
@@ -607,7 +652,7 @@ async def run_pr_review(
                 cfg=cfg,
                 pii_context_subset=batch_pii,
                 telemetry_dir=telemetry_dir,
-                bundle=bundle,
+                bundle=batch_bundle,
             )
 
             # Accumulate usage stats across batches

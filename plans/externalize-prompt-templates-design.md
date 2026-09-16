@@ -128,6 +128,8 @@ The proposed architecture decouples prompt authoring from agent execution using 
 ├── prompts/
 │   ├── pr_reviewer/
 │   │   └── v1.0.0.md
+│   ├── batch_pr_reviewer/
+│   │   └── v1.0.0.md
 │   ├── quality_gate/
 │   │   └── v1.0.0.md
 │   └── README.md
@@ -141,6 +143,20 @@ The proposed architecture decouples prompt authoring from agent execution using 
 │       ├── test_pr_reviewer_agent.py
 │       └── test_quality_gate_agent.py
 ```
+
+### 🔄 Evolution & Distinction: `pr_reviewer` vs. `batch_pr_reviewer`
+
+Both `.github/prompts/pr_reviewer/v1.0.0.md` and `.github/prompts/batch_pr_reviewer/v1.0.0.md` reside in `.github/prompts/`, representing the evolution from monolithic reviews to context-compacted batch reviews:
+
+| Dimension | `pr_reviewer/v1.0.0.md` | `batch_pr_reviewer/v1.0.0.md` |
+| :--- | :--- | :--- |
+| **Origin & Lifecycle** | Created in Decision D-19 (PR #17) for monolithic whole-PR reviews. | Created to support Decision D-17/D-18 (PR #20) for partitioned, context-isolated review batches. |
+| **Operational Role** | **Legacy / backward-compatibility mode** for non-batched PR reviews. | **Active runtime review engine** executed during production PR reviews. |
+| **Primary Caller** | [`build_pr_review_prompt()`](file://.github/scripts/pr_reviewer_agent.py) and module-level `SYSTEM_INSTRUCTIONS`. | [`build_batch_review_prompt()`](file://.github/scripts/pr_reviewer_agent.py) within `review_batch_with_isolated_context()`. |
+| **Input Variables** | 3 variables: `pr_number`, `repo`, `pii_context`. | 8 variables: `pr_number`, `repo`, `batch_index`, `total_batches`, `files_count`, `total_estimated_tokens`, `pii_context_subset`, `diffs_text`. |
+| **Diff Delivery** | Diffs are not in the prompt; the agent uses GitHub MCP tools dynamically to inspect the full repository diff. | Diff hunks are pre-compacted, triaged, and embedded directly into `${diffs_text}` in the prompt body. |
+| **Telemetry Output** | `reports/telemetry/pr_reviewer_agent/prompt-metadata.json`. | `reports/telemetry/pr_review_agent/batch-prompt-metadata.json` (and `reports/telemetry/batch_pr_reviewer_agent/prompt-metadata.json`). |
+| **System Instructions** | Exported as `SYSTEM_INSTRUCTIONS` in `pr_reviewer_agent.py`. | Exported as `BATCH_SYSTEM_INSTRUCTIONS` in `pr_reviewer_agent.py`. |
 
 ---
 

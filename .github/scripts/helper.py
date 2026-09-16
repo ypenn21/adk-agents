@@ -90,6 +90,8 @@ def resolve_env_config(
     quality_gate_prompt_version: Optional[str] = None,
     pr_review_prompt_path: Optional[str] = None,
     quality_gate_prompt_path: Optional[str] = None,
+    batch_pr_review_prompt_version: Optional[str] = None,
+    batch_pr_review_prompt_path: Optional[str] = None,
     batch_max_files: Optional[int] = None,
     batch_max_tokens: Optional[int] = None,
     max_review_files_cap: Optional[int] = None,
@@ -172,6 +174,22 @@ def resolve_env_config(
     if resolved_quality_gate_prompt_path:
         resolved_quality_gate_prompt_path = str(resolved_quality_gate_prompt_path).strip() or None
 
+    resolved_batch_pr_review_prompt_version = (
+        batch_pr_review_prompt_version
+        or os.environ.get("BATCH_PR_REVIEW_PROMPT_VERSION")
+        or resolved_pr_review_prompt_version
+        or "1.0.0"
+    )
+    if resolved_batch_pr_review_prompt_version:
+        resolved_batch_pr_review_prompt_version = str(resolved_batch_pr_review_prompt_version).strip() or "1.0.0"
+
+    resolved_batch_pr_review_prompt_path = (
+        batch_pr_review_prompt_path
+        or os.environ.get("BATCH_PR_REVIEW_PROMPT_PATH")
+    )
+    if resolved_batch_pr_review_prompt_path:
+        resolved_batch_pr_review_prompt_path = str(resolved_batch_pr_review_prompt_path).strip() or None
+
     # Budget limits resolution (D-13)
     def _parse_int_env(val: Optional[int], env_name: str, default: int) -> int:
         if val is not None:
@@ -232,6 +250,8 @@ def resolve_env_config(
         "quality_gate_prompt_version": resolved_quality_gate_prompt_version,
         "pr_review_prompt_path": resolved_pr_review_prompt_path,
         "quality_gate_prompt_path": resolved_quality_gate_prompt_path,
+        "batch_pr_review_prompt_version": resolved_batch_pr_review_prompt_version,
+        "batch_pr_review_prompt_path": resolved_batch_pr_review_prompt_path,
         "batch_max_files": resolved_batch_max_files,
         "batch_max_tokens": resolved_batch_max_tokens,
         "max_review_files_cap": resolved_max_review_files_cap,

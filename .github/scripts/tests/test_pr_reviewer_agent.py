@@ -1583,6 +1583,60 @@ def test_build_batch_review_prompt_and_pii_subset():
     assert "auth/login.py: Potential API key at line 1" in prompt
 
 
+def test_build_batch_review_prompt_with_explicit_bundle_and_version():
+    """Validates build_batch_review_prompt with explicit bundle, version, and disambiguation (D-17, D-19)."""
+    from prompt_loader import load_prompt_bundle
+
+    files = [
+        FileDiffItem(
+            filename="src/app.py",
+            status="modified",
+            additions=4,
+            deletions=1,
+            changes=5,
+            patch="@@ -1,2 +1,5 @@\n+print('hello')",
+            estimated_tokens=30,
+            risk_score=20,
+        ),
+    ]
+    batch = ReviewBatch(batch_index=1, total_batches=1, files=files, total_estimated_tokens=30)
+
+    # 1. Test with explicit version
+    prompt_ver = build_batch_review_prompt(
+        batch,
+        pr_number="200",
+        repo="my-org/my-repo",
+        pii_context_subset="Clean",
+        version="1.0.0",
+    )
+    assert "Pull Request #200" in prompt_ver
+    assert "my-org/my-repo" in prompt_ver
+    assert "src/app.py" in prompt_ver
+
+    # 2. Test with explicit batch_pr_reviewer bundle
+    batch_bundle = load_prompt_bundle("batch_pr_reviewer", version="1.0.0")
+    prompt_bundle = build_batch_review_prompt(
+        batch,
+        pr_number="201",
+        repo="my-org/my-repo",
+        pii_context_subset="Clean",
+        bundle=batch_bundle,
+    )
+    assert "Pull Request #201" in prompt_bundle
+
+    # 3. Test disambiguation when pr_reviewer bundle is inadvertently passed
+    pr_bundle = load_prompt_bundle("pr_reviewer", version="1.0.0")
+    prompt_disambiguated = build_batch_review_prompt(
+        batch,
+        pr_number="202",
+        repo="my-org/my-repo",
+        pii_context_subset="Clean",
+        bundle=pr_bundle,
+    )
+    assert "Pull Request #202" in prompt_disambiguated
+    assert "src/app.py" in prompt_disambiguated
+
+
 def test_synthesize_final_review_report_deduplication_and_status():
     """Validates cross-batch deduplication, status resolution hierarchy, and triage notices (D-17, D-18)."""
     triage_clean = PRTriageSummary(
