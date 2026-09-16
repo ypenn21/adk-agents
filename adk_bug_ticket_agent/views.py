@@ -27,7 +27,7 @@ async def interact_with_agent(request): # Removed the initial check for session_
             if not all([app_name, user_id, session_id, new_message_data]) or not new_message_data.get('parts'):
                 return JsonResponse({'error': 'Invalid payload structure.'}, status=400)
 
-            user_query = new_message_data['parts'][0].get('text')
+            user_query = new_message_data['parts'][1].get('text')
 
             if not user_query:
                 return JsonResponse({'error': 'No message provided'}, status=400)
@@ -70,6 +70,7 @@ async def interact_with_agent(request): # Removed the initial check for session_
                     if event.content and event.content.parts and event.content.parts[0].text:
                         final_response_text = event.content.parts[0].text
                         break
+                break
             
             if final_response_text is None:
                 final_response_text = "Agent did not provide a clear text response."

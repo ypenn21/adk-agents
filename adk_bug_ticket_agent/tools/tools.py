@@ -108,7 +108,7 @@ class LazyToolboxTool:
         
     def __getattr__(self, name):
         self._ensure_tool()
-        return getattr(self._tool, name)
+        return getattr(self.tool, name)
 
 _toolbox_tools_cache = None
 
