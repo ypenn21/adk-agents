@@ -2,13 +2,10 @@ import os
 from enum import Enum
 from google.adk.agents import Agent
 from google.adk.models.lite_llm import LiteLlm
-from a2a.types import AgentCard, AgentCapabilities, AgentSkill
-from a2a.server.apps.jsonrpc.starlette_app import A2AStarletteApplication
-from a2a.server.request_handlers import DefaultRequestHandler
-from a2a.server.tasks import InMemoryTaskStore
+from a2a.types import AgentCapabilities, AgentSkill
+from google.adk.a2a import _compat
 from google.adk.a2a.utils.agent_to_a2a import to_a2a
 from . import system_prompt
-from .agent_executor import AdkAgentToA2AExecutor
 from .tools.tools import get_current_date, search_tool, get_toolbox_tools
 from google.adk.tools import load_memory
 from google.adk.sessions import DatabaseSessionService
@@ -134,9 +131,17 @@ class ServiceManager:
         return root_agent
 
     def _init_agent_executor(self):
-        """Initializes the agent executor."""
-        print("Initializing AdkAgentToA2AExecutor...")
-        return AdkAgentToA2AExecutor(self.root_agent, self.session_service, self.memory_service)
+        """Initializes the official ADK A2A agent executor."""
+        print("Initializing A2aAgentExecutor...")
+        from google.adk.a2a.executor.a2a_agent_executor import A2aAgentExecutor
+        from google.adk.runners import Runner
+        runner = Runner(
+            app_name="it_bug_assistant_agent",
+            agent=self.root_agent,
+            session_service=self.session_service,
+            memory_service=self.memory_service,
+        )
+        return A2aAgentExecutor(runner=runner)
 
     @property
     def session_service(self):
@@ -204,38 +209,33 @@ skill = AgentSkill(
     examples=["Create a new ticket for a login issue.", "Search for tickets related to 'database connection error'"],
 )
 
-agent_card = AgentCard(
+agent_card = _compat.build_agent_card(
     name="IT Bug Assistant Agent",
     description="An agent to help users with bug tickets, including searching, creating, and updating them.",
-    url=f"{AGENT_URL}",
     version="1.0.0",
-    defaultInputModes=SUPPORTED_CONTENT_TYPES,
-    defaultOutputModes=SUPPORTED_CONTENT_TYPES,
-    capabilities=capabilities,
+    url=AGENT_URL,
+    protocol_binding="JSONRPC",
     skills=[skill],
+    capabilities=capabilities,
+    default_input_modes=SUPPORTED_CONTENT_TYPES,
+    default_output_modes=SUPPORTED_CONTENT_TYPES,
 )
 
 # 1. Create the AgentCard, RequestHandler, and App at the global scope.
 #    This is more efficient as it's done only once when the function instance starts.
 
-#this is used for adk web ui or a2a framework for agent to agent communication. not in the django framework.
+# this is used for adk web ui or a2a framework for agent to agent communication. not in the django framework.
 django_env = os.environ.get("DJANGO")
-if django_env is None or django_env.strip().lower() != "true":
-    # Note: to_a2a() auto-generates an agent card using AgentCardBuilder
-    # The agent card uses the agent's name and description properties
-    # Skills are auto-generated from the agent's tools
-    root_agent = get_agent()
-    # a2a_app = to_a2a(root_agent, port=AGENT_PORT)
-    request_handler = DefaultRequestHandler(
-        agent_executor=AdkAgentToA2AExecutor(root_agent),
-        task_store=InMemoryTaskStore(),
-    )
-
-    # 2. The Functions Framework will automatically look for this 'app' variable.
-    app = A2AStarletteApplication(
-        agent_card=agent_card,
-        http_handler=request_handler,
-    ).build()
-    
-else:
+if django_env is not None and django_env.strip().lower() == "true":
+    # In Django web mode, app is unused to avoid port collisions and unnecessary initialization
+    app = None
     root_agent = None
+else:
+    # Standalone A2A ASGI server mode (used by DockerA2A & uvicorn)
+    root_agent = get_agent()
+    app = to_a2a(
+        root_agent,
+        host=os.environ.get("A2A_HOST", "0.0.0.0"),
+        port=int(AGENT_PORT),
+        agent_card=agent_card,
+    )

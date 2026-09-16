@@ -1,106 +1,47 @@
-from a2a.server.agent_execution import AgentExecutor, RequestContext
-from a2a.server.events import EventQueue
-from a2a.utils.errors import ServerError
-from a2a.types import (
-    Part,
-    Task,
-    TaskState,
-    TextPart,
-    UnsupportedOperationError,
-)
-from a2a.utils import (
-    new_agent_parts_message,
-    new_agent_text_message,
-    new_task,
-)
-from a2a.server.tasks import TaskUpdater
+"""A2A Agent Executor compatibility adapter for Google ADK."""
+from typing import Any, Optional
 
-from google.adk.memory.in_memory_memory_service import InMemoryMemoryService
-from google.adk.artifacts.in_memory_artifact_service import InMemoryArtifactService
-from google.adk.sessions.in_memory_session_service import InMemorySessionService
-from google.genai.types import Content
-
+from google.adk.agents import Agent
 from google.adk.agents.base_agent import BaseAgent
+from google.adk.artifacts.in_memory_artifact_service import InMemoryArtifactService
+from google.adk.memory.in_memory_memory_service import InMemoryMemoryService
 from google.adk.runners import Runner
+from google.adk.sessions.in_memory_session_service import InMemorySessionService
+from google.adk.a2a.executor.a2a_agent_executor import A2aAgentExecutor
 
 
-class AdkAgentToA2AExecutor(AgentExecutor):
-    _runner: Runner
+class AdkAgentToA2AExecutor(A2aAgentExecutor):
+    """Backwards-compatible wrapper delegating to Google ADK's native A2aAgentExecutor."""
 
     def __init__(
         self,
-        agent: BaseAgent = None,
-        session_service=InMemorySessionService(),
-        memory_service=InMemoryMemoryService(),
-        runner: Runner = None
-    ):
+        agent: Optional[BaseAgent] = None,
+        session_service: Optional[Any] = None,
+        memory_service: Optional[Any] = None,
+        runner: Optional[Runner] = None,
+    ) -> None:
         self.name = "IT Bug Assistant Agent"
-        if runner is not None:
-            self._runner = runner
-        else:
-            self._runner = Runner(
-                app_name=self.name,
-                agent=agent,
-                session_service=session_service,
-                artifact_service=InMemoryArtifactService(),
-                memory_service=memory_service,
+        if runner is None:
+            resolved_agent = (
+                agent if agent is not None else Agent(name="it_bug_assistant_agent")
             )
+            resolved_session = (
+                session_service
+                if session_service is not None
+                else InMemorySessionService()
+            )
+            resolved_memory = (
+                memory_service
+                if memory_service is not None
+                else InMemoryMemoryService()
+            )
+            runner = Runner(
+                app_name=self.name,
+                agent=resolved_agent,
+                session_service=resolved_session,
+                artifact_service=InMemoryArtifactService(),
+                memory_service=resolved_memory,
+            )
+        super().__init__(runner=runner)
         self.agent = agent
         self._user_id = "remote_agent"
-
-    async def execute(
-        self,
-        context: RequestContext,
-        event_queue: EventQueue,
-    ) -> None:
-        query = context.get_user_input()
-        task = context.current_task
-
-        if not task:
-            if not context.message:
-                return
-
-            task = new_task(context.message)
-            await event_queue.enqueue_event(task)
-
-        updater = TaskUpdater(event_queue, task.id, task.context_id)
-        session_id = task.context_id
-
-        session = await self._runner.session_service.get_session(
-            app_name=self.name,
-            user_id=self._user_id,
-            session_id=session_id,
-        )
-        if session is None:
-            session = await self._runner.session_service.create_session(
-                app_name=self.name,
-                user_id=self._user_id,
-                state={},
-                session_id=session_id,
-            )
-
-        content = Content(role="user", parts=[{"text": query}])
-
-        full_response_text = ""
-
-        # Working status
-        await updater.start_work()
-
-        try:
-            async for event in self._runner.run_async(
-                user_id=self._user_id, session_id=session.id, new_message=content
-            ):
-                if event.is_final_response():
-                    if event.content and event.content.parts and event.content.parts[0].text:
-                        await updater.add_artifact(
-                            [Part(root=TextPart(text=event.content.parts[0].text))], name='response'
-                        )
-                        await updater.complete()
-        except Exception as e:
-            await updater.failed(message=new_agent_text_message(f"Task failed with error: {e}"))
-
-
-    async def cancel(
-        self, context: RequestContext, event_queue: EventQueue
-    ) -> None:
-        raise ServerError(error=UnsupportedOperationError())
