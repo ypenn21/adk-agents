@@ -150,6 +150,13 @@ def generate_prompt_audit_section(reports_dir: Path) -> List[str]:
             ],
         ),
         (
+            "Batch PR Reviewer Agent",
+            [
+                reports_dir / "telemetry/pr_review_agent/batch-prompt-metadata.json",
+                reports_dir / "telemetry/batch_pr_reviewer_agent/prompt-metadata.json",
+            ],
+        ),
+        (
             "Quality Gate Agent",
             [
                 reports_dir / "telemetry/quality_gate_agent/prompt-metadata.json",

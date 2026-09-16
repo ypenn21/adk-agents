@@ -246,3 +246,103 @@ def test_write_token_usage_report_includes_prompt_metadata(tmp_path, monkeypatch
     assert report_file.exists()
     report_data = json.loads(report_file.read_text(encoding="utf-8"))
     assert report_data["prompt_template"] == mock_audit
+
+
+def test_load_batch_pr_reviewer_bundle_from_file():
+    """Verify batch_pr_reviewer v1.0.0 loads from markdown file with valid frontmatter."""
+    bundle = load_prompt_bundle("batch_pr_reviewer", version="1.0.0")
+    assert bundle.metadata.name == "batch_pr_reviewer"
+    assert bundle.metadata.version == "1.0.0"
+    assert bundle.metadata.is_fallback is False
+    assert len(bundle.metadata.sha256) == 64
+    assert len(bundle.metadata.required_variables) == 8
+    expected_vars = [
+        "pr_number",
+        "repo",
+        "batch_index",
+        "total_batches",
+        "files_count",
+        "total_estimated_tokens",
+        "pii_context_subset",
+        "diffs_text",
+    ]
+    assert bundle.metadata.required_variables == expected_vars
+    assert "### REVIEW GUIDELINES & CHECKLIST:" in bundle.system_instructions
+
+
+def test_render_batch_pr_reviewer_user_prompt():
+    """Verify render_user_prompt substitutes all 8 variables and preserves literal braces."""
+    bundle = load_prompt_bundle("batch_pr_reviewer", version="1.0.0")
+    rendered = bundle.render_user_prompt(
+        pr_number="123",
+        repo="test-owner/test-repo",
+        batch_index=1,
+        total_batches=3,
+        files_count=4,
+        total_estimated_tokens=5000,
+        pii_context_subset="No DLP findings detected.",
+        diffs_text="diff --git a/main.py b/main.py\n+def handler(): return {'status': 200}",
+    )
+    assert "Pull Request #123" in rendered
+    assert "repository test-owner/test-repo" in rendered
+    assert "Review Batch 1 of 3" in rendered
+    assert "(4 files, ~5000 tokens)" in rendered
+    assert "No DLP findings detected." in rendered
+    assert "def handler(): return {'status': 200}" in rendered
+    # Ensure literal curly braces are preserved without corruption
+    assert "{'status': 200}" in rendered
+    # Ensure no unresolved template variables remain
+    assert "${" not in rendered
+
+
+def test_render_batch_pr_reviewer_missing_variable_raises():
+    """Verify render_user_prompt raises ValueError if required variable is missing."""
+    bundle = load_prompt_bundle("batch_pr_reviewer", version="1.0.0")
+    with pytest.raises(ValueError, match="Missing required prompt variable: 'diffs_text'"):
+        bundle.render_user_prompt(
+            pr_number="123",
+            repo="test-owner/test-repo",
+            batch_index=1,
+            total_batches=3,
+            files_count=4,
+            total_estimated_tokens=5000,
+            pii_context_subset="No DLP findings detected.",
+            # diffs_text omitted
+        )
+
+
+def test_fallback_batch_pr_reviewer_builtin():
+    """Verify fallback to built-in bundle when requested file does not exist."""
+    bundle = load_prompt_bundle("batch_pr_reviewer", version="99.99.99")
+    assert bundle.metadata.name == "batch_pr_reviewer"
+    assert bundle.metadata.version == "1.0.0-builtin"
+    assert bundle.metadata.is_fallback is True
+    assert len(bundle.metadata.required_variables) == 8
+    assert "batch_index" in bundle.metadata.required_variables
+    assert "### REVIEW GUIDELINES & CHECKLIST:" in bundle.system_instructions
+
+
+def test_batch_system_instructions_module_constant():
+    """Verify BATCH_SYSTEM_INSTRUCTIONS module constant exists in pr_reviewer_agent."""
+    assert hasattr(pr_reviewer_agent, "BATCH_SYSTEM_INSTRUCTIONS")
+    assert isinstance(pr_reviewer_agent.BATCH_SYSTEM_INSTRUCTIONS, str)
+    assert len(pr_reviewer_agent.BATCH_SYSTEM_INSTRUCTIONS) > 0
+    assert "REST API Design" in pr_reviewer_agent.BATCH_SYSTEM_INSTRUCTIONS
+    assert "BatchReviewResult" in pr_reviewer_agent.BATCH_SYSTEM_INSTRUCTIONS
+
+
+def test_resolve_env_config_batch_prompt_parameters(monkeypatch):
+    """Verify resolve_env_config extracts batch prompt version and path."""
+    monkeypatch.setenv("BATCH_PR_REVIEW_PROMPT_VERSION", "2.0.0")
+    monkeypatch.setenv("BATCH_PR_REVIEW_PROMPT_PATH", "/custom/path/batch.md")
+    cfg = resolve_env_config()
+    assert cfg["batch_pr_review_prompt_version"] == "2.0.0"
+    assert cfg["batch_pr_review_prompt_path"] == "/custom/path/batch.md"
+
+    cfg_direct = resolve_env_config(
+        batch_pr_review_prompt_version="1.0.0",
+        batch_pr_review_prompt_path="/other/batch.md",
+    )
+    assert cfg_direct["batch_pr_review_prompt_version"] == "1.0.0"
+    assert cfg_direct["batch_pr_review_prompt_path"] == "/other/batch.md"
+
