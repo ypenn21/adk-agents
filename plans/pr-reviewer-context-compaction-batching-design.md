@@ -1,17 +1,17 @@
 # Feature Implementation Plan: Context-Managed Batching, Compaction & Triage for PR Reviewer Agent
 
 ## 📋 Todo Checklist
-- [ ] Task 1: Implement paginated file retrieval and exclusion filtering (`fetch_all_pr_modified_files`, `triage_and_filter_files`) in [`.github/scripts/helper.py`](file:///Users/yannipeng/git-projects/adk-agents/.github/scripts/helper.py)
-- [ ] Task 2: Implement token-aware batch partitioner (`partition_files_into_batches`) in [`.github/scripts/helper.py`](file:///Users/yannipeng/git-projects/adk-agents/.github/scripts/helper.py)
-- [ ] Task 3: Implement risk scoring and file triage heuristics (`triage_review_files`) in [`.github/scripts/helper.py`](file:///Users/yannipeng/git-projects/adk-agents/.github/scripts/helper.py)
-- [ ] Task 4: Define batch data schemas (`FileDiffItem`, `ReviewBatch`, `BatchReviewResult`, `PRTriageSummary`) in [`.github/scripts/pr_reviewer_agent.py`](file:///Users/yannipeng/git-projects/adk-agents/.github/scripts/pr_reviewer_agent.py)
-- [ ] Task 5: Implement isolated-context batch review runner (`review_batch_with_isolated_context`) in [`.github/scripts/pr_reviewer_agent.py`](file:///Users/yannipeng/git-projects/adk-agents/.github/scripts/pr_reviewer_agent.py)
-- [ ] Task 6: Implement finding accumulator, cross-batch deduplication, and final report synthesis (`synthesize_final_review_report`) in [`.github/scripts/pr_reviewer_agent.py`](file:///Users/yannipeng/git-projects/adk-agents/.github/scripts/pr_reviewer_agent.py)
-- [ ] Task 7: Refactor `run_pr_review()` in [`.github/scripts/pr_reviewer_agent.py`](file:///Users/yannipeng/git-projects/adk-agents/.github/scripts/pr_reviewer_agent.py) to execute the batch review pipeline
-- [ ] Task 8: Update configuration resolution in `resolve_env_config()` for batch thresholds (`BATCH_MAX_FILES`, `BATCH_MAX_TOKENS`, `MAX_REVIEW_FILES_CAP`)
-- [ ] Task 9: Update [`.github/workflows/source-code-pii-review.yml`](file:///Users/yannipeng/git-projects/adk-agents/.github/workflows/source-code-pii-review.yml) with batch configuration environment variables
-- [ ] Task 10: Update architectural specification [`docs/spec.md`](file:///Users/yannipeng/git-projects/adk-agents/docs/spec.md) with Decisions D-15 through D-18
-- [ ] Task 11: Write unit and contract tests in [`.github/scripts/tests/test_helper.py`](file:///Users/yannipeng/git-projects/adk-agents/.github/scripts/tests/test_helper.py) and [`.github/scripts/tests/test_pr_reviewer_agent.py`](file:///Users/yannipeng/git-projects/adk-agents/.github/scripts/tests/test_pr_reviewer_agent.py)
+- [x] Task 1: Implement paginated file retrieval and exclusion filtering (`fetch_all_pr_modified_files`, `triage_and_filter_files`) in [`.github/scripts/helper.py`](file:///Users/yannipeng/git-projects/adk-agents/.github/scripts/helper.py)
+- [x] Task 2: Implement token-aware batch partitioner (`partition_files_into_batches`) in [`.github/scripts/helper.py`](file:///Users/yannipeng/git-projects/adk-agents/.github/scripts/helper.py)
+- [x] Task 3: Implement risk scoring and file triage heuristics (`triage_review_files`) in [`.github/scripts/helper.py`](file:///Users/yannipeng/git-projects/adk-agents/.github/scripts/helper.py)
+- [x] Task 4: Define batch data schemas (`FileDiffItem`, `ReviewBatch`, `BatchReviewResult`, `PRTriageSummary`) in [`.github/scripts/pr_reviewer_agent.py`](file:///Users/yannipeng/git-projects/adk-agents/.github/scripts/pr_reviewer_agent.py)
+- [x] Task 5: Implement isolated-context batch review runner (`review_batch_with_isolated_context`) in [`.github/scripts/pr_reviewer_agent.py`](file:///Users/yannipeng/git-projects/adk-agents/.github/scripts/pr_reviewer_agent.py)
+- [x] Task 6: Implement finding accumulator, cross-batch deduplication, and final report synthesis (`synthesize_final_review_report`) in [`.github/scripts/pr_reviewer_agent.py`](file:///Users/yannipeng/git-projects/adk-agents/.github/scripts/pr_reviewer_agent.py)
+- [x] Task 7: Refactor `run_pr_review()` in [`.github/scripts/pr_reviewer_agent.py`](file:///Users/yannipeng/git-projects/adk-agents/.github/scripts/pr_reviewer_agent.py) to execute the batch review pipeline
+- [x] Task 8: Update configuration resolution in `resolve_env_config()` for batch thresholds (`BATCH_MAX_FILES`, `BATCH_MAX_TOKENS`, `MAX_REVIEW_FILES_CAP`)
+- [x] Task 9: Update [`.github/workflows/source-code-pii-review.yml`](file:///Users/yannipeng/git-projects/adk-agents/.github/workflows/source-code-pii-review.yml) with batch configuration environment variables
+- [x] Task 10: Update architectural specification [`docs/spec.md`](file:///Users/yannipeng/git-projects/adk-agents/docs/spec.md) with Decisions D-15 through D-18
+- [x] Task 11: Write unit and contract tests in [`.github/scripts/tests/test_helper.py`](file:///Users/yannipeng/git-projects/adk-agents/.github/scripts/tests/test_helper.py) and [`.github/scripts/tests/test_pr_reviewer_agent.py`](file:///Users/yannipeng/git-projects/adk-agents/.github/scripts/tests/test_pr_reviewer_agent.py)
 
 ---
 
