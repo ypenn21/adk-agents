@@ -1,18 +1,18 @@
 # Feature Implementation Plan: LLM Inference Testing Architecture & Evaluation Framework
 
 ## 📋 Todo Checklist
-- [ ] Task 1: Define evaluation data schemas and result models in `.github/scripts/tests/eval/evalset_schema.py`
-- [ ] Task 2: Author curated golden test cases in `.github/scripts/tests/eval/cases/` (Clean code, Hardcoded secrets, SQL injection, Zero division, Style suggestions, Fail-closed DLP, Blocker alignment)
-- [ ] Task 3: Implement lightweight Stdio Mock MCP Server for GitHub diffs and file contents in `.github/scripts/tests/eval/mock_mcp_server.py`
-- [ ] Task 4: Implement evaluation metric calculators (Schema Conformance, Vulnerability Recall, Clean FPR, Cost Spend) in `.github/scripts/tests/eval/metrics.py`
-- [ ] Task 5: Implement standalone Eval Runner CLI and GitHub Actions Step Summary generator in `.github/scripts/tests/eval/eval_runner.py`
-- [ ] Task 6: Implement Tier 2 Cassette Replay Engine and test suite in `.github/scripts/tests/eval/test_replay_pipeline.py` with mock response cassettes in `.github/scripts/tests/eval/cassettes/`
-- [ ] Task 7: Enhance Pytest configuration in `.github/scripts/tests/conftest.py` with custom `@pytest.mark.inference` marker, `--run-inference` CLI option, and shared fixtures
-- [ ] Task 8: Implement Tier 3 Live Inference test suite for PR Reviewer Agent in `.github/scripts/tests/eval/test_inference_pr_reviewer.py`
-- [ ] Task 9: Implement Tier 3 Live Inference test suite for Quality Gate Agent in `.github/scripts/tests/eval/test_inference_quality_gate.py`
-- [ ] Task 10: Create GitHub Actions evaluation workflow `.github/workflows/inference-evaluation.yml` for scheduled nightly runs, prompt change triggers, and manual dispatch
-- [ ] Task 11: Document Decision D-20 (LLM Inference Testing Architecture & Evaluation Framework) in `docs/spec.md`
-- [ ] Task 12: Verify all 124 existing Tier 1 unit/contract tests and Tier 2 replay tests execute and pass with zero cloud calls
+- [x] Task 1: Define evaluation data schemas and result models in `.github/scripts/tests/eval/evalset_schema.py`
+- [x] Task 2: Author curated golden test cases in `.github/scripts/tests/eval/cases/` (Clean code, Hardcoded secrets, SQL injection, Zero division, Style suggestions, Fail-closed DLP, Blocker alignment)
+- [x] Task 3: Implement lightweight Stdio Mock MCP Server for GitHub diffs and file contents in `.github/scripts/tests/eval/mock_mcp_server.py`
+- [x] Task 4: Implement evaluation metric calculators (Schema Conformance, Vulnerability Recall, Clean FPR, Cost Spend) in `.github/scripts/tests/eval/metrics.py`
+- [x] Task 5: Implement standalone Eval Runner CLI and GitHub Actions Step Summary generator in `.github/scripts/tests/eval/eval_runner.py`
+- [x] Task 6: Implement Tier 2 Cassette Replay Engine and test suite in `.github/scripts/tests/eval/test_replay_pipeline.py` with mock response cassettes in `.github/scripts/tests/eval/cassettes/`
+- [x] Task 7: Enhance Pytest configuration in `.github/scripts/tests/conftest.py` with custom `@pytest.mark.inference` marker, `--run-inference` CLI option, and shared fixtures
+- [x] Task 8: Implement Tier 3 Live Inference test suite for PR Reviewer Agent in `.github/scripts/tests/eval/test_inference_pr_reviewer.py`
+- [x] Task 9: Implement Tier 3 Live Inference test suite for Quality Gate Agent in `.github/scripts/tests/eval/test_inference_quality_gate.py`
+- [x] Task 10: Create GitHub Actions evaluation workflow `.github/workflows/inference-evaluation.yml` for scheduled nightly runs, prompt change triggers, and manual dispatch
+- [x] Task 11: Document Decision D-20 (LLM Inference Testing Architecture & Evaluation Framework) in `docs/spec.md`
+- [x] Task 12: Verify all 124 existing Tier 1 unit/contract tests and Tier 2 replay tests execute and pass with zero cloud calls
 
 ---
 
@@ -679,7 +679,7 @@ def evaluate_case_assertions(case: EvalCase, report: Any, duration: float, usage
     - Budget limit early halt without calling `structured_output()`
     - Deserialization into `PRReviewReport` and `QualityGateDecision`
     - Token spend calculations with 0 cloud network calls.
-- **Status**: `- [ ]`
+- **Status**: `- [x]`
 
 ### Step 7: Pytest Configuration & Test Fixture Extensions
 - **Files to modify**: `.github/scripts/tests/conftest.py`
@@ -688,7 +688,7 @@ def evaluate_case_assertions(case: EvalCase, report: Any, duration: float, usage
   - Add `pytest_configure(config)` registering marker `inference`.
   - Add `pytest_collection_modifyitems(config, items)` to automatically skip `@pytest.mark.inference` tests when `--run-inference` is NOT supplied.
   - Add shared fixtures: `eval_cases_dir`, `load_eval_case`, `mock_dlp_report`, `mock_pr_review_file`.
-- **Status**: `- [ ]`
+- **Status**: `- [x]`
 
 ### Step 8: Tier 3 Live Inference Tests for PR Reviewer Agent
 - **Files to create**: `.github/scripts/tests/eval/test_inference_pr_reviewer.py`
@@ -697,7 +697,7 @@ def evaluate_case_assertions(case: EvalCase, report: Any, duration: float, usage
   - Test case parameterization across `tc01_clean_code`, `tc02_secret_leak`, `tc03_sql_injection`, `tc04_zero_division`, `tc05_style_suggestion`.
   - Use `create_mock_github_mcp_server(case_fixture)` to supply diffs and files to `pr_reviewer_agent.run_pr_review()`.
   - Assert schema conformance, status match, blocker recall, and budget constraints.
-- **Status**: `- [ ]`
+- **Status**: `- [x]`
 
 ### Step 9: Tier 3 Live Inference Tests for Quality Gate Agent
 - **Files to create**: `.github/scripts/tests/eval/test_inference_quality_gate.py`
@@ -706,7 +706,7 @@ def evaluate_case_assertions(case: EvalCase, report: Any, duration: float, usage
   - Test case parameterization across `tc01_clean_code`, `tc02_secret_leak`, `tc06_fail_closed_dlp`, `tc07_blocker_alignment`.
   - Write temporary DLP and PR review reports using pytest `tmp_path`, call `quality_gate_agent.evaluate_quality_gate()`.
   - Assert `QualityGateDecision` validity, `passed` boolean match, and critical failure categories.
-- **Status**: `- [ ]`
+- **Status**: `- [x]`
 
 ### Step 10: GitHub Actions Inference Evaluation Workflow
 - **Files to create**: `.github/workflows/inference-evaluation.yml`

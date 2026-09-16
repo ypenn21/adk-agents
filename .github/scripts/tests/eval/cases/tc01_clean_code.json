@@ -1,0 +1,33 @@
+{
+  "case_id": "tc01_clean_code",
+  "name": "Clean Django View and Unit Test",
+  "description": "Clean Django PR introducing a health check view and unit test. Follows REST conventions, includes proper status codes, type hints, and passes all checks.",
+  "category": "clean",
+  "pr_number": "101",
+  "repo": "octocat/hello-world",
+  "diff_content": "diff --git a/web_ui/views.py b/web_ui/views.py\n--- a/web_ui/views.py\n+++ b/web_ui/views.py\n@@ -10,6 +10,14 @@ from django.http import JsonResponse, HttpRequest\n \n+def health_check(request: HttpRequest) -> JsonResponse:\n+    \"\"\"Returns system operational status.\"\"\"\n+    return JsonResponse({\"status\": \"ok\", \"service\": \"it-bug-assistant\"}, status=200)\ndiff --git a/web_ui/tests.py b/web_ui/tests.py\n--- a/web_ui/tests.py\n+++ b/web_ui/tests.py\n@@ -1,6 +1,15 @@\n from django.test import TestCase, Client\n+\n+class HealthCheckTestCase(TestCase):\n+    def setUp(self):\n+        self.client = Client()\n+\n+    def test_health_check_returns_200(self):\n+        response = self.client.get(\"/health/\")\n+        self.assertEqual(response.status_code, 200)\n+        self.assertEqual(response.json()[\"status\"], \"ok\")\n",
+  "modified_files": {
+    "web_ui/views.py": [10, 11, 12, 13, 14],
+    "web_ui/tests.py": [3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+  },
+  "file_tree": {
+    "web_ui/views.py": "from django.http import JsonResponse, HttpRequest\n\ndef health_check(request: HttpRequest) -> JsonResponse:\n    \"\"\"Returns system operational status.\"\"\"\n    return JsonResponse({\"status\": \"ok\", \"service\": \"it-bug-assistant\"}, status=200)\n",
+    "web_ui/tests.py": "from django.test import TestCase, Client\n\nclass HealthCheckTestCase(TestCase):\n    def setUp(self):\n        self.client = Client()\n\n    def test_health_check_returns_200(self):\n        response = self.client.get(\"/health/\")\n        self.assertEqual(response.status_code, 200)\n        self.assertEqual(response.json()[\"status\"], \"ok\")\n"
+  },
+  "pii_scan_content": "✅ No sensitive data or PII detected by Cloud DLP.",
+  "pr_review_content": "{\n  \"overall_status\": \"APPROVE\",\n  \"summary\": \"All PR changes look clean, well-structured, and meet standards. Added health check endpoint with unit test.\",\n  \"findings\": []\n}",
+  "expected_review": {
+    "expected_status": ["APPROVE"],
+    "min_findings": 0,
+    "max_findings": 0,
+    "has_blockers": false,
+    "required_findings": []
+  },
+  "expected_gate": {
+    "expected_passed": true,
+    "min_failures": 0,
+    "max_failures": 0,
+    "expected_failure_categories": [],
+    "expected_severities": []
+  }
+}

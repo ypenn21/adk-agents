@@ -1,0 +1,37 @@
+{
+  "case_id": "quality_gate_fail",
+  "model": "gemini-3.7-flash",
+  "recorded_at": "2026-09-16T03:00:00Z",
+  "usage_metadata": {
+    "prompt_token_count": 1150,
+    "candidates_token_count": 240,
+    "cached_content_token_count": 0,
+    "thoughts_token_count": 80,
+    "thought_tokens": 80,
+    "total_token_count": 1470
+  },
+  "stop_reason": "STOP",
+  "chunks": [
+    {
+      "type": "Thought",
+      "content": "Evaluating DLP scan and PR code review report. PR review contains a BLOCKER finding for hardcoded secret key in settings.py. Gate must fail."
+    },
+    {
+      "type": "Text",
+      "content": "{\"passed\": false, \"summary\": \"Quality gate failed due to blocking secret leak in PR code review.\", \"failures\": [{\"category\": \"PII_LEAK\", \"component\": \"PR Code Review\", \"severity\": \"CRITICAL\", \"reason\": \"Hardcoded secret key in settings.py\", \"remediation\": \"Rotate key and use Secret Manager\"}]}"
+    }
+  ],
+  "raw_structured_output": {
+    "passed": false,
+    "summary": "Quality gate failed due to blocking secret leak in PR code review.",
+    "failures": [
+      {
+        "category": "PII_LEAK",
+        "component": "PR Code Review",
+        "severity": "CRITICAL",
+        "reason": "Hardcoded secret key in settings.py",
+        "remediation": "Rotate key and use Secret Manager"
+      }
+    ]
+  }
+}

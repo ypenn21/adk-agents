@@ -1,0 +1,34 @@
+{
+  "case_id": "tc05_style_suggestion",
+  "name": "Missing Type Annotations and Docstring",
+  "description": "Function missing type hint or docstring. Expects APPROVE or COMMENT with severity SUGGESTION or INFO, gate passed=True.",
+  "category": "style",
+  "pr_number": "105",
+  "repo": "octocat/hello-world",
+  "diff_content": "diff --git a/adk_bug_ticket_agent/utils.py b/adk_bug_ticket_agent/utils.py\n--- a/adk_bug_ticket_agent/utils.py\n+++ b/adk_bug_ticket_agent/utils.py\n@@ -8,3 +8,5 @@\n+def format_user_label(first_name, last_name):\n+    return f\"{first_name} {last_name}\".strip()\n",
+  "modified_files": {
+    "adk_bug_ticket_agent/utils.py": [9, 10]
+  },
+  "file_tree": {
+    "adk_bug_ticket_agent/utils.py": "def format_user_label(first_name, last_name):\n    return f\"{first_name} {last_name}\".strip()\n"
+  },
+  "pii_scan_content": "✅ No sensitive data or PII detected by Cloud DLP.",
+  "pr_review_content": "{\n  \"overall_status\": \"APPROVE\",\n  \"summary\": \"Clean utility function implementation with minor non-blocking suggestions for type hints and docstrings.\",\n  \"findings\": [\n    {\n      \"file_path\": \"adk_bug_ticket_agent/utils.py\",\n      \"line_number\": 9,\n      \"severity\": \"SUGGESTION\",\n      \"title\": \"Add Type Annotations and Docstring\",\n      \"details\": \"Function format_user_label lacks PEP 484 type annotations and docstring.\",\n      \"suggestion\": \"def format_user_label(first_name: str, last_name: str) -> str:\\n    \\\"\\\"\\\"Formats user name into display label.\\\"\\\"\\\"\\n    return f\\\"{first_name} {last_name}\\\".strip()\",\n      \"pii_leak\": false\n    }\n  ]\n}",
+  "expected_review": {
+    "expected_status": ["APPROVE", "COMMENT"],
+    "has_blockers": false,
+    "required_findings": [
+      {
+        "file_path": "adk_bug_ticket_agent/utils.py",
+        "expected_severity": "SUGGESTION"
+      }
+    ]
+  },
+  "expected_gate": {
+    "expected_passed": true,
+    "min_failures": 0,
+    "max_failures": 0,
+    "expected_failure_categories": [],
+    "expected_severities": []
+  }
+}
