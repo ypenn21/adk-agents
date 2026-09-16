@@ -2,7 +2,7 @@
 name: engineer
 description: Software Engineer subagent. Executes precise code implementations, writes high-quality code, runs tests, and resolves technical tasks.
 kind: local
-model: gemini-3.7-flash-low
+model: inherit
 enable_write_tools: true
 enable_mcp_tools: true
 mcp_servers:
