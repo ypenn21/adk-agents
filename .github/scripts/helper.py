@@ -17,7 +17,7 @@ import urllib.request
 import urllib.error
 from pathlib import Path
 from typing import Optional, Union, Any, TypeVar
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 try:
     from google.antigravity import types
@@ -31,6 +31,42 @@ POSITIVE_APPROVAL_TEMPLATE = (
     "Great job! No code defects, architectural issues, or Cloud DLP security "
     "findings were detected in this pull request. All changes look clean and ready to merge."
 )
+
+
+# =====================================================================
+# Batch & Triage Schemas (Decision D-15, D-16)
+# =====================================================================
+
+class FileDiffItem(BaseModel):
+    """Represents a modified file diff item with token estimation and risk scoring."""
+    filename: str
+    status: str = "modified"
+    additions: int = 0
+    deletions: int = 0
+    changes: int = 0
+    patch: str = ""
+    estimated_tokens: int = 0
+    pii_flagged: bool = False
+    risk_score: int = 0
+
+
+class ReviewBatch(BaseModel):
+    """Represents a bounded batch of files partitioned for isolated context review."""
+    batch_index: int
+    total_batches: int
+    files: list[FileDiffItem] = Field(default_factory=list)
+    total_estimated_tokens: int = 0
+
+
+class PRTriageSummary(BaseModel):
+    """Metadata tracking file counts, exclusion filtering, and triage capping."""
+    total_files_in_pr: int
+    reviewable_files_count: int
+    excluded_files_count: int
+    triaged_files_count: int
+    skipped_files_count: int
+    batches_executed: int = 0
+    triage_applied: bool = False
 
 
 # =====================================================================
@@ -54,8 +90,11 @@ def resolve_env_config(
     quality_gate_prompt_version: Optional[str] = None,
     pr_review_prompt_path: Optional[str] = None,
     quality_gate_prompt_path: Optional[str] = None,
+    batch_max_files: Optional[int] = None,
+    batch_max_tokens: Optional[int] = None,
+    max_review_files_cap: Optional[int] = None,
 ) -> dict[str, Any]:
-    """Resolves configuration, token budget, and prompt template parameters (Decision D-4, D-13, D-19)."""
+    """Resolves configuration, token budget, batch thresholds, and prompt template parameters (Decision D-4, D-13, D-15, D-16, D-19)."""
     resolved_pr = pr_number or os.environ.get("PULL_REQUEST_NUMBER") or os.environ.get("PR_NUMBER")
     if resolved_pr is not None:
         resolved_pr = str(resolved_pr).strip()
@@ -168,6 +207,9 @@ def resolve_env_config(
     resolved_model_calls = _parse_int_env(max_model_calls, "MAX_MODEL_CALLS", 100)
     resolved_tool_calls = _parse_int_env(max_tool_calls, "MAX_TOOL_CALLS", 50)
     resolved_spend_usd = _parse_float_env(max_spend_usd, "MAX_SPEND_USD")
+    resolved_batch_max_files = _parse_int_env(batch_max_files, "BATCH_MAX_FILES", 25)
+    resolved_batch_max_tokens = _parse_int_env(batch_max_tokens, "BATCH_MAX_TOKENS", 60_000)
+    resolved_max_review_files_cap = _parse_int_env(max_review_files_cap, "MAX_REVIEW_FILES_CAP", 200)
 
     if resolved_spend_usd is not None and resolved_spend_usd > 0:
         spend_derived_tokens = int((resolved_spend_usd / 3.75) * 1_000_000)
@@ -190,6 +232,9 @@ def resolve_env_config(
         "quality_gate_prompt_version": resolved_quality_gate_prompt_version,
         "pr_review_prompt_path": resolved_pr_review_prompt_path,
         "quality_gate_prompt_path": resolved_quality_gate_prompt_path,
+        "batch_max_files": resolved_batch_max_files,
+        "batch_max_tokens": resolved_batch_max_tokens,
+        "max_review_files_cap": resolved_max_review_files_cap,
     }
 
 
@@ -230,6 +275,138 @@ def sanitize_and_validate_repo(repo: str) -> Optional[tuple[str, str]]:
 
 
 
+# =====================================================================
+# File Discovery, Exclusion, Triage, and Batching (D-15, D-16)
+# =====================================================================
+
+EXCLUDED_FILE_PATTERNS: list[str] = [
+    r"package-lock\.json$",
+    r"yarn\.lock$",
+    r"pnpm-lock\.yaml$",
+    r"poetry\.lock$",
+    r"Pipfile\.lock$",
+    r"composer\.lock$",
+    r"go\.sum$",
+    r"\.min\.(js|css)$",
+    r"\.map$",
+    r"\.(png|jpg|jpeg|gif|svg|ico|pdf|zip|tar|gz|woff|woff2|ttf|eot)$",
+    r"vendor/",
+    r"node_modules/",
+]
+
+
+def is_excluded_file(filename: str) -> bool:
+    """Checks if a file path matches any exclusion pattern in EXCLUDED_FILE_PATTERNS."""
+    if not filename:
+        return False
+    normalized = filename.replace("\\", "/")
+    for pattern in EXCLUDED_FILE_PATTERNS:
+        if re.search(pattern, normalized, re.IGNORECASE):
+            return True
+    return False
+
+
+def calculate_file_risk_score(
+    filename: str,
+    pii_context: str = "",
+    additions: int = 0,
+    changes: int = 0,
+) -> tuple[int, bool]:
+    """Calculates file risk score and DLP/PII sensitivity flag (Decision D-16)."""
+    pii_flagged = False
+    risk_score = 0
+
+    if not filename:
+        return 0, False
+
+    filename_lower = filename.lower()
+    base_name = os.path.basename(filename)
+
+    # 1. PII Context match (+100 risk, pii_flagged = True)
+    if pii_context:
+        if filename in pii_context or (base_name and base_name in pii_context):
+            risk_score += 100
+            pii_flagged = True
+
+    # 2. Security / Auth / Crypto paths (+50 risk)
+    security_keywords = (
+        "auth",
+        "security",
+        "crypto",
+        "secret",
+        "credential",
+        "password",
+        "login",
+        "token",
+        "cert",
+        "key",
+    )
+    if any(kw in filename_lower for kw in security_keywords):
+        risk_score += 50
+
+    # 3. API routes / endpoints (+30 risk)
+    api_keywords = (
+        "api",
+        "endpoint",
+        "routes",
+        "views",
+        "controllers",
+        "urls",
+    )
+    if any(kw in filename_lower for kw in api_keywords):
+        risk_score += 30
+
+    # 4. Size contribution: min(20, (changes or additions) // 10)
+    size_risk = min(20, max(0, (changes or additions) // 10))
+    risk_score += size_risk
+
+    return risk_score, pii_flagged
+
+
+def fetch_all_pr_modified_files(
+    owner: str,
+    repo_name: str,
+    pr_number: Union[str, int],
+    token: str,
+    timeout: int = 15,
+) -> list[dict[str, Any]]:
+    """Paginates through GitHub REST API to fetch all modified files on a PR (Decision D-15).
+
+    Queries GET https://api.github.com/repos/{owner}/{repo_name}/pulls/{pr_number}/files?per_page=100&page={page}
+    Paginates from page=1 up to page=100 (10,000 files max), halting when an empty page or < 100 items are returned.
+    """
+    if not token or not token.strip():
+        return []
+
+    all_files: list[dict[str, Any]] = []
+    for page in range(1, 101):
+        url = f"https://api.github.com/repos/{owner}/{repo_name}/pulls/{pr_number}/files?per_page=100&page={page}"
+        req = urllib.request.Request(
+            url=url,
+            method="GET",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Accept": "application/vnd.github+json",
+                "User-Agent": "automated-pr-reviewer/1.0",
+                "X-GitHub-Api-Version": "2022-11-28",
+            },
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                data = resp.read().decode("utf-8")
+                files_data = json.loads(data)
+                if not isinstance(files_data, list) or not files_data:
+                    break
+                all_files.extend(files_data)
+                if len(files_data) < 100:
+                    break
+        except Exception as e:
+            print(f"[Warning] Could not fetch PR diff hunks from GitHub API: {e}", flush=True)
+            break
+
+    return all_files
+
+
 def fetch_pr_modified_lines(
     owner: str,
     repo_name: str,
@@ -241,45 +418,169 @@ def fetch_pr_modified_lines(
     if not token or not token.strip():
         return {}
 
-    url = f"https://api.github.com/repos/{owner}/{repo_name}/pulls/{pr_number}/files?per_page=100"
-    req = urllib.request.Request(
-        url=url,
-        method="GET",
-        headers={
-            "Authorization": f"Bearer {token}",
-            "Accept": "application/vnd.github+json",
-            "User-Agent": "automated-pr-reviewer/1.0",
-            "X-GitHub-Api-Version": "2022-11-28",
-        },
-    )
-
     diff_map: dict[str, list[int]] = {}
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            files_data = json.loads(resp.read().decode("utf-8"))
-            for file_info in files_data:
-                filename = file_info.get("filename")
-                patch = file_info.get("patch", "")
-                if not filename or not patch:
-                    continue
+        files_data = fetch_all_pr_modified_files(
+            owner=owner,
+            repo_name=repo_name,
+            pr_number=pr_number,
+            token=token,
+            timeout=timeout,
+        )
+        for file_info in files_data:
+            filename = file_info.get("filename")
+            patch = file_info.get("patch", "")
+            if not filename or not patch:
+                continue
 
-                lines: list[int] = []
-                current_line = 0
-                for line in patch.splitlines():
-                    hunk_match = re.match(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@", line)
-                    if hunk_match:
-                        current_line = int(hunk_match.group(1))
-                    elif line.startswith("+") and not line.startswith("+++"):
-                        lines.append(current_line)
-                        current_line += 1
-                    elif line.startswith(" "):
-                        lines.append(current_line)
-                        current_line += 1
-                diff_map[filename] = lines
+            lines: list[int] = []
+            current_line = 0
+            for line in patch.splitlines():
+                hunk_match = re.match(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@", line)
+                if hunk_match:
+                    current_line = int(hunk_match.group(1))
+                elif line.startswith("+") and not line.startswith("+++"):
+                    lines.append(current_line)
+                    current_line += 1
+                elif line.startswith(" "):
+                    lines.append(current_line)
+                    current_line += 1
+            diff_map[filename] = lines
     except Exception as e:
         print(f"[Warning] Could not fetch PR diff hunks from GitHub API: {e}", flush=True)
 
     return diff_map
+
+
+def triage_and_filter_files(
+    files: list[dict[str, Any]],
+    pii_context: str = "",
+    max_cap: int = 200,
+) -> tuple[list[FileDiffItem], PRTriageSummary]:
+    """Filters non-reviewable files, assigns risk scores, and caps review volume (Decision D-16)."""
+    total_files_in_pr = len(files)
+    excluded_files_count = 0
+    reviewable_items: list[FileDiffItem] = []
+
+    for file_info in files:
+        filename = file_info.get("filename", "")
+        if not filename or is_excluded_file(filename):
+            excluded_files_count += 1
+            continue
+
+        status = file_info.get("status", "modified")
+        additions = int(file_info.get("additions", 0) or 0)
+        deletions = int(file_info.get("deletions", 0) or 0)
+        changes = int(file_info.get("changes", additions + deletions) or 0)
+        patch = file_info.get("patch", "") or ""
+
+        estimated_tokens = max(1, len(patch) // 4) if patch else 0
+
+        risk_score, pii_flagged = calculate_file_risk_score(
+            filename=filename,
+            pii_context=pii_context,
+            additions=additions,
+            changes=changes,
+        )
+
+        reviewable_items.append(
+            FileDiffItem(
+                filename=filename,
+                status=status,
+                additions=additions,
+                deletions=deletions,
+                changes=changes,
+                patch=patch,
+                estimated_tokens=estimated_tokens,
+                pii_flagged=pii_flagged,
+                risk_score=risk_score,
+            )
+        )
+
+    reviewable_files_count = len(reviewable_items)
+    triage_applied = False
+    triaged_files_count = reviewable_files_count
+    skipped_files_count = 0
+
+    if reviewable_files_count > max_cap:
+        reviewable_items.sort(
+            key=lambda item: (item.risk_score, item.changes, item.additions),
+            reverse=True,
+        )
+        capped_items = reviewable_items[:max_cap]
+        triage_applied = True
+        triaged_files_count = max_cap
+        skipped_files_count = reviewable_files_count - max_cap
+    else:
+        capped_items = reviewable_items
+
+    summary = PRTriageSummary(
+        total_files_in_pr=total_files_in_pr,
+        reviewable_files_count=reviewable_files_count,
+        excluded_files_count=excluded_files_count,
+        triaged_files_count=triaged_files_count,
+        skipped_files_count=skipped_files_count,
+        batches_executed=0,
+        triage_applied=triage_applied,
+    )
+
+    return capped_items, summary
+
+
+triage_review_files = triage_and_filter_files
+
+
+def partition_files_into_batches(
+    files: list[FileDiffItem],
+    max_files_per_batch: int = 25,
+    max_tokens_per_batch: int = 60_000,
+) -> list[ReviewBatch]:
+    """Partitions files into bounded batches based on file count and estimated tokens (Decision D-16)."""
+    if not files:
+        return []
+
+    batches: list[list[FileDiffItem]] = []
+    current_batch: list[FileDiffItem] = []
+    current_batch_tokens = 0
+
+    for file_item in files:
+        if file_item.estimated_tokens >= max_tokens_per_batch:
+            if current_batch:
+                batches.append(current_batch)
+                current_batch = []
+                current_batch_tokens = 0
+            batches.append([file_item])
+            continue
+
+        if current_batch and (
+            len(current_batch) >= max_files_per_batch
+            or (current_batch_tokens + file_item.estimated_tokens) > max_tokens_per_batch
+        ):
+            batches.append(current_batch)
+            current_batch = [file_item]
+            current_batch_tokens = file_item.estimated_tokens
+        else:
+            current_batch.append(file_item)
+            current_batch_tokens += file_item.estimated_tokens
+
+    if current_batch:
+        batches.append(current_batch)
+
+    total_batches = len(batches)
+    review_batches: list[ReviewBatch] = []
+    for idx, batch_files in enumerate(batches, start=1):
+        total_tokens = sum(f.estimated_tokens for f in batch_files)
+        review_batches.append(
+            ReviewBatch(
+                batch_index=idx,
+                total_batches=total_batches,
+                files=batch_files,
+                total_estimated_tokens=total_tokens,
+            )
+        )
+
+    return review_batches
+
 
 
 def fetch_pr_comments(

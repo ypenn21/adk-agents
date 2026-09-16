@@ -73,6 +73,37 @@ class InlineFinding(BaseModel):
     suggestion: str = ""
     pii_leak: bool = False
 
+class FileDiffItem(BaseModel):
+    filename: str
+    status: str
+    additions: int
+    deletions: int
+    changes: int
+    patch: str = ""
+    estimated_tokens: int = 0
+    pii_flagged: bool = False
+    risk_score: int = 0
+
+class ReviewBatch(BaseModel):
+    batch_index: int
+    total_batches: int
+    files: List[FileDiffItem]
+    total_estimated_tokens: int
+
+class BatchReviewResult(BaseModel):
+    batch_index: int
+    batch_summary: str
+    findings: List[InlineFinding] = Field(default_factory=list)
+
+class PRTriageSummary(BaseModel):
+    total_files_in_pr: int
+    reviewable_files_count: int
+    excluded_files_count: int
+    triaged_files_count: int
+    skipped_files_count: int
+    batches_executed: int
+    triage_applied: bool = False
+
 class PRReviewReport(BaseModel):
     overall_status: ReviewStatus
     summary: str
@@ -138,6 +169,26 @@ class QualityGateDecision(BaseModel):
 # =====================================================================
 
 def sanitize_and_validate_repo(repo: str) -> str: ...
+
+def fetch_all_pr_modified_files(
+    owner: str,
+    repo_name: str,
+    pr_number: Any,
+    token: str,
+    timeout: int = 15,
+) -> List[Dict[str, Any]]: ...
+
+def triage_and_filter_files(
+    files: List[Dict[str, Any]],
+    pii_findings: Optional[List[Dict[str, Any]]] = None,
+    max_files_cap: int = 200,
+) -> Tuple[List[FileDiffItem], PRTriageSummary]: ...
+
+def partition_files_into_batches(
+    files: List[FileDiffItem],
+    max_files_per_batch: int = 25,
+    max_tokens_per_batch: int = 60_000,
+) -> List[ReviewBatch]: ...
 
 def is_duplicate_comment(
     new_path: str,
@@ -240,6 +291,14 @@ async def evaluate_quality_gate(
 - Cumulative token consumption is tracked from `agent.conversation.total_usage` or `response.usage_metadata` and serialized to `reports/token-usage.json`.
 - If turn halts early due to budget exhaustion (`StopReason` containing `EXCEEDED`), the agent bypasses `response.structured_output()`, writes reports, posts a review comment to the GitHub PR with status `ReviewStatus.COMMENT`, and exits gracefully preserving Quality Gate integrity.
 
+### 7. Context-Managed Batching, Compaction & Triage (D-15 through D-18)
+- **Map-Reduce Architecture:** The PR Reviewer operates a two-phase Map-Reduce review pipeline. In the Map phase, modified files are partitioned into bounded batches reviewed independently by ephemeral `Agent` sessions. In the Reduce phase, findings and summaries across all batches are aggregated, deduplicated, and synthesized into a unified `PRReviewReport`.
+- **Paginated PR File Discovery (D-15):** The reviewer queries the GitHub REST API (`/repos/{owner}/{repo}/pulls/{number}/files?per_page=100&page={page}`) paginating up to 100 pages (up to 10,000 files) to eliminate the default 100-file silent truncation limit and retrieve full diff hunks.
+- **Automated Exclusion & Risk-Based Triage (D-16):** Non-reviewable files (lockfiles, vendor directories, minified bundles, binary assets, generated assets) are excluded using regex filters. When the total reviewable files exceed `MAX_REVIEW_FILES_CAP` (default 200 files), files are triaged using heuristic risk scoring (Cloud DLP PII findings +100, auth/security/crypto modules +50, API routes +30, diff size) to guarantee CI completion within 10 minutes.
+- **Context Isolation & Compaction (D-17):** Files are partitioned into batches constrained by `BATCH_MAX_FILES` (default 25) and `BATCH_MAX_TOKENS` (default 60,000 tokens). Each batch executes in a fresh, ephemeral `Agent` session with `response_schema=BatchReviewResult`. Raw diff hunks and transient conversation turns are discarded upon batch completion, guaranteeing strict context isolation and preventing context window explosion.
+- **Finding Accumulation & Synthesis (D-18):** Batch findings are aggregated and deduplicated against diff coordinates. If any batch detects a `BLOCKER` or `pii_leak=True`, `ReviewStatus.REQUEST_CHANGES` is enforced. A comprehensive summary combines batch overviews and highlights triage status when file capping was applied.
+- **Cumulative Budget Tracking & Early Halt (D-14, D-18):** Cumulative token consumption across all batches is tracked against `MAX_TOTAL_TOKENS` and `MAX_SPEND_USD`. If the budget is exhausted, remaining batches are skipped, and the synthesis step produces a partial review with `ReviewStatus.COMMENT`.
+
 ---
 
 ## Out of scope
@@ -269,6 +328,10 @@ async def evaluate_quality_gate(
 | **D-12** | Inline comment line numbers are validated against PR modified line mappings (`fetch_pr_modified_lines`); out-of-hunk findings are omitted from inline comments but kept in summary. | Diff hunk boundary enforcement | GitHub 422 reject for out-of-diff comments vs filtered inline comments |
 | **D-13** | Proactive budget ceiling via `types.BudgetConfig` (`max_total_tokens`, `max_input_tokens`, `max_output_tokens`, `max_model_calls`, `max_tool_calls`), with safe import resilience if `types is None`. Derived token ceiling from `MAX_SPEND_USD` using upper-bound output/thinking pricing ($3.75 / 1M tokens): $\lfloor(\text{MAX\_SPEND\_USD} / 3.75) \times 1{,}000{,}000\rfloor$, capping `max_total_tokens`. Configuration resolved in `resolve_env_config`. | Proactive budget controls and runaway turn protection | Runaway multi-turn tool loops exhausting token quota vs bounded session budget |
 | **D-14** | Usage telemetry and graceful early halt: when `stop_reason` indicates budget exhaustion (`MAX_TOTAL_TOKENS_EXCEEDED`, `MAX_INPUT_TOKENS_EXCEEDED`, `MAX_OUTPUT_TOKENS_EXCEEDED`, `MAX_MODEL_CALLS_EXCEEDED`, `MAX_TOOL_CALLS_EXCEEDED`), bypass `response.structured_output()`, generate fallback `PRReviewReport` with `overall_status = ReviewStatus.COMMENT`, write `reports/pr-review.json`, `reports/pr-review.txt`, write telemetry artifact `reports/token-usage.json` with pricing breakdown (prompt $0.75/1M, cached $0.075/1M, output/thinking $3.75/1M for Gemini 3.7/3.8 Flash), post review comment to GitHub PR, and preserve downstream Quality Gate integrity. | Graceful early termination and token spend observability | Crash on truncated response or silent review abort vs graceful comment and telemetry artifact |
+| **D-15** | Paginated PR File Discovery & Complete Diff Retrieval: Queries GitHub REST API `/repos/{owner}/{repo}/pulls/{number}/files?per_page=100&page={page}` iteratively up to 100 pages, eliminating the 100-file silent truncation limit and ensuring complete diff coverage on large PRs. | Full repository diff discovery across multi-page PR diffs | Silent truncation at 100 files vs complete iterative retrieval across all PR files |
+| **D-16** | Automated Exclusion Filtering & Risk-Based Triage Capping: Automatically excludes non-reviewable assets (lockfiles, vendor directories, minified bundles, binary assets) via regex. Bounded by `MAX_REVIEW_FILES_CAP` (default 200 files). When exceeded, files are ranked and prioritized by security risk scoring (Cloud DLP PII findings +100, auth/security/crypto +50, API routes +30, diff size) to keep CI review time under 10 minutes. | Non-reviewable asset exclusion and risk-based file prioritization under high volume | Wasting review tokens on lockfiles/minified assets and exceeding CI timeout vs prioritized security review of high-risk components capped at 200 files |
+| **D-17** | Isolated-Context Batch Review Execution (Map Phase): Files are grouped into batches bounded by `BATCH_MAX_FILES` (default 25) and `BATCH_MAX_TOKENS` (default 60,000 tokens). Each batch is reviewed in a dedicated, ephemeral `Agent` session with `response_schema=BatchReviewResult`. Raw diff hunks are discarded after each batch completes, guaranteeing strict context isolation and preventing context window explosion. | Map-phase chunking and isolated context window enforcement | Monolithic context explosion / 1M token overflow vs bounded, ephemeral single-batch review sessions |
+| **D-18** | Finding Accumulation, Cross-Batch Deduplication & Synthesis (Reduce Phase): Batch findings are aggregated and deduplicated against diff coordinates. If any batch detects a `BLOCKER` or `pii_leak=True`, `ReviewStatus.REQUEST_CHANGES` is enforced. A comprehensive summary combines batch overviews and highlights triage status when file capping was applied. | Cross-batch finding reduction, deduplication, and severity enforcement | Fragmented batch outputs or missed blockers vs consolidated report with enforced change requests and triage reporting |
 | **D-19** | Externalized Versioned Prompt Templates: Prompt templates are externalized from Python code into Markdown files with YAML frontmatter under `.github/prompts/<agent_name>/v<version>.md`. Variable substitution uses `string.Template` (`${var}`) syntax to safeguard literal curly braces (e.g. URI patterns `/api/v1/accounts/{id}`) without double-escaping. `PromptLoader` verifies required variables, computes SHA256 hashes of raw Markdown contents, and resolves semantic versions (`latest`, `1.0.0`, `v1.0.0`). If a template file is missing or corrupted, `PromptLoader` automatically falls back to embedded built-in default prompts (`is_fallback: True`), guaranteeing pipeline resilience. Execution telemetry records prompt metadata (`version`, `sha256`, `is_fallback`, `loaded_at`) in `reports/telemetry/<agent>/prompt-metadata.json`, embeds it in `reports/token-usage.json`, and renders an audit table in `$GITHUB_STEP_SUMMARY`. | Externalized prompt engineering, zero-regression fallbacks, and prompt auditability | Hardcoded agent prompt strings requiring code releases vs versioned declarative prompt files with tamper-evident checksums and zero-crash fallbacks |
 
 ---

@@ -623,3 +623,401 @@ def test_write_token_usage_report_file_generation(tmp_path):
     assert data["total_cost_usd"] == 0.1515
     assert data["budget_limits"]["max_total_tokens"] == 120_000
 
+
+# =====================================================================
+# Tests: Batch & Triage Schemas (Decision D-15, D-16)
+# =====================================================================
+
+def test_batch_schemas_instantiation():
+    """Validates instantiation and default values for batch schemas."""
+    item = helper.FileDiffItem(filename="app/main.py")
+    assert item.filename == "app/main.py"
+    assert item.status == "modified"
+    assert item.additions == 0
+    assert item.deletions == 0
+    assert item.changes == 0
+    assert item.patch == ""
+    assert item.estimated_tokens == 0
+    assert item.pii_flagged is False
+    assert item.risk_score == 0
+
+    batch = helper.ReviewBatch(
+        batch_index=1,
+        total_batches=2,
+        files=[item],
+        total_estimated_tokens=50,
+    )
+    assert batch.batch_index == 1
+    assert batch.total_batches == 2
+    assert len(batch.files) == 1
+    assert batch.total_estimated_tokens == 50
+
+    summary = helper.PRTriageSummary(
+        total_files_in_pr=100,
+        reviewable_files_count=80,
+        excluded_files_count=20,
+        triaged_files_count=50,
+        skipped_files_count=30,
+        batches_executed=0,
+        triage_applied=True,
+    )
+    assert summary.total_files_in_pr == 100
+    assert summary.reviewable_files_count == 80
+    assert summary.excluded_files_count == 20
+    assert summary.triaged_files_count == 50
+    assert summary.skipped_files_count == 30
+    assert summary.batches_executed == 0
+    assert summary.triage_applied is True
+
+
+# =====================================================================
+# Tests: fetch_all_pr_modified_files (D-15)
+# =====================================================================
+
+def test_fetch_all_pr_modified_files_empty_token():
+    """Returns empty list when token is empty or whitespace."""
+    assert helper.fetch_all_pr_modified_files("owner", "repo", 42, "") == []
+    assert helper.fetch_all_pr_modified_files("owner", "repo", 42, "   ") == []
+
+
+def test_fetch_all_pr_modified_files_single_page():
+    """Fetches a single page of files and halts when < 100 items returned."""
+    mock_files = json.dumps([
+        {"filename": "app/a.py", "patch": "@@ -1 +1 @@"},
+        {"filename": "app/b.py", "patch": "@@ -1 +1 @@"},
+    ]).encode("utf-8")
+
+    mock_resp = MagicMock()
+    mock_resp.status = 200
+    mock_resp.read.return_value = mock_files
+    mock_resp.__enter__.return_value = mock_resp
+    mock_resp.__exit__.return_value = None
+
+    with patch("urllib.request.urlopen", return_value=mock_resp) as mock_urlopen:
+        files = helper.fetch_all_pr_modified_files("owner", "repo", 42, "dummy-token")
+        assert len(files) == 2
+        assert files[0]["filename"] == "app/a.py"
+        assert files[1]["filename"] == "app/b.py"
+        assert mock_urlopen.call_count == 1
+        req = mock_urlopen.call_args[0][0]
+        assert "per_page=100&page=1" in req.full_url
+        assert req.headers["Authorization"] == "Bearer dummy-token"
+
+
+def test_fetch_all_pr_modified_files_pagination_multi_page():
+    """Paginates across multiple pages until a page with < 100 files is reached."""
+    page_1_data = json.dumps([{"filename": f"file_{i}.py", "patch": "+line"} for i in range(100)]).encode("utf-8")
+    page_2_data = json.dumps([{"filename": f"file_{100 + i}.py", "patch": "+line"} for i in range(45)]).encode("utf-8")
+
+    resp_1 = MagicMock()
+    resp_1.status = 200
+    resp_1.read.return_value = page_1_data
+    resp_1.__enter__.return_value = resp_1
+    resp_1.__exit__.return_value = None
+
+    resp_2 = MagicMock()
+    resp_2.status = 200
+    resp_2.read.return_value = page_2_data
+    resp_2.__enter__.return_value = resp_2
+    resp_2.__exit__.return_value = None
+
+    with patch("urllib.request.urlopen", side_effect=[resp_1, resp_2]) as mock_urlopen:
+        all_files = helper.fetch_all_pr_modified_files("owner", "repo", 99, "token-xyz")
+        assert len(all_files) == 145
+        assert all_files[0]["filename"] == "file_0.py"
+        assert all_files[99]["filename"] == "file_99.py"
+        assert all_files[100]["filename"] == "file_100.py"
+        assert all_files[144]["filename"] == "file_144.py"
+        assert mock_urlopen.call_count == 2
+        call_urls = [call[0][0].full_url for call in mock_urlopen.call_args_list]
+        assert "page=1" in call_urls[0]
+        assert "page=2" in call_urls[1]
+
+
+def test_fetch_all_pr_modified_files_network_error(capsys):
+    """Gracefully handles network errors during pagination and returns partial results."""
+    page_1_data = json.dumps([{"filename": f"file_{i}.py"} for i in range(100)]).encode("utf-8")
+    resp_1 = MagicMock()
+    resp_1.status = 200
+    resp_1.read.return_value = page_1_data
+    resp_1.__enter__.return_value = resp_1
+    resp_1.__exit__.return_value = None
+
+    with patch("urllib.request.urlopen", side_effect=[resp_1, urllib.error.URLError("Connection reset")]):
+        files = helper.fetch_all_pr_modified_files("owner", "repo", 101, "tok")
+        assert len(files) == 100
+    captured = capsys.readouterr()
+    assert "[Warning] Could not fetch PR diff hunks from GitHub API" in captured.out
+
+
+# =====================================================================
+# Tests: EXCLUDED_FILE_PATTERNS & is_excluded_file (D-16)
+# =====================================================================
+
+def test_is_excluded_file_patterns():
+    """Matches lockfiles, minified files, map files, binaries, and vendor directories."""
+    # Lockfiles
+    assert helper.is_excluded_file("package-lock.json") is True
+    assert helper.is_excluded_file("frontend/package-lock.json") is True
+    assert helper.is_excluded_file("yarn.lock") is True
+    assert helper.is_excluded_file("pnpm-lock.yaml") is True
+    assert helper.is_excluded_file("poetry.lock") is True
+    assert helper.is_excluded_file("Pipfile.lock") is True
+    assert helper.is_excluded_file("composer.lock") is True
+    assert helper.is_excluded_file("go.sum") is True
+
+    # Minified assets and maps
+    assert helper.is_excluded_file("static/bundle.min.js") is True
+    assert helper.is_excluded_file("dist/styles.min.css") is True
+    assert helper.is_excluded_file("dist/bundle.js.map") is True
+
+    # Binary media and documents
+    assert helper.is_excluded_file("assets/logo.png") is True
+    assert helper.is_excluded_file("images/banner.jpg") is True
+    assert helper.is_excluded_file("icons/favicon.ico") is True
+    assert helper.is_excluded_file("docs/manual.pdf") is True
+    assert helper.is_excluded_file("build/archive.zip") is True
+    assert helper.is_excluded_file("fonts/inter.woff2") is True
+
+    # Vendor and node_modules
+    assert helper.is_excluded_file("vendor/autoload.php") is True
+    assert helper.is_excluded_file("src/vendor/lib.py") is True
+    assert helper.is_excluded_file("node_modules/axios/index.js") is True
+    assert helper.is_excluded_file("web/node_modules/package.json") is True
+
+    # Non-excluded standard files
+    assert helper.is_excluded_file("app/main.py") is False
+    assert helper.is_excluded_file("src/routes/api.ts") is False
+    assert helper.is_excluded_file("Dockerfile") is False
+    assert helper.is_excluded_file("README.md") is False
+    assert helper.is_excluded_file("tests/test_helper.py") is False
+    assert helper.is_excluded_file("") is False
+
+
+# =====================================================================
+# Tests: calculate_file_risk_score (D-16)
+# =====================================================================
+
+def test_calculate_file_risk_score_pii_context():
+    """Flags PII and awards +100 risk score when file is cited in DLP scan."""
+    risk, pii_flag = helper.calculate_file_risk_score(
+        filename="src/user_service.py",
+        pii_context="Found email leak in src/user_service.py: line 42",
+        additions=0,
+        changes=0,
+    )
+    assert pii_flag is True
+    assert risk >= 100
+
+
+def test_calculate_file_risk_score_security_and_api_and_size():
+    """Awards +50 for security paths, +30 for API routes, and caps size contribution at 20."""
+    risk, pii_flag = helper.calculate_file_risk_score(
+        filename="api/v1/auth/tokens.py",
+        pii_context="",
+        additions=150,
+        changes=150,
+    )
+    assert pii_flag is False
+    # +50 (auth/token) + 30 (api) + min(20, 150 // 10) = 50 + 30 + 15 = 95
+    assert risk == 95
+
+    # Size cap at 20
+    risk_large, _ = helper.calculate_file_risk_score(
+        filename="api/routes.py",
+        pii_context="",
+        additions=500,
+        changes=500,
+    )
+    # 0 security + 30 api + min(20, 500 // 10) = 30 + 20 = 50
+    assert risk_large == 50
+
+
+def test_calculate_file_risk_score_empty_and_neutral():
+    """Returns 0 risk score and False for neutral files and empty names."""
+    assert helper.calculate_file_risk_score("") == (0, False)
+    risk, pii_flag = helper.calculate_file_risk_score(
+        filename="docs/readme.txt",
+        pii_context="",
+        additions=5,
+        changes=5,
+    )
+    assert risk == 0
+    assert pii_flag is False
+
+
+# =====================================================================
+# Tests: triage_and_filter_files (D-16)
+# =====================================================================
+
+def test_triage_and_filter_files_exclusions():
+    """Filters excluded files and accurately computes triage summary."""
+    files = [
+        {"filename": "app/routes.py", "patch": "@@ -1 +1 @@\n+line", "additions": 1, "changes": 1},
+        {"filename": "package-lock.json", "patch": "@@ -1 +1 @@", "additions": 1000, "changes": 1000},
+        {"filename": "assets/logo.png", "patch": "", "additions": 0, "changes": 0},
+        {"filename": "vendor/bundle.js", "patch": "@@ -1 +1 @@", "additions": 500, "changes": 500},
+        {"filename": "app/auth.py", "patch": "@@ -1 +1 @@\n+auth", "additions": 2, "changes": 2},
+    ]
+
+    filtered, summary = helper.triage_and_filter_files(files, max_cap=200)
+    assert len(filtered) == 2
+    assert summary.total_files_in_pr == 5
+    assert summary.reviewable_files_count == 2
+    assert summary.excluded_files_count == 3
+    assert summary.triaged_files_count == 2
+    assert summary.skipped_files_count == 0
+    assert summary.triage_applied is False
+    assert {f.filename for f in filtered} == {"app/routes.py", "app/auth.py"}
+
+
+def test_triage_and_filter_files_capping():
+    """Capping at max_cap sorts by risk score descending and retains highest risk files."""
+    files = []
+    # 10 security/auth files (risk >= 50)
+    for i in range(10):
+        files.append({
+            "filename": f"src/auth/service_{i}.py",
+            "patch": "@@ -1,5 +1,10 @@\n" + "\n".join(f"+line {j}" for j in range(200)),
+            "additions": 200,
+            "changes": 200,
+        })
+    # 90 neutral utility files (risk 0)
+    for i in range(90):
+        files.append({
+            "filename": f"src/utils/tool_{i}.py",
+            "patch": "@@ -1 +1 @@\n+minor",
+            "additions": 1,
+            "changes": 1,
+        })
+
+    capped, summary = helper.triage_and_filter_files(files, max_cap=50)
+    assert len(capped) == 50
+    assert summary.total_files_in_pr == 100
+    assert summary.reviewable_files_count == 100
+    assert summary.excluded_files_count == 0
+    assert summary.triaged_files_count == 50
+    assert summary.skipped_files_count == 50
+    assert summary.triage_applied is True
+
+    # High-risk security files must all be retained
+    retained_filenames = {f.filename for f in capped}
+    for i in range(10):
+        assert f"src/auth/service_{i}.py" in retained_filenames
+
+
+# =====================================================================
+# Tests: partition_files_into_batches (D-16)
+# =====================================================================
+
+def test_partition_files_into_batches_empty():
+    """Empty list returns empty batch list."""
+    assert helper.partition_files_into_batches([]) == []
+
+
+def test_partition_files_into_batches_file_count():
+    """Groups files respecting max_files_per_batch constraint."""
+    files = [
+        helper.FileDiffItem(filename=f"file_{i}.py", estimated_tokens=100)
+        for i in range(60)
+    ]
+
+    batches = helper.partition_files_into_batches(files, max_files_per_batch=25, max_tokens_per_batch=60_000)
+    assert len(batches) == 3
+    assert batches[0].batch_index == 1
+    assert batches[0].total_batches == 3
+    assert len(batches[0].files) == 25
+    assert batches[0].total_estimated_tokens == 2500
+
+    assert batches[1].batch_index == 2
+    assert batches[1].total_batches == 3
+    assert len(batches[1].files) == 25
+    assert batches[1].total_estimated_tokens == 2500
+
+    assert batches[2].batch_index == 3
+    assert batches[2].total_batches == 3
+    assert len(batches[2].files) == 10
+    assert batches[2].total_estimated_tokens == 1000
+
+
+def test_partition_files_into_batches_token_budget():
+    """Groups files respecting max_tokens_per_batch constraint."""
+    files = [
+        helper.FileDiffItem(filename="heavy_1.py", estimated_tokens=35_000),
+        helper.FileDiffItem(filename="heavy_2.py", estimated_tokens=35_000),
+        helper.FileDiffItem(filename="heavy_3.py", estimated_tokens=35_000),
+    ]
+
+    batches = helper.partition_files_into_batches(files, max_files_per_batch=25, max_tokens_per_batch=60_000)
+    assert len(batches) == 3
+    for idx, b in enumerate(batches, start=1):
+        assert b.batch_index == idx
+        assert b.total_batches == 3
+        assert len(b.files) == 1
+        assert b.total_estimated_tokens == 35_000
+
+
+def test_partition_files_into_batches_oversized_solo_file():
+    """Places single files that exceed max_tokens_per_batch in their own solo batch."""
+    files = [
+        helper.FileDiffItem(filename="file_1.py", estimated_tokens=10_000),
+        helper.FileDiffItem(filename="huge_file.py", estimated_tokens=75_000),
+        helper.FileDiffItem(filename="file_2.py", estimated_tokens=15_000),
+    ]
+
+    batches = helper.partition_files_into_batches(files, max_files_per_batch=25, max_tokens_per_batch=60_000)
+    assert len(batches) == 3
+    assert len(batches[0].files) == 1
+    assert batches[0].files[0].filename == "file_1.py"
+
+    assert len(batches[1].files) == 1
+    assert batches[1].files[0].filename == "huge_file.py"
+    assert batches[1].total_estimated_tokens == 75_000
+
+    assert len(batches[2].files) == 1
+    assert batches[2].files[0].filename == "file_2.py"
+
+
+# =====================================================================
+# Tests: resolve_env_config with Batch Configurations (D-15, D-16)
+# =====================================================================
+
+def test_resolve_env_config_batch_defaults(monkeypatch):
+    """Verifies default batch thresholds when environment variables are unset."""
+    for var in ["BATCH_MAX_FILES", "BATCH_MAX_TOKENS", "MAX_REVIEW_FILES_CAP"]:
+        monkeypatch.delenv(var, raising=False)
+
+    cfg = helper.resolve_env_config()
+    assert cfg["batch_max_files"] == 25
+    assert cfg["batch_max_tokens"] == 60_000
+    assert cfg["max_review_files_cap"] == 200
+
+
+def test_resolve_env_config_batch_env_vars(monkeypatch):
+    """Verifies environment variable overrides for batch parameters."""
+    monkeypatch.setenv("BATCH_MAX_FILES", "15")
+    monkeypatch.setenv("BATCH_MAX_TOKENS", "45000")
+    monkeypatch.setenv("MAX_REVIEW_FILES_CAP", "120")
+
+    cfg = helper.resolve_env_config()
+    assert cfg["batch_max_files"] == 15
+    assert cfg["batch_max_tokens"] == 45_000
+    assert cfg["max_review_files_cap"] == 120
+
+
+def test_resolve_env_config_batch_cli_priority(monkeypatch):
+    """Verifies CLI argument priority over environment variables for batch parameters."""
+    monkeypatch.setenv("BATCH_MAX_FILES", "15")
+    monkeypatch.setenv("BATCH_MAX_TOKENS", "45000")
+    monkeypatch.setenv("MAX_REVIEW_FILES_CAP", "120")
+
+    cfg = helper.resolve_env_config(
+        batch_max_files=10,
+        batch_max_tokens=30_000,
+        max_review_files_cap=50,
+    )
+    assert cfg["batch_max_files"] == 10
+    assert cfg["batch_max_tokens"] == 30_000
+    assert cfg["max_review_files_cap"] == 50
+
+

@@ -26,6 +26,10 @@ from pr_reviewer_agent import (
     ReviewStatus,
     InlineFinding,
     PRReviewReport,
+    FileDiffItem,
+    ReviewBatch,
+    BatchReviewResult,
+    PRTriageSummary,
     POSITIVE_APPROVAL_TEMPLATE,
     sanitize_and_validate_repo,
     send_github_review_sync,
@@ -36,6 +40,10 @@ from pr_reviewer_agent import (
     fetch_pr_modified_lines,
     fetch_pr_comments,
     is_duplicate_comment,
+    extract_batch_pii_context,
+    build_batch_review_prompt,
+    review_batch_with_isolated_context,
+    synthesize_final_review_report,
 )
 
 
@@ -1501,4 +1509,550 @@ async def test_run_pr_review_passes_budget_config_to_local_agent_config(tmp_path
         )
         mock_local_config_cls.assert_called_once()
         assert mock_local_config_cls.call_args[1]["budget_config"] == mock_budget_config_instance
+
+
+# =====================================================================
+# Decision D-15, D-16, D-17, D-18: Multi-Batch Agent Review, Isolation, and Synthesis
+# =====================================================================
+
+def test_batch_review_result_schema_and_aliases():
+    """Validates BatchReviewResult schema defaults, validation, and summary aliasing (D-17)."""
+    # Test default values
+    res1 = BatchReviewResult()
+    assert res1.batch_index == 1
+    assert res1.batch_summary == ""
+    assert res1.findings == []
+
+    # Test summary alias
+    res2 = BatchReviewResult.model_validate({"summary": "Batch summary text.", "findings": []})
+    assert res2.batch_summary == "Batch summary text."
+    assert res2.batch_index == 1
+
+    # Test explicit values
+    f = InlineFinding(
+        file_path="src/main.py",
+        line_number=42,
+        severity=PRFindingSeverity.WARNING,
+        title="Check bounds",
+        details="Potential off-by-one",
+    )
+    res3 = BatchReviewResult(batch_index=2, batch_summary="Reviewed 5 files.", findings=[f])
+    assert res3.batch_index == 2
+    assert len(res3.findings) == 1
+    assert res3.findings[0].file_path == "src/main.py"
+
+
+def test_build_batch_review_prompt_and_pii_subset():
+    """Validates batch user prompt construction and PII subset extraction (D-17)."""
+    files = [
+        FileDiffItem(
+            filename="auth/login.py",
+            status="modified",
+            additions=10,
+            deletions=2,
+            changes=12,
+            patch="@@ -1,2 +1,3 @@\n+token = 'secret'",
+            estimated_tokens=50,
+            pii_flagged=True,
+            risk_score=95,
+        ),
+        FileDiffItem(
+            filename="utils/helper.py",
+            status="added",
+            additions=5,
+            deletions=0,
+            changes=5,
+            patch="@@ -0,0 +1,5 @@\n+def foo(): pass",
+            estimated_tokens=20,
+            risk_score=10,
+        ),
+    ]
+    batch = ReviewBatch(batch_index=1, total_batches=2, files=files, total_estimated_tokens=70)
+    pii_scan = "auth/login.py: Potential API key at line 1\nother/file.py: SSN detected"
+
+    pii_subset = extract_batch_pii_context(batch, pii_scan)
+    assert "auth/login.py: Potential API key at line 1" in pii_subset
+    assert "other/file.py" not in pii_subset
+
+    prompt = build_batch_review_prompt(batch, pr_number="101", repo="org/repo", pii_context_subset=pii_subset)
+    assert "Pull Request #101" in prompt
+    assert "Review Batch 1 of 2" in prompt
+    assert "auth/login.py" in prompt
+    assert "utils/helper.py" in prompt
+    assert "token = 'secret'" in prompt
+    assert "auth/login.py: Potential API key at line 1" in prompt
+
+
+def test_synthesize_final_review_report_deduplication_and_status():
+    """Validates cross-batch deduplication, status resolution hierarchy, and triage notices (D-17, D-18)."""
+    triage_clean = PRTriageSummary(
+        total_files_in_pr=2,
+        reviewable_files_count=2,
+        excluded_files_count=0,
+        triaged_files_count=2,
+        skipped_files_count=0,
+        batches_executed=2,
+        triage_applied=False,
+    )
+
+    f1 = InlineFinding(
+        file_path="src/app.py",
+        line_number=10,
+        severity=PRFindingSeverity.WARNING,
+        title="Inefficient query",
+        details="Use index",
+    )
+    f1_dup = InlineFinding(
+        file_path="src/app.py",
+        line_number=10,
+        severity=PRFindingSeverity.WARNING,
+        title="Inefficient query",
+        details="Use index (duplicate)",
+    )
+    f2 = InlineFinding(
+        file_path="src/app.py",
+        line_number=25,
+        severity=PRFindingSeverity.SUGGESTION,
+        title="Add docstring",
+        details="Function missing docstring",
+    )
+
+    batch1 = BatchReviewResult(batch_index=1, batch_summary="Batch 1 completed.", findings=[f1])
+    batch2 = BatchReviewResult(batch_index=2, batch_summary="Batch 2 completed.", findings=[f1_dup, f2])
+
+    report = synthesize_final_review_report([batch1, batch2], triage_summary=triage_clean)
+
+    # Findings should be deduplicated (f1 and f2 retained, f1_dup removed)
+    assert len(report.findings) == 2
+    assert report.findings[0].title == "Inefficient query"
+    assert report.findings[1].title == "Add docstring"
+    assert report.overall_status == ReviewStatus.COMMENT
+    assert "Batch 1 Summary" in report.summary
+    assert "Batch 2 Summary" in report.summary
+
+
+def test_synthesize_final_review_report_blocker_and_pii_leak():
+    """Validates that BLOCKER and pii_leak enforce REQUEST_CHANGES (D-4, D-17, D-18)."""
+    triage = PRTriageSummary(
+        total_files_in_pr=1,
+        reviewable_files_count=1,
+        excluded_files_count=0,
+        triaged_files_count=1,
+        skipped_files_count=0,
+        batches_executed=1,
+        triage_applied=False,
+    )
+    blocker_finding = InlineFinding(
+        file_path="src/sec.py",
+        line_number=5,
+        severity=PRFindingSeverity.BLOCKER,
+        title="Hardcoded API Key",
+        details="Remove key",
+        pii_leak=True,
+    )
+    batch = BatchReviewResult(batch_index=1, batch_summary="Security issue found.", findings=[blocker_finding])
+
+    report = synthesize_final_review_report([batch], triage_summary=triage)
+    assert report.overall_status == ReviewStatus.REQUEST_CHANGES
+    assert len(report.findings) == 1
+    assert report.findings[0].pii_leak is True
+
+
+def test_synthesize_final_review_report_triage_notice():
+    """Validates that triage notice is appended when triage_applied is True (D-15, D-18)."""
+    triage = PRTriageSummary(
+        total_files_in_pr=250,
+        reviewable_files_count=220,
+        excluded_files_count=30,
+        triaged_files_count=150,
+        skipped_files_count=70,
+        batches_executed=6,
+        triage_applied=True,
+    )
+    batch = BatchReviewResult(batch_index=1, batch_summary="Clean review.", findings=[])
+    report = synthesize_final_review_report([batch], triage_summary=triage)
+
+    assert report.overall_status == ReviewStatus.APPROVE
+    assert "⚠️ Note: Review volume triaged and capped. Evaluated 150 of 250 files based on risk scoring (skipped 70 lower-risk files)." in report.summary
+
+
+def test_synthesize_final_review_report_halted_early():
+    """Validates that halted_early forces COMMENT status and appends halt reason (D-13, D-14, D-18)."""
+    triage = PRTriageSummary(
+        total_files_in_pr=10,
+        reviewable_files_count=10,
+        excluded_files_count=0,
+        triaged_files_count=10,
+        skipped_files_count=0,
+        batches_executed=2,
+        triage_applied=False,
+    )
+    batch = BatchReviewResult(batch_index=1, batch_summary="Batch 1 passed.", findings=[])
+    report = synthesize_final_review_report(
+        [batch],
+        triage_summary=triage,
+        halted_early=True,
+        halt_reason="Model execution budget exceeded",
+    )
+
+    assert report.overall_status == ReviewStatus.COMMENT
+    assert "⚠️ PR review halted early: Model execution budget exceeded" in report.summary
+
+
+@pytest.mark.asyncio
+async def test_review_batch_with_isolated_context_unit(tmp_path):
+    """Unit test: verifies review_batch_with_isolated_context runs ephemeral agent and parses BatchReviewResult (D-17)."""
+    telemetry_dir = tmp_path / "telemetry"
+    telemetry_dir.mkdir(parents=True, exist_ok=True)
+
+    batch = ReviewBatch(
+        batch_index=1,
+        total_batches=1,
+        files=[FileDiffItem(filename="src/main.py", status="modified", patch="@@ -1 +1 @@\n+print('hi')")],
+        total_estimated_tokens=50,
+    )
+    cfg = {
+        "pr_number": "55",
+        "repo": "owner/repo",
+        "token": "token123",
+        "project_id": "test-project",
+        "location": "us-central1",
+        "model": "gemini-3.7-flash",
+        "max_total_tokens": 100_000,
+        "max_input_tokens": 80_000,
+        "max_output_tokens": 20_000,
+        "max_model_calls": 5,
+        "max_tool_calls": 10,
+        "max_spend_usd": 1.0,
+    }
+
+    mock_finding = InlineFinding(
+        file_path="src/main.py",
+        line_number=1,
+        severity=PRFindingSeverity.SUGGESTION,
+        title="Use logging",
+        details="Avoid print in production",
+    )
+    expected_result = BatchReviewResult(
+        batch_index=1,
+        batch_summary="Batch 1 clean with 1 suggestion.",
+        findings=[mock_finding],
+    )
+
+    mock_response = MagicMock()
+    mock_response.stop_reason = None
+    mock_response.usage_metadata = MockUsage(prompt_token_count=1000, total_token_count=1200)
+    mock_response.chunks = []
+    mock_response.structured_output = AsyncMock(return_value=expected_result)
+
+    mock_agent_instance = MagicMock()
+    mock_agent_instance.__aenter__ = AsyncMock(return_value=mock_agent_instance)
+    mock_agent_instance.__aexit__ = AsyncMock(return_value=None)
+    mock_agent_instance.chat = AsyncMock(return_value=mock_response)
+
+    with patch.object(pr_reviewer_agent, "Agent", return_value=mock_agent_instance) as mock_agent_cls:
+        result, usage_stats, stop_reason, stop_reason_str = await review_batch_with_isolated_context(
+            batch=batch,
+            cfg=cfg,
+            pii_context_subset="No DLP findings.",
+            telemetry_dir=str(telemetry_dir),
+        )
+
+    mock_agent_cls.assert_called_once()
+    assert result.batch_index == 1
+    assert len(result.findings) == 1
+    assert result.findings[0].title == "Use logging"
+    assert usage_stats["total_tokens"] == 1200
+    assert stop_reason is None
+    assert stop_reason_str == ""
+
+
+@pytest.mark.asyncio
+async def test_run_pr_review_multi_batch_aggregation(tmp_path, monkeypatch):
+    """Scenario: Validates that run_pr_review processes multiple batches and aggregates findings & usage (D-17)."""
+    monkeypatch.chdir(tmp_path)
+    reports_dir = tmp_path / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+
+    # Return 4 files that will partition into 2 batches when batch_max_files=2
+    mock_files = [
+        {"filename": "src/file1.py", "status": "modified", "changes": 10, "additions": 10, "deletions": 0, "patch": "@@ -0,0 +1,10 @@"},
+        {"filename": "src/file2.py", "status": "modified", "changes": 10, "additions": 10, "deletions": 0, "patch": "@@ -0,0 +1,10 @@"},
+        {"filename": "src/file3.py", "status": "modified", "changes": 10, "additions": 10, "deletions": 0, "patch": "@@ -0,0 +1,10 @@"},
+        {"filename": "src/file4.py", "status": "modified", "changes": 10, "additions": 10, "deletions": 0, "patch": "@@ -0,0 +1,10 @@"},
+    ]
+
+    result_batch1 = BatchReviewResult(
+        batch_index=1,
+        batch_summary="Batch 1: Minor suggestion.",
+        findings=[
+            InlineFinding(
+                file_path="src/file1.py",
+                line_number=5,
+                severity=PRFindingSeverity.SUGGESTION,
+                title="Consider helper function",
+                details="Extract complex logic",
+            )
+        ],
+    )
+    result_batch2 = BatchReviewResult(
+        batch_index=2,
+        batch_summary="Batch 2: Warning detected.",
+        findings=[
+            InlineFinding(
+                file_path="src/file3.py",
+                line_number=8,
+                severity=PRFindingSeverity.WARNING,
+                title="Unused variable",
+                details="Variable is not read",
+            )
+        ],
+    )
+
+    batch_call_count = 0
+
+    async def mock_review_batch(batch, cfg, pii_context_subset, telemetry_dir, bundle=None):
+        nonlocal batch_call_count
+        batch_call_count += 1
+        if batch.batch_index == 1:
+            return result_batch1, {"total_tokens": 1000, "total_cost_usd": 0.001}, None, ""
+        else:
+            return result_batch2, {"total_tokens": 1500, "total_cost_usd": 0.0015}, None, ""
+
+    with patch("pr_reviewer_agent.fetch_all_pr_modified_files", return_value=mock_files), \
+         patch("pr_reviewer_agent.fetch_pr_modified_lines", return_value={}), \
+         patch("pr_reviewer_agent.fetch_pr_comments", return_value=[]), \
+         patch("pr_reviewer_agent.review_batch_with_isolated_context", side_effect=mock_review_batch), \
+         patch("pr_reviewer_agent.post_github_pr_review", new_callable=AsyncMock) as mock_post_review:
+        mock_post_review.return_value = True
+
+        report = await run_pr_review(
+            pr_number="77",
+            repo="org/repo",
+            token="test-token",
+            pii_report_path=str(reports_dir / "pii-scan.txt"),
+            batch_max_files=2,
+        )
+
+    assert report is not None
+    assert batch_call_count == 2
+    assert report.overall_status == ReviewStatus.COMMENT
+    assert len(report.findings) == 2
+    assert "Consider helper function" in [f.title for f in report.findings]
+    assert "Unused variable" in [f.title for f in report.findings]
+    assert "Batch 1: Minor suggestion." in report.summary
+    assert "Batch 2: Warning detected." in report.summary
+
+    # Verify cumulative token usage was persisted
+    token_usage_path = tmp_path / "reports" / "token-usage.json"
+    assert token_usage_path.exists()
+    with open(token_usage_path, "r", encoding="utf-8") as f:
+        usage = json.load(f)
+    assert usage["total_tokens"] == 2500
+    assert usage["total_cost_usd"] == 0.0025
+
+
+@pytest.mark.asyncio
+async def test_run_pr_review_multi_batch_blocker_triggers_request_changes(tmp_path, monkeypatch):
+    """Scenario: Validates that a BLOCKER in any batch elevates final review to REQUEST_CHANGES (D-4, D-17)."""
+    monkeypatch.chdir(tmp_path)
+    reports_dir = tmp_path / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+
+    mock_files = [
+        {"filename": "src/safe.py", "status": "modified", "changes": 5, "additions": 5, "deletions": 0, "patch": "@@ -0,0 +1,5 @@"},
+        {"filename": "src/unsafe.py", "status": "modified", "changes": 5, "additions": 5, "deletions": 0, "patch": "@@ -0,0 +1,5 @@"},
+    ]
+
+    result_batch1 = BatchReviewResult(batch_index=1, batch_summary="Batch 1 is clean.", findings=[])
+    result_batch2 = BatchReviewResult(
+        batch_index=2,
+        batch_summary="Batch 2 has severe PII leak.",
+        findings=[
+            InlineFinding(
+                file_path="src/unsafe.py",
+                line_number=2,
+                severity=PRFindingSeverity.BLOCKER,
+                title="Credential leak",
+                details="API key exposed in patch",
+                pii_leak=True,
+            )
+        ],
+    )
+
+    async def mock_review_batch(batch, cfg, pii_context_subset, telemetry_dir, bundle=None):
+        if batch.batch_index == 1:
+            return result_batch1, {"total_tokens": 500, "total_cost_usd": 0.0005}, None, ""
+        else:
+            return result_batch2, {"total_tokens": 500, "total_cost_usd": 0.0005}, None, ""
+
+    with patch("pr_reviewer_agent.fetch_all_pr_modified_files", return_value=mock_files), \
+         patch("pr_reviewer_agent.fetch_pr_modified_lines", return_value={}), \
+         patch("pr_reviewer_agent.fetch_pr_comments", return_value=[]), \
+         patch("pr_reviewer_agent.review_batch_with_isolated_context", side_effect=mock_review_batch), \
+         patch("pr_reviewer_agent.post_github_pr_review", new_callable=AsyncMock) as mock_post_review:
+        mock_post_review.return_value = True
+
+        report = await run_pr_review(
+            pr_number="88",
+            repo="org/repo",
+            token="test-token",
+            pii_report_path=str(reports_dir / "pii-scan.txt"),
+            batch_max_files=1,
+        )
+
+    assert report is not None
+    assert report.overall_status == ReviewStatus.REQUEST_CHANGES
+    assert len(report.findings) == 1
+    assert report.findings[0].pii_leak is True
+    posted_report = mock_post_review.call_args[1]["report"]
+    assert posted_report.overall_status == ReviewStatus.REQUEST_CHANGES
+
+
+@pytest.mark.asyncio
+async def test_run_pr_review_clean_multi_batch_results_in_approve(tmp_path, monkeypatch):
+    """Scenario: Validates that when all batches are clean, final review status is APPROVE (D-17, D-18)."""
+    monkeypatch.chdir(tmp_path)
+    reports_dir = tmp_path / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+
+    mock_files = [
+        {"filename": "src/clean1.py", "status": "modified", "changes": 3, "additions": 3, "deletions": 0, "patch": "@@ -0,0 +1,3 @@"},
+        {"filename": "src/clean2.py", "status": "modified", "changes": 3, "additions": 3, "deletions": 0, "patch": "@@ -0,0 +1,3 @@"},
+    ]
+
+    async def mock_review_batch(batch, cfg, pii_context_subset, telemetry_dir, bundle=None):
+        return (
+            BatchReviewResult(batch_index=batch.batch_index, batch_summary=f"Batch {batch.batch_index} clean.", findings=[]),
+            {"total_tokens": 400, "total_cost_usd": 0.0004},
+            None,
+            "",
+        )
+
+    with patch("pr_reviewer_agent.fetch_all_pr_modified_files", return_value=mock_files), \
+         patch("pr_reviewer_agent.fetch_pr_modified_lines", return_value={}), \
+         patch("pr_reviewer_agent.fetch_pr_comments", return_value=[]), \
+         patch("pr_reviewer_agent.review_batch_with_isolated_context", side_effect=mock_review_batch), \
+         patch("pr_reviewer_agent.post_github_pr_review", new_callable=AsyncMock) as mock_post_review:
+        mock_post_review.return_value = True
+
+        report = await run_pr_review(
+            pr_number="99",
+            repo="org/repo",
+            token="test-token",
+            pii_report_path=str(reports_dir / "pii-scan.txt"),
+            batch_max_files=1,
+        )
+
+    assert report is not None
+    assert report.overall_status == ReviewStatus.APPROVE
+    assert len(report.findings) == 0
+    posted_report = mock_post_review.call_args[1]["report"]
+    assert posted_report.overall_status == ReviewStatus.APPROVE
+
+
+@pytest.mark.asyncio
+async def test_run_pr_review_multi_batch_budget_exhaustion_halts_subsequent_batches(tmp_path, monkeypatch):
+    """Scenario: Validates that budget exhaustion in batch 1 halts remaining batches (D-13, D-14, D-17)."""
+    monkeypatch.chdir(tmp_path)
+    reports_dir = tmp_path / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+
+    mock_files = [
+        {"filename": "src/part1.py", "status": "modified", "changes": 5, "additions": 5, "deletions": 0, "patch": "@@ -0,0 +1,5 @@"},
+        {"filename": "src/part2.py", "status": "modified", "changes": 5, "additions": 5, "deletions": 0, "patch": "@@ -0,0 +1,5 @@"},
+        {"filename": "src/part3.py", "status": "modified", "changes": 5, "additions": 5, "deletions": 0, "patch": "@@ -0,0 +1,5 @@"},
+    ]
+
+    batch_execution_list = []
+
+    async def mock_review_batch(batch, cfg, pii_context_subset, telemetry_dir, bundle=None):
+        batch_execution_list.append(batch.batch_index)
+        if batch.batch_index == 1:
+            # Batch 1 runs and exceeds tokens
+            return (
+                BatchReviewResult(batch_index=1, batch_summary="Batch 1 finished.", findings=[]),
+                {"total_tokens": 120_000, "total_cost_usd": 0.12},
+                "MAX_TOTAL_TOKENS_EXCEEDED",
+                "MAX_TOTAL_TOKENS_EXCEEDED",
+            )
+        else:
+            return (
+                BatchReviewResult(batch_index=batch.batch_index, batch_summary=f"Batch {batch.batch_index}", findings=[]),
+                {"total_tokens": 100, "total_cost_usd": 0.0001},
+                None,
+                "",
+            )
+
+    with patch("pr_reviewer_agent.fetch_all_pr_modified_files", return_value=mock_files), \
+         patch("pr_reviewer_agent.fetch_pr_modified_lines", return_value={}), \
+         patch("pr_reviewer_agent.fetch_pr_comments", return_value=[]), \
+         patch("pr_reviewer_agent.review_batch_with_isolated_context", side_effect=mock_review_batch), \
+         patch("pr_reviewer_agent.post_github_pr_review", new_callable=AsyncMock) as mock_post_review:
+        mock_post_review.return_value = True
+
+        report = await run_pr_review(
+            pr_number="120",
+            repo="org/repo",
+            token="test-token",
+            pii_report_path=str(reports_dir / "pii-scan.txt"),
+            batch_max_files=1,
+            max_total_tokens=100_000,
+        )
+
+    assert report is not None
+    # Only batch 1 should have been executed! Batches 2 and 3 must be skipped.
+    assert batch_execution_list == [1]
+    assert report.overall_status == ReviewStatus.COMMENT
+    assert "PR review halted early" in report.summary
+
+    token_usage_path = tmp_path / "reports" / "token-usage.json"
+    assert token_usage_path.exists()
+    with open(token_usage_path, "r", encoding="utf-8") as f:
+        usage = json.load(f)
+    assert usage["budget_exceeded"] is True
+    assert usage["stop_reason"] == "MAX_TOTAL_TOKENS_EXCEEDED"
+
+
+@pytest.mark.asyncio
+async def test_run_pr_review_triage_metadata_and_skipped_notice_in_summary(tmp_path, monkeypatch):
+    """Scenario: Validates that triaging files beyond max_cap adds transparency note to final summary (D-15, D-18)."""
+    monkeypatch.chdir(tmp_path)
+    reports_dir = tmp_path / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+
+    # 10 mock files
+    mock_files = [
+        {"filename": f"src/file_{i}.py", "status": "modified", "changes": 2, "additions": 2, "deletions": 0, "patch": "@@ -0,0 +1,2 @@"}
+        for i in range(10)
+    ]
+
+    async def mock_review_batch(batch, cfg, pii_context_subset, telemetry_dir, bundle=None):
+        return (
+            BatchReviewResult(batch_index=batch.batch_index, batch_summary=f"Batch {batch.batch_index} clean.", findings=[]),
+            {"total_tokens": 100, "total_cost_usd": 0.0001},
+            None,
+            "",
+        )
+
+    with patch("pr_reviewer_agent.fetch_all_pr_modified_files", return_value=mock_files), \
+         patch("pr_reviewer_agent.fetch_pr_modified_lines", return_value={}), \
+         patch("pr_reviewer_agent.fetch_pr_comments", return_value=[]), \
+         patch("pr_reviewer_agent.review_batch_with_isolated_context", side_effect=mock_review_batch), \
+         patch("pr_reviewer_agent.post_github_pr_review", new_callable=AsyncMock) as mock_post_review:
+        mock_post_review.return_value = True
+
+        report = await run_pr_review(
+            pr_number="130",
+            repo="org/repo",
+            token="test-token",
+            pii_report_path=str(reports_dir / "pii-scan.txt"),
+            batch_max_files=5,
+            max_review_files_cap=3,  # Cap at 3 files out of 10
+        )
+
+    assert report is not None
+    assert report.overall_status == ReviewStatus.APPROVE
+    assert "⚠️ Note: Review volume triaged and capped. Evaluated 3 of 10 files based on risk scoring (skipped 7 lower-risk files)." in report.summary
+
 
