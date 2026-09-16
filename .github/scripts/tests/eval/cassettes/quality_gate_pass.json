@@ -1,0 +1,29 @@
+{
+  "case_id": "quality_gate_pass",
+  "model": "gemini-3.7-flash",
+  "recorded_at": "2026-09-16T03:00:00Z",
+  "usage_metadata": {
+    "prompt_token_count": 950,
+    "candidates_token_count": 120,
+    "cached_content_token_count": 0,
+    "thoughts_token_count": 45,
+    "thought_tokens": 45,
+    "total_token_count": 1115
+  },
+  "stop_reason": "STOP",
+  "chunks": [
+    {
+      "type": "Thought",
+      "content": "Evaluating DLP scan and PR code review report. DLP report indicates 0 findings. PR review approved with 0 blockers. Gate passes cleanly."
+    },
+    {
+      "type": "Text",
+      "content": "{\"passed\": true, \"summary\": \"All quality and security checks passed cleanly.\", \"failures\": []}"
+    }
+  ],
+  "raw_structured_output": {
+    "passed": true,
+    "summary": "All quality and security checks passed cleanly.",
+    "failures": []
+  }
+}

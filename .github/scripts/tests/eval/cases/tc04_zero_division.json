@@ -1,0 +1,34 @@
+{
+  "case_id": "tc04_zero_division",
+  "name": "Unhandled Zero Division Logic Defect",
+  "description": "Unchecked division: avg = total / count without checking if count == 0. Expects finding noting unhandled ZeroDivisionError.",
+  "category": "logic_defect",
+  "pr_number": "104",
+  "repo": "octocat/hello-world",
+  "diff_content": "diff --git a/adk_bug_ticket_agent/tools/analytics.py b/adk_bug_ticket_agent/tools/analytics.py\n--- a/adk_bug_ticket_agent/tools/analytics.py\n+++ b/adk_bug_ticket_agent/tools/analytics.py\n@@ -10,3 +10,6 @@\n+def calculate_ticket_resolution_metrics(total_hours: float, resolved_count: int) -> dict:\n+    avg_hours = total_hours / resolved_count\n+    return {\"average_resolution_hours\": avg_hours}\n",
+  "modified_files": {
+    "adk_bug_ticket_agent/tools/analytics.py": [10, 11, 12]
+  },
+  "file_tree": {
+    "adk_bug_ticket_agent/tools/analytics.py": "def calculate_ticket_resolution_metrics(total_hours: float, resolved_count: int) -> dict:\n    avg_hours = total_hours / resolved_count\n    return {\"average_resolution_hours\": avg_hours}\n"
+  },
+  "pii_scan_content": "✅ No sensitive data or PII detected by Cloud DLP.",
+  "pr_review_content": "{\n  \"overall_status\": \"REQUEST_CHANGES\",\n  \"summary\": \"Logic defect: potential unhandled ZeroDivisionError in calculate_ticket_resolution_metrics.\",\n  \"findings\": [\n    {\n      \"file_path\": \"adk_bug_ticket_agent/tools/analytics.py\",\n      \"line_number\": 11,\n      \"severity\": \"BLOCKER\",\n      \"title\": \"Unhandled ZeroDivisionError in calculation\",\n      \"details\": \"Variable resolved_count can be 0, which raises an unhandled ZeroDivisionError.\",\n      \"suggestion\": \"if resolved_count == 0:\\n    return {\\\"average_resolution_hours\\\": 0.0}\\navg_hours = total_hours / resolved_count\",\n      \"pii_leak\": false\n    }\n  ]\n}",
+  "expected_review": {
+    "expected_status": ["REQUEST_CHANGES", "COMMENT"],
+    "min_findings": 1,
+    "required_findings": [
+      {
+        "file_path": "adk_bug_ticket_agent/tools/analytics.py",
+        "keyword_in_title_or_details": "zero"
+      }
+    ]
+  },
+  "expected_gate": {
+    "expected_passed": false,
+    "min_failures": 1,
+    "expected_failure_categories": ["ARCHITECTURAL_DEFECT"],
+    "expected_severities": ["CRITICAL", "HIGH", "MEDIUM"],
+    "keyword_in_summary_or_reason": "division"
+  }
+}

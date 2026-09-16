@@ -1,0 +1,52 @@
+{
+  "case_id": "tc01_clean_code",
+  "model": "gemini-3.7-flash",
+  "recorded_at": "2026-09-16T03:00:00Z",
+  "usage_metadata": {
+    "prompt_token_count": 1200,
+    "candidates_token_count": 180,
+    "cached_content_token_count": 0,
+    "thoughts_token_count": 64,
+    "thought_tokens": 64,
+    "total_token_count": 1444
+  },
+  "stop_reason": "STOP",
+  "chunks": [
+    {
+      "type": "Thought",
+      "content": "Analyzing modified files diff. Verified clean Django view implementation with proper status codes, type hints, and passing unit test cases."
+    },
+    {
+      "type": "ToolCall",
+      "name": "list_pull_request_files",
+      "args": {
+        "owner": "octocat",
+        "repo": "hello-world",
+        "pull_number": 101
+      }
+    },
+    {
+      "type": "ToolResult",
+      "name": "list_pull_request_files",
+      "result": {
+        "files": [
+          {
+            "filename": "adk_bug_ticket_agent/views.py",
+            "status": "modified"
+          }
+        ]
+      }
+    },
+    {
+      "type": "Text",
+      "content": "{\"batch_index\": 1, \"batch_summary\": \"Clean implementation with comprehensive test coverage. No security or architectural defects identified.\", \"overall_status\": \"APPROVE\", \"summary\": \"Clean implementation with comprehensive test coverage. No security or architectural defects identified.\", \"findings\": []}"
+    }
+  ],
+  "raw_structured_output": {
+    "batch_index": 1,
+    "batch_summary": "Clean implementation with comprehensive test coverage. No security or architectural defects identified.",
+    "overall_status": "APPROVE",
+    "summary": "Clean implementation with comprehensive test coverage. No security or architectural defects identified.",
+    "findings": []
+  }
+}

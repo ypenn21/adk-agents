@@ -1,0 +1,35 @@
+{
+  "case_id": "tc07_blocker_alignment",
+  "name": "PR Review Contains Blockers While DLP is Clean",
+  "description": "PR review contains blockers, but DLP report is clean. Expects gate passed=False, category ARCHITECTURAL_DEFECT.",
+  "category": "alignment",
+  "pr_number": "107",
+  "repo": "octocat/hello-world",
+  "diff_content": "diff --git a/adk_bug_ticket_agent/agent.py b/adk_bug_ticket_agent/agent.py\n--- a/adk_bug_ticket_agent/agent.py\n+++ b/adk_bug_ticket_agent/agent.py\n@@ -50,3 +50,6 @@\n+def get_agent_instance():\n+    # Anti-pattern: Instantiating new runner and memory on every request\n+    return Agent(LocalAgentConfig(model=\"gemini-3.8-flash\"))\n",
+  "modified_files": {
+    "adk_bug_ticket_agent/agent.py": [50, 51, 52]
+  },
+  "file_tree": {
+    "adk_bug_ticket_agent/agent.py": "def get_agent_instance():\n    return Agent(LocalAgentConfig(model=\"gemini-3.8-flash\"))\n"
+  },
+  "pii_scan_content": "✅ No sensitive data or PII detected by Cloud DLP.",
+  "pr_review_content": "{\n  \"overall_status\": \"REQUEST_CHANGES\",\n  \"summary\": \"Architectural defects detected in agent initialization: singleton pattern broken, unbounded memory growth.\",\n  \"findings\": [\n    {\n      \"file_path\": \"adk_bug_ticket_agent/agent.py\",\n      \"line_number\": 50,\n      \"severity\": \"BLOCKER\",\n      \"title\": \"Unbounded memory growth and broken singleton\",\n      \"details\": \"Agent creates new session manager instance per request causing severe memory leak and architectural defect.\",\n      \"suggestion\": \"Use ServiceManager.get_instance() to retain singleton.\",\n      \"pii_leak\": false\n    }\n  ]\n}",
+  "expected_review": {
+    "expected_status": ["REQUEST_CHANGES"],
+    "has_blockers": true,
+    "min_findings": 1,
+    "required_findings": [
+      {
+        "file_path": "adk_bug_ticket_agent/agent.py",
+        "expected_severity": "BLOCKER"
+      }
+    ]
+  },
+  "expected_gate": {
+    "expected_passed": false,
+    "min_failures": 1,
+    "expected_failure_categories": ["ARCHITECTURAL_DEFECT"],
+    "expected_severities": ["CRITICAL", "HIGH"],
+    "keyword_in_summary_or_reason": "architectural"
+  }
+}

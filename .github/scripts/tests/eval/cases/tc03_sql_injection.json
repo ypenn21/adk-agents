@@ -1,0 +1,36 @@
+{
+  "case_id": "tc03_sql_injection",
+  "name": "Raw SQL String Interpolation Vulnerability",
+  "description": "Source diff with raw string formatting into SQL cursor: f\"SELECT * FROM users WHERE id = '{user_id}'\". Expects REQUEST_CHANGES, severity BLOCKER, remediation mentioning parameterized queries.",
+  "category": "vulnerability",
+  "pr_number": "103",
+  "repo": "octocat/hello-world",
+  "diff_content": "diff --git a/adk_bug_ticket_agent/views.py b/adk_bug_ticket_agent/views.py\n--- a/adk_bug_ticket_agent/views.py\n+++ b/adk_bug_ticket_agent/views.py\n@@ -85,4 +85,7 @@ from django.db import connection\n \n+def get_user_profile(user_id: str):\n+    with connection.cursor() as cursor:\n+        cursor.execute(f\"SELECT * FROM users WHERE id = '{user_id}'\")\n+        return cursor.fetchone()\n",
+  "modified_files": {
+    "adk_bug_ticket_agent/views.py": [86, 87, 88, 89]
+  },
+  "file_tree": {
+    "adk_bug_ticket_agent/views.py": "from django.db import connection\n\ndef get_user_profile(user_id: str):\n    with connection.cursor() as cursor:\n        cursor.execute(f\"SELECT * FROM users WHERE id = '{user_id}'\")\n        return cursor.fetchone()\n"
+  },
+  "pii_scan_content": "✅ No sensitive data or PII detected by Cloud DLP.",
+  "pr_review_content": "{\n  \"overall_status\": \"REQUEST_CHANGES\",\n  \"summary\": \"CRITICAL: SQL injection vulnerability detected in adk_bug_ticket_agent/views.py.\",\n  \"findings\": [\n    {\n      \"file_path\": \"adk_bug_ticket_agent/views.py\",\n      \"line_number\": 88,\n      \"severity\": \"BLOCKER\",\n      \"title\": \"SQL Injection via Unsanitized f-string formatting\",\n      \"details\": \"User input user_id is directly formatted into raw SQL query without parameterization.\",\n      \"suggestion\": \"cursor.execute('SELECT * FROM users WHERE id = %s', [user_id])\",\n      \"pii_leak\": false\n    }\n  ]\n}",
+  "expected_review": {
+    "expected_status": ["REQUEST_CHANGES"],
+    "min_findings": 1,
+    "has_blockers": true,
+    "required_findings": [
+      {
+        "file_path": "adk_bug_ticket_agent/views.py",
+        "expected_severity": "BLOCKER",
+        "keyword_in_title_or_details": "sql"
+      }
+    ]
+  },
+  "expected_gate": {
+    "expected_passed": false,
+    "min_failures": 1,
+    "expected_failure_categories": ["SECURITY_VULNERABILITY"],
+    "expected_severities": ["CRITICAL", "HIGH"],
+    "keyword_in_summary_or_reason": "SQL"
+  }
+}

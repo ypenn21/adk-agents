@@ -1,0 +1,27 @@
+{
+  "case_id": "tc06_fail_closed_dlp",
+  "name": "Fail-Closed Gate on Missing Cloud DLP Report",
+  "description": "Missing Cloud DLP report file. Expects gate passed=False, severity CRITICAL, component 'Cloud DLP'.",
+  "category": "fail_closed",
+  "pr_number": "106",
+  "repo": "octocat/hello-world",
+  "diff_content": "",
+  "modified_files": {},
+  "file_tree": {},
+  "pii_scan_content": "ERROR: Cloud DLP scan report could not be located or loaded. File reports/pii-scan.txt is missing.",
+  "pr_review_content": "{\n  \"overall_status\": \"APPROVE\",\n  \"summary\": \"All code changes look clean and well-structured.\",\n  \"findings\": []\n}",
+  "expected_review": {
+    "expected_status": ["APPROVE"],
+    "min_findings": 0,
+    "max_findings": 0,
+    "has_blockers": false,
+    "required_findings": []
+  },
+  "expected_gate": {
+    "expected_passed": false,
+    "min_failures": 1,
+    "expected_failure_categories": ["SECURITY_VULNERABILITY"],
+    "expected_severities": ["CRITICAL"],
+    "keyword_in_summary_or_reason": "DLP"
+  }
+}

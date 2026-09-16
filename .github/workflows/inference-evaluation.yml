@@ -1,0 +1,108 @@
+name: LLM Inference Evaluation Suite
+
+on:
+  schedule:
+    - cron: '0 3 * * *'  # Nightly at 3:00 AM UTC
+  pull_request:
+    paths:
+      - '.github/prompts/**'
+      - '.github/scripts/pr_reviewer_agent.py'
+      - '.github/scripts/quality_gate_agent.py'
+      - '.github/scripts/tests/eval/**'
+  workflow_dispatch:
+    inputs:
+      model:
+        description: 'Target Gemini model for evaluation'
+        required: false
+        default: 'gemini-3.7-flash'
+        type: string
+      fail_on_threshold_breach:
+        description: 'Fail workflow if quality thresholds are breached'
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+  id-token: write
+  pull-requests: write
+
+env:
+  GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT || vars.GCP_PROJECT_ID }}
+  GOOGLE_CLOUD_PROJECT_NUMBER: ${{ secrets.GOOGLE_CLOUD_PROJECT_NUMBER || vars.GCP_PROJECT_NUMBER }}
+  GOOGLE_GENAI_USE_VERTEXAI: 'true'
+  GOOGLE_CLOUD_LOCATION: ${{ secrets.GOOGLE_CLOUD_LOCATION || 'us-central1' }}
+  LLM_Model: ${{ inputs.model || vars.LLM_MODEL || vars.LLM_Model || secrets.LLM_MODEL || secrets.LLM_Model || 'gemini-3.7-flash' }}
+  FAIL_ON_BREACH: ${{ inputs.fail_on_threshold_breach != false }}
+
+jobs:
+  inference-eval:
+    name: Evaluate Gemini Inference Quality & Security
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - id: 'auth'
+        name: 'Authenticate to Google Cloud (WIF)'
+        uses: 'google-github-actions/auth@v2'
+        with:
+          workload_identity_provider: 'projects/${{ env.GOOGLE_CLOUD_PROJECT_NUMBER }}/locations/global/workloadIdentityPools/aaa-github-pool/providers/github-provider'
+          service_account: '${{ env.GOOGLE_CLOUD_PROJECT_NUMBER }}-compute@developer.gserviceaccount.com'
+          project_id: ${{ env.GOOGLE_CLOUD_PROJECT }}
+
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v2'
+        with:
+          install_components: 'alpha'
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python SDK and dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install google-antigravity "pydantic>=2.0.0,<3.0.0" pyyaml pytest pytest-asyncio
+
+      - name: Run Live LLM Inference Evaluation Suite
+        id: eval-run
+        continue-on-error: true
+        env:
+          PYTHONPATH: .:.github/scripts:.github/scripts/tests/eval
+          GOOGLE_GENAI_USE_VERTEXAI: 'true'
+          GOOGLE_CLOUD_PROJECT: ${{ env.GOOGLE_CLOUD_PROJECT }}
+          GOOGLE_CLOUD_LOCATION: ${{ env.GOOGLE_CLOUD_LOCATION }}
+          LLM_Model: ${{ env.LLM_Model }}
+        run: |
+          mkdir -p reports
+          pytest .github/scripts/tests/eval/ -m inference --run-inference --junitxml=reports/eval-results.xml -v || true
+
+      - name: Generate and Publish Step Summary
+        if: always()
+        env:
+          PYTHONPATH: .:.github/scripts:.github/scripts/tests/eval
+          LLM_Model: ${{ env.LLM_Model }}
+        run: |
+          python .github/scripts/tests/eval/eval_runner.py --generate-summary --output-dir reports --model "${{ env.LLM_Model }}"
+
+      - name: Enforce Evaluation Thresholds
+        if: always()
+        env:
+          PYTHONPATH: .:.github/scripts:.github/scripts/tests/eval
+          FAIL_ON_BREACH: ${{ env.FAIL_ON_BREACH }}
+        run: |
+          if [ "$FAIL_ON_BREACH" = "true" ]; then
+            python .github/scripts/tests/eval/eval_runner.py --fail-on-threshold-breach --output-dir reports --model "${{ env.LLM_Model }}"
+          else
+            echo "Quality threshold enforcement bypassed (fail_on_threshold_breach is false)."
+          fi
+
+      - name: Upload Evaluation Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-reports-${{ github.run_id }}
+          path: reports/
+          retention-days: 30
