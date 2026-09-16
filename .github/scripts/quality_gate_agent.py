@@ -27,6 +27,7 @@ from helper import (
     read_text_file,
     parse_agent_structured_output,
 )
+from prompt_loader import load_prompt_bundle
 
 __all__ = [
     "SeverityLevel",
@@ -81,30 +82,22 @@ class QualityGateDecision(BaseModel):
         return self
 
 
-QUALITY_GATE_SYSTEM_INSTRUCTIONS = (
-    "You are a Lead Release Engineer and Security Gatekeeper. "
-    "Evaluate combined DLP and PR code review reports against release criteria.\n"
-    "Quality Gate Criteria:\n"
-    "1. ZERO PII, credential, or authentication token leaks detected by Cloud DLP.\n"
-    "2. PR Code Review contains no unresolved blocking architectural or critical security failures."
-)
+_DEFAULT_QUALITY_GATE_BUNDLE = load_prompt_bundle("quality_gate")
+QUALITY_GATE_SYSTEM_INSTRUCTIONS = _DEFAULT_QUALITY_GATE_BUNDLE.system_instructions
 
 
-def build_quality_gate_prompt(pii_content: str, pr_review_content: str) -> str:
-    """Builds prompt for Quality Gate LLM evaluation."""
-    return f"""You are the Quality Gate Decision Agent.
-Evaluate the following security scans and PR code review outputs:
-
-=== CLOUD DLP SCAN REPORT ===
-{pii_content}
-
-=== PR CODE REVIEW REPORT ===
-{pr_review_content}
-
-Evaluate if the build passes or fails release criteria.
-Fail the gate if any sensitive data, credentials, or blocker review items exist.
-Return a structured QualityGateDecision response.
-"""
+def build_quality_gate_prompt(
+    pii_content: str,
+    pr_review_content: str,
+    version: Optional[str] = None,
+    prompt_path: Optional[str] = None,
+) -> str:
+    """Builds prompt for Quality Gate LLM evaluation using PromptLoader (Decision D-19)."""
+    bundle = load_prompt_bundle("quality_gate", version=version, prompt_path=prompt_path)
+    return bundle.render_user_prompt(
+        pii_content=pii_content,
+        pr_review_content=pr_review_content,
+    )
 
 
 async def evaluate_quality_gate(
@@ -115,11 +108,26 @@ async def evaluate_quality_gate(
     pr_number: Optional[str] = None,
     model: Optional[str] = None,
     enforce: bool = False,
+    prompt_version: Optional[str] = None,
+    prompt_path: Optional[str] = None,
 ) -> QualityGateDecision:
     """Evaluates combined scan and review reports against release criteria."""
-    cfg = resolve_env_config(pr_number=pr_number, project_id=project_id, location=location, model=model)
+    cfg = resolve_env_config(
+        pr_number=pr_number,
+        project_id=project_id,
+        location=location,
+        model=model,
+        quality_gate_prompt_version=prompt_version,
+        quality_gate_prompt_path=prompt_path,
+    )
     pr_num = cfg["pr_number"]
     telemetry_dir = ensure_directory("reports/telemetry/quality_gate_agent")
+
+    # Load versioned prompt bundle (Decision D-19)
+    resolved_prompt_ver = prompt_version or cfg.get("quality_gate_prompt_version")
+    resolved_prompt_p = prompt_path or cfg.get("quality_gate_prompt_path")
+    bundle = load_prompt_bundle("quality_gate", version=resolved_prompt_ver, prompt_path=resolved_prompt_p)
+    prompt_metadata_audit = bundle.to_audit_dict()
 
     # 1. Fail-Closed Check on Cloud DLP Scan Report (Decision D-7)
     if not os.path.exists(pii_report_path) or os.path.getsize(pii_report_path) == 0:
@@ -136,7 +144,7 @@ async def evaluate_quality_gate(
                 )
             ],
         )
-        write_gate_reports(decision)
+        write_gate_reports(decision, prompt_metadata=prompt_metadata_audit)
         return decision
 
     pii_content = read_text_file(pii_report_path)
@@ -159,7 +167,7 @@ async def evaluate_quality_gate(
                     )
                 ],
             )
-            write_gate_reports(decision)
+            write_gate_reports(decision, prompt_metadata=prompt_metadata_audit)
             return decision
     else:
         pr_review_content = read_text_file(pr_review_path)
@@ -206,7 +214,10 @@ async def evaluate_quality_gate(
 
     # 4. Attempt to invoke Antigravity SDK Agent
     try:
-        prompt = build_quality_gate_prompt(pii_content, pr_review_content)
+        prompt = bundle.render_user_prompt(
+            pii_content=pii_content,
+            pr_review_content=pr_review_content,
+        )
         config = LocalAgentConfig(
             vertex=True,
             project=cfg["project_id"],
@@ -214,13 +225,13 @@ async def evaluate_quality_gate(
             model=cfg["model"],
             response_schema=QualityGateDecision,
             app_data_dir=telemetry_dir,
-            system_instructions=QUALITY_GATE_SYSTEM_INSTRUCTIONS,
+            system_instructions=bundle.system_instructions,
         )
         async with Agent(config) as agent:
             response = await agent.chat(prompt)
             raw_output = await response.structured_output()
             decision = parse_agent_structured_output(raw_output, QualityGateDecision)
-            write_gate_reports(decision)
+            write_gate_reports(decision, prompt_metadata=prompt_metadata_audit)
             return decision
     except Exception:
         # Fallback to deterministic evaluation
@@ -239,7 +250,7 @@ async def evaluate_quality_gate(
             failures=[],
         )
 
-    write_gate_reports(decision)
+    write_gate_reports(decision, prompt_metadata=prompt_metadata_audit)
     return decision
 
 

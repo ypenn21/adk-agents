@@ -41,6 +41,7 @@ dependencies = [
     { name = "psycopg2-binary" },
     { name = "pytest" },
     { name = "python-dotenv" },
+    { name = "pyyaml" },
     { name = "toolbox-core" },
     { name = "whitenoise", extra = ["brotli"] },
 ]
@@ -63,6 +64,7 @@ requires-dist = [
     { name = "psycopg2-binary" },
     { name = "pytest", specifier = ">=7.4.0" },
     { name = "python-dotenv", specifier = "==1.1.0" },
+    { name = "pyyaml", specifier = ">=6.0.0" },
     { name = "toolbox-core", specifier = "==0.5.2" },
     { name = "whitenoise", extras = ["brotli"] },
 ]

@@ -27,6 +27,8 @@ env:
   MAX_MODEL_CALLS: ${{ vars.MAX_MODEL_CALLS || secrets.MAX_MODEL_CALLS || '100' }}
   MAX_TOOL_CALLS: ${{ vars.MAX_TOOL_CALLS || secrets.MAX_TOOL_CALLS || '50' }}
   MAX_SPEND_USD: ${{ vars.MAX_SPEND_USD || secrets.MAX_SPEND_USD || '' }}
+  PR_REVIEW_PROMPT_VERSION: ${{ vars.PR_REVIEW_PROMPT_VERSION || secrets.PR_REVIEW_PROMPT_VERSION || '1.0.0' }}
+  QUALITY_GATE_PROMPT_VERSION: ${{ vars.QUALITY_GATE_PROMPT_VERSION || secrets.QUALITY_GATE_PROMPT_VERSION || '1.0.0' }}
 
 jobs:
   scan-and-evaluate:
@@ -66,7 +68,7 @@ jobs:
 
       - name: Install Python SDK and dependencies
         run: |
-          pip install google-antigravity "pydantic>=2.0.0,<3.0.0"
+          pip install google-antigravity "pydantic>=2.0.0,<3.0.0" pyyaml
 
       - name: 'Google Cloud DLP Sensitive Data & PII Scan'
         run: |
@@ -156,51 +158,10 @@ jobs:
 
       - name: 'Generate GitHub Actions Job Summary'
         if: always()
+        env:
+          GOOGLE_CLOUD_PROJECT: ${{ env.GOOGLE_CLOUD_PROJECT }}
         run: |
-          echo "## 🛡️ Antigravity CI/CD Quality Gate Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          if grep -q "GATE_PASSED" reports/decision.txt 2>/dev/null; then
-            echo "### ✅ Status: **GATE PASSED**" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "### ❌ Status: **GATE FAILED**" >> $GITHUB_STEP_SUMMARY
-          fi
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 📋 Release Engineer Decision" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          cat reports/decision.txt 2>/dev/null || echo "No decision report generated." >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          if [ -f reports/token-usage.json ]; then
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "### 📊 PR Reviewer Token Usage & Estimated Spend" >> $GITHUB_STEP_SUMMARY
-            python -c "
-          import json
-          with open('reports/token-usage.json') as f:
-              d = json.load(f)
-          model = d.get('model', 'gemini-3.7-flash')
-          prompt = d.get('prompt_tokens', 0)
-          cached = d.get('cached_tokens', 0)
-          candidate = d.get('candidate_tokens', 0)
-          thought = d.get('thought_tokens', 0)
-          total = d.get('total_tokens', 0)
-          cost = d.get('total_cost_usd', 0.0)
-          stop = d.get('stop_reason', 'COMPLETED')
-          halted = '⚠️ **BUDGET EXCEEDED**' if d.get('budget_exceeded') else '✅ Normal'
-
-          print(f'| Metric | Value |')
-          print(f'| :--- | :--- |')
-          print(f'| **Model** | \`{model}\` |')
-          print(f'| **Execution Status** | {halted} (\`{stop}\`) |')
-          print(f'| **Prompt Tokens (Uncached)** | {max(0, prompt - cached):,} |')
-          print(f'| **Cached Prompt Tokens** | {cached:,} |')
-          print(f'| **Candidate Generation Tokens** | {candidate:,} |')
-          print(f'| **Reasoning / Thought Tokens** | {thought:,} |')
-          print(f'| **Total Tokens Billed** | **{total:,}** |')
-          print(f'| **Estimated Spend (USD)** | **\${cost:.6f}** |')
-          " >> $GITHUB_STEP_SUMMARY
-          fi
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 📦 Archived Artifacts" >> $GITHUB_STEP_SUMMARY
-          echo "GCS Destination: \`gs://${{ env.GOOGLE_CLOUD_PROJECT }}-scan-reports/${{ github.run_id }}_${{ github.run_attempt }}\`" >> $GITHUB_STEP_SUMMARY
+          python .github/scripts/generate_job_summary.py
 
       - name: 'Upload Audit Reports & Telemetry to GCS'
         if: always()
