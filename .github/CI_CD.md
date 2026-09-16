@@ -97,6 +97,7 @@ sequenceDiagram
 * **Outputs:**
   * `reports/gate-decision.json` (`QualityGateDecision` Pydantic model)
   * `reports/decision.txt` (Deterministic text starting with `GATE_PASSED` or `GATE_FAILED`)
+* **Token Budget & Telemetry Scope:** The Quality Gate Agent executes a single bounded inference pass over pre-filtered scan summaries without multi-turn MCP loops or iterative code batching. Consequently, token budgeting dials (`MAX_TOTAL_TOKENS`, `MAX_SPEND_USD`) and spend capping apply only to the PR Reviewer Agent, and Quality Gate tokens are not tracked or persisted in `reports/token-usage.json`.
 
 ### Stage 4: Artifact Archiving & Enforcement
 * **Job Summary:** Renders markdown decision summary directly into `$GITHUB_STEP_SUMMARY`.
@@ -211,6 +212,23 @@ Every review run writes structured telemetry to `reports/token-usage.json`:
 ```
 
 The GitHub Actions workflow parses this file and publishes the **Token Usage & Estimated Spend** table directly into the GitHub Job Summary.
+
+---
+
+### 5.7 Agent Scope: PR Reviewer vs. Quality Gate Token Accounting
+
+The tokenomics and budgeting architecture within the pipeline distinguishes between the multi-turn, tool-augmented PR Reviewer Agent and the downstream Quality Gate Decision Agent:
+
+* **PR Reviewer Agent ([`pr_reviewer_agent.py`](scripts/pr_reviewer_agent.py)):**
+  * **Subject to Budget Controls:** Actively enforces `MAX_TOTAL_TOKENS`, `MAX_INPUT_TOKENS`, `MAX_OUTPUT_TOKENS`, `MAX_MODEL_CALLS`, `MAX_TOOL_CALLS`, and `MAX_SPEND_USD` via `types.BudgetConfig`.
+  * **Telemetry Persistence:** Accumulates multi-batch token metrics and writes `reports/token-usage.json`.
+  * **Job Summary Display:** Serves as the sole data source for the **PR Reviewer Token Usage & Estimated Spend** table in `$GITHUB_STEP_SUMMARY`.
+  * **Operational Risk:** Inspects large PR diffs, executes iterative batching, and interacts dynamically with GitHub MCP tools, creating genuine potential for runaway token consumption without strict ceilings.
+
+* **Quality Gate Decision Agent ([`quality_gate_agent.py`](scripts/quality_gate_agent.py)):**
+  * **Excluded from Token Caps:** Does not configure `types.BudgetConfig` or enforce token/spend limits.
+  * **No Telemetry Generation:** Does not calculate token spend or persist usage metrics to `reports/token-usage.json`.
+  * **Operational Characteristics:** Executes a single, bounded inference pass (or falls back to deterministic rule-based evaluation) over two pre-filtered, summarized text artifacts (`reports/pii-scan.txt` and `reports/pr-review.txt`). Its token consumption is minimal (typically a few hundred to a few thousand tokens) with negligible cost variance, obviating the need for complex multi-turn budgeting dials.
 
 ---
 
