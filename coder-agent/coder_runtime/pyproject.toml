@@ -15,10 +15,10 @@ requires-python = ">=3.12,<3.13"
 # the serving environment keeps aiplatform. Adding either package back here
 # reintroduces the conflict, and it reappears as a VersionError at import.
 dependencies = [
-    "google-adk[antigravity]>=2.7.1",
+    "google-adk[antigravity]>=2.9.1",
     # 0.1.12 declares protobuf>=4.25 but ships gencode 7.35.0, so it resolves
     # green and dies at import. 0.1.13 is the first release whose pin is true.
-    "google-antigravity>=0.1.13",
-    "google-cloud-secret-manager>=2.20.0",
+    "google-antigravity>=0.1.16",
+    "google-cloud-secret-manager>=2.30.0",
     "protobuf>=7.35",
 ]
