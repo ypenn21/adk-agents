@@ -60,6 +60,40 @@ sequenceDiagram
 
 ## 4. Pipeline Stages & Business Logic
 
+```mermaid
+flowchart TD
+    subgraph STAGE1["Stage 1: Cloud DLP PII & Secret Scan"]
+        direction TB
+        SrcFiles["Source Files & PR Diffs"] --> DLP["Cloud DLP Text Inspection<br/>(gcloud alpha dlp text inspect)"]
+        DLP --> DLPReports["DLP Reports<br/>(reports/pii-scan.txt, .json)"]
+    end
+
+    subgraph STAGE2["Stage 2: Antigravity PR Reviewer Agent"]
+        direction TB
+        PRContext["PR Diffs & Metadata"] --> MCP["GitHub MCP Server"]
+        MCP --> Reviewer["Antigravity Reviewer Agent<br/>(Vertex AI Gemini)"]
+        Reviewer --> InlineComments["Inline PR Comments & Review Status"]
+        Reviewer --> ReviewReports["PR Review Reports<br/>(reports/pr-review.txt, .json)"]
+    end
+
+    subgraph STAGE3["Stage 3: Quality Gate Decision Agent"]
+        direction TB
+        DLPReports --> GateAgent["Quality Gate Decision Agent<br/>(Lead Release Engineer)"]
+        ReviewReports --> GateAgent
+        GateAgent --> Rules{"Decision Logic:<br/>- Zero PII Leaks<br/>- No Blocker Defects<br/>- Fail-Closed Check"}
+        Rules --> GateOutput["Gate Decision Artifacts<br/>(reports/gate-decision.json, decision.txt)"]
+    end
+
+    subgraph STAGE4["Stage 4: Archiving & Enforcement"]
+        direction TB
+        GateOutput --> StepSummary["Render Markdown Summary to<br/>$GITHUB_STEP_SUMMARY"]
+        GateOutput --> GCSUpload["Upload Reports & Traces to<br/>Google Cloud Storage"]
+        GateOutput --> StatusCheck{"Quality Gate<br/>passed == true?"}
+        StatusCheck -- Passed --> Deploy(["Proceed / Merge Allowed"])
+        StatusCheck -- Failed --> Exit1(["Exit 1 / Block PR & Merge"])
+    end
+```
+
 ### Stage 1: Cloud DLP Sensitive Data & PII Scan
 * **Command:** `gcloud alpha dlp text inspect`
 * **Target InfoTypes:** `EMAIL_ADDRESS`, `PHONE_NUMBER`, `LOCATION`, `CREDIT_CARD_NUMBER`, `AUTH_TOKEN`, `API_KEY`.
