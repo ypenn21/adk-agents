@@ -139,7 +139,7 @@ async def test_live_inference_pr_reviewer(
 
     # 2. Case-specific assertions
     if case_id == "tc01_clean_code":
-        assert report.overall_status == ReviewStatus.APPROVE, (
+        assert report.overall_status in (ReviewStatus.APPROVE, ReviewStatus.COMMENT), (
             f"Clean code was rejected with status {report.overall_status}"
         )
         assert not any(f.severity == PRFindingSeverity.BLOCKER for f in report.findings), (

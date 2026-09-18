@@ -162,6 +162,51 @@ def test_evaluate_case_assertions_clean_pr_success():
     assert abs(metric.cost_usd - 0.001215) < 1e-6
 
 
+def test_evaluate_case_assertions_clean_pr_comment_status_success():
+    case = EvalCase(
+        case_id="tc01_clean_code",
+        name="Clean PR with Non-blocking Comments",
+        description="Clean code with stylistic suggestion",
+        category="clean",
+        diff_content="+ def health_check(): pass",
+        expected_review=ExpectedReviewAssertion(
+            expected_status=[ReviewStatus.APPROVE, ReviewStatus.COMMENT],
+            min_findings=0,
+            has_blockers=False,
+        ),
+    )
+    report = PRReviewReport(
+        overall_status=ReviewStatus.COMMENT,
+        summary="Clean implementation with non-blocking suggestion.",
+        findings=[
+            InlineFinding(
+                file_path="web_ui/views.py",
+                line_number=12,
+                severity=PRFindingSeverity.SUGGESTION,
+                title="Restrict to GET requests",
+                details="Use @require_GET decorator",
+                suggestion="@require_GET",
+                pii_leak=False,
+            )
+        ],
+    )
+    usage = {
+        "prompt_tokens": 1000,
+        "candidate_tokens": 100,
+        "cached_tokens": 0,
+        "thought_tokens": 0,
+        "total_tokens": 1100,
+    }
+
+    metric = evaluate_case_assertions(case, report, duration=2.0, usage=usage)
+    assert metric.schema_valid is True
+    assert metric.status_match is True
+    assert metric.clean_fpr == 0.0
+    assert metric.detected_blockers == 0
+    assert metric.passed_all_assertions is True
+    assert len(metric.failure_reasons) == 0
+
+
 def test_evaluate_case_assertions_vulnerability_pr_success():
     case = EvalCase(
         case_id="tc02_secret_leak",

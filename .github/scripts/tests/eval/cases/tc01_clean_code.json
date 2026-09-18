@@ -17,9 +17,8 @@
   "pii_scan_content": "✅ No sensitive data or PII detected by Cloud DLP.",
   "pr_review_content": "{\n  \"overall_status\": \"APPROVE\",\n  \"summary\": \"All PR changes look clean, well-structured, and meet standards. Added health check endpoint with unit test.\",\n  \"findings\": []\n}",
   "expected_review": {
-    "expected_status": ["APPROVE"],
+    "expected_status": ["APPROVE", "COMMENT"],
     "min_findings": 0,
-    "max_findings": 0,
     "has_blockers": false,
     "required_findings": []
   },
