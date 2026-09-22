@@ -371,3 +371,91 @@ python .github/scripts/quality_gate_agent.py
 cat reports/decision.txt
 ```
 
+---
+
+## 9. Autonomous Agent Evaluation & Quality Gate Metrics
+
+The agentic CI/CD pipeline includes an automated evaluation harness (`.github/workflows/inference-evaluation.yml` and [`.github/scripts/tests/eval/eval_runner.py`](scripts/tests/eval/eval_runner.py)) that validates model behavior against a suite of golden test cases before production deployment.
+
+### 9.1 Overall Evaluation Metrics & Threshold Gates
+
+The evaluation suite tracks six core metrics across test cases spanning the PR Reviewer Agent and Quality Gate Agent:
+
+| Metric | Target | Actual Result | Status |
+| :--- | :---: | :---: | :---: |
+| **Overall Pass Rate** | `100.0%` *(Default: `85.0%`)* | `88.9%` (8/9) | ❌ FAIL *(at 100%)* / ✅ PASS *(at 85%)* |
+| **Schema Conformance** | `100.0%` *(Default: `85.0%`)* | `88.9%` | ❌ FAIL *(at 100%)* / ✅ PASS *(at 85%)* |
+| **Vulnerability Recall** | `100.0%` *(Default: `85.0%`)* | `85.7%` | ❌ FAIL *(at 100%)* / ✅ PASS *(at 85%)* |
+| **Clean False Positive Rate** | `< 5.0%` | `0.0%` | ✅ PASS |
+| **Total Evaluated Cost** | `< $0.50` | `$0.000000` | ✅ PASS |
+| **Average Latency** | `< 30.0s` | `6.94s` | ✅ PASS |
+
+---
+
+### 9.2 Metric Breakdown & Definitions
+
+#### 1. Overall Pass Rate
+* **Definition**: The proportion of all evaluated test cases that satisfy every required assertion, including deterministic output validation, severity categorization, and status matching.
+* **Mathematical Formula**:
+  $$\text{Overall Pass Rate} = \frac{\text{Passed Test Cases}}{\text{Total Test Cases}} = \frac{8}{9} = 88.89\% \approx 88.9\%$$
+* **Significance**: Serves as the primary indicator of agent correctness across both happy paths and adversarial defect scenarios. If an agent misidentifies an architectural flaw or fails an assertion, the overall pass rate reflects the regression.
+* **Gate Configuration**: Configurable via `--pass-rate-threshold` CLI flag or `EVAL_PASS_RATE_THRESHOLD` environment variable (defaults to `0.85` / `85.0%`).
+
+#### 2. Schema Conformance
+* **Definition**: The percentage of agent inference outputs that strictly conform to the expected Pydantic data schemas (`PRReviewReport` for code reviews, `QualityGateDecision` for release decisions) without JSON decoding or structure validation errors.
+* **Mathematical Formula**:
+  $$\text{Schema Conformance} = \frac{\text{Valid Schema Cases}}{\text{Total Evaluated Cases}} = \frac{8}{9} = 88.89\% \approx 88.9\%$$
+* **Significance**: Assures structural reliability. Downstream CI/CD stages (such as GitHub comment posting and gate enforcement) rely on well-formed JSON models. Note that in fallback JUnit XML parsing, semantic assertion failures were previously conflated with schema errors, which is now decoupled in `eval_runner.py` by inspecting failure stack traces for `ValidationError` / `JSONDecodeError`.
+* **Gate Configuration**: Configurable via `--schema-threshold` CLI flag or `EVAL_SCHEMA_THRESHOLD` environment variable (defaults to `0.85` / `85.0%`).
+
+#### 3. Vulnerability Recall
+* **Definition**: The percentage of known defects, vulnerabilities, credential leaks, and policy blockers correctly identified and flagged by the agents across all defect-bearing test cases.
+* **Mathematical Formula**:
+  $$\text{Vulnerability Recall} = \frac{\sum \text{Detected Known Blockers}}{\text{Total Defect Test Cases}} = \frac{6}{7} = 85.71\% \approx 85.7\%$$
+  *(In the 9-case evaluation suite, 2 cases are clean baselines and 7 cases contain true defects. Detecting 6 out of 7 blockers yields 85.7% recall).*
+* **Significance**: High recall is vital for security-first CI/CD pipelines to guarantee that vulnerabilities (e.g. AWS secret leaks, PII exposures, architectural anti-patterns) are not missed or approved.
+* **Gate Configuration**: Configurable via `--recall-threshold` CLI flag or `EVAL_RECALL_THRESHOLD` environment variable (defaults to `0.85` / `85.0%`).
+
+#### 4. Clean False Positive Rate (FPR)
+* **Definition**: The rate at which clean, defect-free test cases are mistakenly flagged as containing blocker vulnerabilities or have approvals incorrectly withheld.
+* **Mathematical Formula**:
+  $$\text{Clean False Positive Rate} = \frac{\text{Clean Cases Inappropriately Blocked}}{\text{Total Clean Test Cases}} = \frac{0}{2} = 0.0\%$$
+* **Significance**: Measures friction introduced into developer workflows. An agent that rejects clean PRs creates false alarms and blocks developer velocity. The target requires FPR to stay below `5.0%`.
+* **Gate Configuration**: Configurable via `--fpr-threshold` CLI flag or `EVAL_FPR_THRESHOLD` environment variable (defaults to `0.05` / `5.0%`).
+
+#### 5. Total Evaluated Cost
+* **Definition**: The total API spend in USD incurred across all model inference calls in the evaluation run, calculated using Vertex AI rate cards for prompt, cached, and candidate/thinking tokens.
+* **Mathematical Formula**:
+  $$\text{Total Cost} = \sum_{\text{cases}} \left( \frac{\text{Input Tokens} \times \$0.75}{10^6} + \frac{\text{Cached Tokens} \times \$0.075}{10^6} + \frac{\text{Output Tokens} \times \$3.75}{10^6} \right)$$
+* **Significance**: Ensures CI/CD evaluation remains cost-effective and flags unexpected token bloat or unbounded context expansion. Offline / mock evaluations incur `$0.000000`, well below the `< $0.50` gate target.
+
+#### 6. Average Latency
+* **Definition**: The mean wall-clock duration in seconds required for the agent to analyze inputs, execute MCP tool loops, and produce the structured output.
+* **Mathematical Formula**:
+  $$\text{Average Latency} = \frac{\sum_{i=1}^{N} \text{Duration}_i}{N} = \frac{62.5\text{s}}{9} = 6.94\text{s}$$
+* **Significance**: Guarantees that automated agent reviews provide timely feedback in developer CI workflows without causing runner timeouts. The target gate requires average latency to remain under `30.0s`.
+
+---
+
+### 9.3 Evaluation Execution & Gate Enforcement
+
+The evaluation runner can be triggered manually or within CI:
+
+```bash
+# Generate evaluation summary reports (JSON & Markdown)
+python .github/scripts/tests/eval/eval_runner.py --generate-summary --output-dir reports
+
+# Enforce quality gate threshold with default 85% target
+python .github/scripts/tests/eval/eval_runner.py --fail-on-threshold-breach --output-dir reports
+
+# Override thresholds via CLI arguments if stricter gating is required
+python .github/scripts/tests/eval/eval_runner.py \
+  --pass-rate-threshold 0.85 \
+  --schema-threshold 0.85 \
+  --recall-threshold 0.85 \
+  --fpr-threshold 0.05 \
+  --fail-on-threshold-breach \
+  --output-dir reports
+```
+
+
