@@ -1,3 +1,362 @@
+# Feature Implementation Plan: Chat UI (OPS-11)
+
+## 📋 Todo Checklist
+- [x] Task 1: Complete and modernize the HTML/CSS/JS template in `adk_bug_ticket_agent/templates/adk_agent/interact.html`
+  - [x] Implement responsive layout with light/dark theme CSS variables and anti-FOUC inline head script
+  - [x] Add header controls: theme toggle button with `localStorage` persistence, status pill, session ID badge, and "New Chat" button
+  - [x] Build scrollable messages container with welcome empty-state prompt chips, distinct user/assistant message bubbles, and typing dots indicator
+  - [x] Implement interactive auto-expanding textarea, send button, Enter/Shift+Enter keyboard handlers, and dynamic button states
+  - [x] Integrate Marked.js for markdown rendering (code blocks, syntax highlighting containers, copy buttons, lists, tables)
+  - [x] Develop modular jQuery client logic managing session persistence, UUID generation, AJAX POST communication, error handling, and auto-scrolling
+- [x] Task 2: Verify and ensure compatibility of Django views and URL configurations
+  - [x] Confirm `interact_with_agent` in `adk_bug_ticket_agent/views.py` handles both GET (renders `adk_agent/interact.html`) and POST (ADK runner execution)
+  - [x] Confirm route mappings in `web/urls.py` (`/`, `/agent/`) and `adk_bug_ticket_agent/urls.py` (`/`, `/interact/`, `/chat/`)
+- [x] Task 3: Build automated Django integration test suite in `tests/test_chat_ui_endpoints.py`
+  - [x] Add tests for GET requests across `/`, `/agent/`, `/agent/interact/`, and `/agent/chat/`
+  - [x] Add tests for POST request payload validation (missing keys, empty message text, invalid JSON)
+  - [x] Add tests for unsupported HTTP methods (405)
+  - [x] Add mocked ADK `Runner` test verifying end-to-end POST response contract
+- [x] Task 4: Execute test suite and run live sanity check using `curl` commands
+  - [x] Run `uv run pytest tests/test_chat_ui_endpoints.py` to ensure 100% test pass rate
+  - [x] Run the Django development server and execute sanity `curl` checks across all URIs
+
+---
+
+## 🔍 Analysis & Investigation
+
+### Codebase Structure
+The files directly related to the Chat UI feature and their roles:
+
+| File / Path | Responsibility | Current Status |
+| :--- | :--- | :--- |
+| `adk_bug_ticket_agent/templates/adk_agent/interact.html` | Chat UI template containing HTML markup, CSS stylesheet, and jQuery interaction logic. | Incomplete / Truncated at line 41 in the middle of `<header>`. Lacks styling, chat container, input controls, and JavaScript. |
+| `adk_bug_ticket_agent/views.py` | Handles incoming HTTP requests: GET serves `interact.html`, POST executes ADK agent runner and returns JSON. | Implemented with `async def interact_with_agent(request)`. Expects specific JSON payload and returns structured response. |
+| `adk_bug_ticket_agent/urls.py` | App-level URL routes: `""` (`interact_root`), `"interact/"` (`interact_with_agent`), `"chat/"` (`chat`). | Fully configured and routing to `views.interact_with_agent`. |
+| `web/urls.py` | Project root URL configuration: maps `""` to `interact_with_agent` and `"agent/"` to include `adk_bug_ticket_agent.urls`. | Fully configured. |
+| `web/settings.py` | Django configuration settings (installed apps, middleware, template loaders, static files). | Configured with `APP_DIRS: True` and Whitenoise for static files. |
+| `tests/test_chat_ui_endpoints.py` | Automated integration and regression tests for UI rendering and API endpoints. | Does not exist yet; must be created. |
+
+### Current Architecture
+1. **Model-View-Template (MVT) Pattern**:
+   - The Django application serves as both the Web UI provider (rendering templates via GET) and the backend API gateway for the ADK agent (via POST).
+   - `web/urls.py` exposes root `/` and delegates `/agent/*` routes to `adk_bug_ticket_agent/urls.py`.
+   - Both `/` and `/agent/interact/` route to `views.interact_with_agent`.
+2. **ADK Agent Execution Layer**:
+   - When a POST request arrives, `views.interact_with_agent` parses the JSON body:
+     ```json
+     {
+       "appName": "adk_agent",
+       "userId": "user_...",
+       "sessionId": "session_...",
+       "newMessage": {
+         "parts": [
+           { "text": "<user query>" }
+         ]
+       }
+     }
+     ```
+   - The view retrieves or creates a persistent session via `_service_manager.session_service`, instantiates `google.adk.runners.Runner`, passes `genai_types.Content(role="user", ...)`, runs asynchronously, captures the final response text, and returns:
+     ```json
+     {
+       "content": {
+         "parts": [
+           { "text": "<agent response>" }
+         ],
+         "role": "model"
+       },
+       "timestamp": 1718000000.0
+     }
+     ```
+3. **Template Serving**:
+   - A GET request to `/`, `/agent/`, `/agent/interact/`, or `/agent/chat/` executes `render(request, 'adk_agent/interact.html')`.
+   - Because `interact.html` is currently truncated at line 41, accessing any of these endpoints in a browser yields an unstyled, broken header with no interface to chat or submit input.
+
+### Dependencies & Integration Points
+- **jQuery 3.7.1** (via CDN `https://code.jquery.com/jquery-3.7.1.min.js`): Simplifies DOM traversal, event handling, animations, and asynchronous HTTP POST (`$.ajax`).
+- **Marked.js** (via CDN `https://cdn.jsdelivr.net/npm/marked/marked.min.js`): Parses markdown syntax returned by the Gemini agent (code blocks, bullet points, headers, tables, links) into clean, safe HTML.
+- **Google Fonts (Inter)**: Typography for modern developer-focused UI.
+- **Django 5.0+ Web Framework**: Serves static templates and handles RESTful JSON API requests.
+- **Google ADK (`google-adk[db]>=1.37.0`)**: Back-end AI agent engine powering the conversational assistant.
+
+### Considerations & Challenges
+- **Flash of Unstyled Content (FOUC)**: If the user has dark mode selected in `localStorage` or OS settings, applying the theme via a deferred script or jQuery `$(document).ready()` causes a visible white flash before darkening. An early inline script inside `<head>` must inspect `localStorage` and `window.matchMedia` and immediately set `data-theme` on `<html>`.
+- **Markdown & Code Block Styling**: Agent responses frequently contain SQL queries, Python stack traces, and JSON snippets. Code blocks must have syntax highlighting contrast, horizontal scroll handling, and a one-click copy button.
+- **Session Continuity**: Multi-turn dialogue requires persistent `userId` and `sessionId`. Generating a UUID on initial load, persisting `userId` in `localStorage` and `sessionId` in `sessionStorage` (with fallback to `localStorage`), ensures continuous conversation across refreshes while providing a "New Chat" button to start a clean session.
+- **CSRF Exemption & API Consistency**: `views.interact_with_agent` is decorated with `@csrf_exempt`. However, standard jQuery AJAX setup should include proper JSON content headers (`Content-Type: application/json; charset=UTF-8`) and graceful handling of network drops or HTTP 400/500 errors.
+- **Auto-expanding Input**: Standard `<input type="text">` truncates long multi-line bug descriptions. An auto-expanding `<textarea>` provides superior ergonomics, expanding up to 160px with `Enter` bound to submit and `Shift+Enter` bound to newline insertion.
+
+---
+
+## 📐 Technical Specification & Design
+
+### Component Architecture
+
+```
++-----------------------------------------------------------------------------------------+
+|                                    Client Browser                                       |
+|                                                                                         |
+|  +-----------------------------------------------------------------------------------+  |
+|  | Header: Brand Logo | Status Pill | Session ID | "New Chat" | Dark Mode Toggle    |  |
+|  +-----------------------------------------------------------------------------------+  |
+|  | Messages View:                                                                    |  |
+|  |   - Welcome Prompt Suggestions Chips                                              |  |
+|  |   - User Message Bubbles (Right-aligned, primary blue)                            |  |
+|  |   - Assistant Message Bubbles (Left-aligned, card surface, Marked.js rendered)    |  |
+|  |   - Typing Indicator Animation (3 pulsing dots)                                   |  |
+|  +-----------------------------------------------------------------------------------+  |
+|  | Input Form: Auto-expanding Textarea | Send Button (with busy/disabled state)       |  |
+|  +-----------------------------------------------------------------------------------+  |
+|  | Error Banner: Toast notification for network/API failures                         |  |
+|  +-----------------------------------------------------------------------------------+  |
+|                                         |                                               |
+|                    jQuery Client Controller (BugAssistant)                              |
+|           (UUID Management, Event Handlers, Marked.js, $.ajax POST)                     |
++-----------------------------------------+-----------------------------------------------+
+                                          |
+                      HTTP POST /agent/interact/ (JSON payload)
+                      or HTTP GET / (renders template)
+                                          |
+                                          v
++-----------------------------------------------------------------------------------------+
+|                                  Django Web Framework                                   |
+|                                                                                         |
+|  web/urls.py  -> adk_bug_ticket_agent/urls.py -> views.interact_with_agent              |
+|                                                                                         |
+|  - GET:  render(request, 'adk_agent/interact.html')                                     |
+|  - POST: Validate payload -> _service_manager.session_service -> ADK Runner             |
++-----------------------------------------+-----------------------------------------------+
+                                          |
+                                          v
++-----------------------------------------------------------------------------------------+
+|                                  Google ADK Agent                                       |
+|  Runner(agent, session_service, memory_service).run_async(...) -> Gemini Model          |
++-----------------------------------------------------------------------------------------+
+```
+
+### Mermaid Diagram
+The sequence diagram below details the client-side interaction flow, state transitions, and server communication:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as User / Developer
+    participant UI as Browser DOM (interact.html)
+    participant JS as jQuery Controller (BugAssistant)
+    participant View as views.interact_with_agent
+    participant ADK as ADK Runner & Gemini
+
+    User->>UI: Loads http://127.0.0.1:8000/
+    UI->>JS: Executes inline FOUC check & initializes theme
+    UI->>JS: document.ready() -> initApp()
+    JS->>JS: Resolve userId & sessionId (localStorage / sessionStorage)
+    JS->>UI: Render welcome state with prompt suggestions
+
+    alt User sends a message
+        User->>UI: Types question & hits Enter (or clicks Send)
+        UI->>JS: Submit event triggered
+        JS->>UI: Append User message bubble & auto-scroll to bottom
+        JS->>UI: Show animated typing indicator & disable send button
+        JS->>View: POST /agent/interact/ (JSON with appName, userId, sessionId, newMessage)
+        
+        alt Successful Response (HTTP 200)
+            View->>ADK: runner.run_async(...)
+            ADK-->>View: Final text response
+            View-->>JS: HTTP 200 { "content": { "parts": [{"text": "..."}] }, "timestamp": ... }
+            JS->>JS: Parse Markdown with marked.parse()
+            JS->>UI: Remove typing indicator
+            JS->>UI: Append Assistant bubble with rendered HTML & copy buttons
+            JS->>UI: Enable send button & re-focus textarea
+            JS->>UI: Auto-scroll to bottom
+        else Error Response (HTTP 400 / 500 / Network Error)
+            View-->>JS: HTTP 400/500 { "error": "..." }
+            JS->>UI: Remove typing indicator
+            JS->>UI: Display error notification banner & enable send button
+        end
+    else User toggles Dark/Light theme
+        User->>UI: Clicks Theme Toggle button
+        UI->>JS: toggleTheme()
+        JS->>UI: Toggle data-theme attribute on <html>
+        JS->>JS: Save preference to localStorage ("light" / "dark")
+    else User clicks "New Chat"
+        User->>UI: Clicks "New Chat" button
+        UI->>JS: resetSession()
+        JS->>JS: Generate new sessionId UUID & save to sessionStorage
+        JS->>UI: Clear chat history & re-insert welcome card
+    end
+```
+
+### Schemas & Models
+
+#### 1. Request Payload Schema (Client -> `POST /agent/interact/`)
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AgentChatRequest",
+  "type": "object",
+  "properties": {
+    "appName": {
+      "type": "string",
+      "const": "adk_agent",
+      "description": "Identifier of the target ADK application."
+    },
+    "userId": {
+      "type": "string",
+      "pattern": "^user_[a-zA-Z0-9_-]+$",
+      "description": "Unique identifier for the user client."
+    },
+    "sessionId": {
+      "type": "string",
+      "pattern": "^session_[a-zA-Z0-9_-]+$",
+      "description": "Unique identifier for the conversational session."
+    },
+    "newMessage": {
+      "type": "object",
+      "properties": {
+        "parts": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "properties": {
+              "text": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": ["text"]
+          }
+        }
+      },
+      "required": ["parts"]
+    }
+  },
+  "required": ["appName", "userId", "sessionId", "newMessage"]
+}
+```
+
+#### 2. Response Payload Schema (`POST /agent/interact/` -> Client)
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AgentChatResponse",
+  "type": "object",
+  "properties": {
+    "content": {
+      "type": "object",
+      "properties": {
+        "parts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "text": { "type": "string" }
+            },
+            "required": ["text"]
+          }
+        },
+        "role": {
+          "type": "string",
+          "const": "model"
+        }
+      },
+      "required": ["parts", "role"]
+    },
+    "timestamp": {
+      "type": "number",
+      "description": "UNIX epoch timestamp in seconds."
+    }
+  },
+  "required": ["content", "timestamp"]
+}
+```
+
+#### 3. Error Response Schema
+```json
+{
+  "type": "object",
+  "properties": {
+    "error": { "type": "string" },
+    "traceback": { "type": "string" }
+  },
+  "required": ["error"]
+}
+```
+
+### API & Code Signatures
+
+#### 1. Django View (`adk_bug_ticket_agent/views.py`)
+```python
+@csrf_exempt
+async def interact_with_agent(request: HttpRequest) -> HttpResponse:
+    """
+    Handles both GET (serving the chat HTML UI) and POST (agent interaction).
+
+    Args:
+        request: Standard Django HttpRequest object.
+
+    Returns:
+        - GET: HttpResponse rendering 'adk_agent/interact.html'.
+        - POST: JsonResponse containing the agent's response payload or an error dict.
+        - Other: JsonResponse with status 405 for unsupported HTTP methods.
+    """
+```
+
+#### 2. Client-Side JavaScript Architecture (`interact.html`)
+```javascript
+/**
+ * BugAssistant Chat Client Module
+ */
+const BugAssistant = {
+  // Configuration
+  config: {
+    appName: 'adk_agent',
+    apiEndpoint: '/agent/interact/',
+    storageKeyPrefix: 'adk_'
+  },
+
+  // State
+  state: {
+    userId: null,
+    sessionId: null,
+    theme: 'light',
+    isGenerating: false
+  },
+
+  // Lifecycle & Initialization
+  init: function() {},
+  initSession: function() {},
+  initTheme: function() {},
+  bindEvents: function() {},
+
+  // Theme Management
+  setTheme: function(theme) {},
+  toggleTheme: function() {},
+
+  // Message Handling & UI
+  sendMessage: function() {},
+  appendUserMessage: function(text) {},
+  appendAssistantMessage: function(markdownText) {},
+  showTypingIndicator: function() {},
+  removeTypingIndicator: function() {},
+  showError: function(message) {},
+  hideError: function() {},
+  scrollToBottom: function() {},
+  resetSession: function() {},
+  autoResizeInput: function(element) {},
+  copyToClipboard: function(buttonElement, codeText) {}
+};
+```
+
+---
+
+## 📝 Step-by-Step Implementation Steps
+
+### Step 1: Complete and Modernize the Chat UI Template
+- **Files to modify/create**: `adk_bug_ticket_agent/templates/adk_agent/interact.html`
+- **Changes needed**:
+  Replace the truncated 41-line file with the full, production-ready HTML5 template. The exact blueprint implementation to be applied by the engineer:
+
+```html
 <!DOCTYPE html>
 <html lang="en" data-theme="light">
 <head>
@@ -1037,3 +1396,293 @@
   </script>
 </body>
 </html>
+```
+
+- **Implementation Notes**:
+  - Ensure all external resources (fonts, jQuery, marked) use HTTPS CDN links.
+  - The script sets `marked.setOptions({ breaks: true, gfm: true })` to support GitHub-flavored line breaks.
+  - The inline script in `<head>` ensures no FOUC by setting `data-theme` prior to initial paint.
+- **Status**: `- [x]` Completed
+
+### Step 2: Validate Django View and URL Route Configuration
+- **Files to modify/create**: 
+  - `adk_bug_ticket_agent/views.py` (review/verify)
+  - `adk_bug_ticket_agent/urls.py` (review/verify)
+  - `web/urls.py` (review/verify)
+- **Changes needed**:
+  1. Inspect `views.py` line 99-102:
+     ```python
+     elif request.method == 'GET':
+         return render(request, 'adk_agent/interact.html')
+     ```
+     Ensure that both `/` and `/agent/interact/` successfully serve `adk_agent/interact.html` with an HTTP 200 status code and `Content-Type: text/html; charset=utf-8`.
+  2. Verify that in `adk_bug_ticket_agent/urls.py`:
+     - `path("", views.interact_with_agent, name="interact_root")`
+     - `path("interact/", views.interact_with_agent, name="interact_with_agent")`
+     - `path("chat/", views.interact_with_agent, name="chat")`
+     all properly resolve to `views.interact_with_agent`.
+- **Implementation Notes**:
+  - `interact_with_agent` is an asynchronous view (`async def`). In Django 5.x, returning `render(request, ...)` from an async view is natively handled.
+- **Status**: `- [x]` Completed
+
+### Step 3: Implement Automated Integration Test Suite
+- **Files to modify/create**: `tests/test_chat_ui_endpoints.py`
+- **Changes needed**:
+  Create an exhaustive Django test suite using `django.test.AsyncClient` or `django.test.Client`:
+  1. `test_get_root_url_renders_ui()`:
+     - Issues `GET /` and asserts `response.status_code == 200`.
+     - Asserts response contains `<title>IT Bug Assistant - AI Support</title>`.
+     - Asserts response contains key UI elements: `#chat-input`, `#send-btn`, `#messages-list`, `#btn-theme-toggle`, and Marked.js script inclusion.
+  2. `test_get_all_configured_routes_render_ui()`:
+     - Loops through `["/", "/agent/", "/agent/interact/", "/agent/chat/"]`.
+     - Asserts each route returns `status_code == 200` with `text/html` content type.
+  3. `test_post_empty_body_returns_400()`:
+     - Issues `POST /agent/interact/` with empty JSON `{}`.
+     - Asserts `response.status_code == 400` and `response.json()["error"] == "Invalid payload structure."`.
+  4. `test_post_missing_parts_returns_400()`:
+     - Issues `POST /agent/interact/` with missing `newMessage.parts`.
+     - Asserts `response.status_code == 400`.
+  5. `test_post_empty_text_returns_400()`:
+     - Issues `POST /agent/interact/` with `parts: [{"text": ""}]`.
+     - Asserts `response.status_code == 400` and `response.json()["error"] == "No message provided"`.
+  6. `test_post_invalid_json_returns_400()`:
+     - Issues `POST /agent/interact/` with payload `"invalid-json-string"`.
+     - Asserts `response.status_code == 400` and `response.json()["error"] == "Invalid JSON in request"`.
+  7. `test_unsupported_methods_return_405()`:
+     - Issues `DELETE /agent/interact/` and `PUT /agent/interact/`.
+     - Asserts `response.status_code == 405` and `response.json()["error"] == "Unsupported method"`.
+  8. `test_post_valid_chat_mocked_runner()`:
+     - Mocks `google.adk.runners.Runner.run_async` to yield a mock event with `is_final_response() == True` returning `"Triage completed: ticket BUG-102 has been resolved."`.
+     - Issues `POST /agent/interact/` with a complete valid payload.
+     - Asserts `response.status_code == 200`.
+     - Asserts response JSON matches `{ "content": { "parts": [{"text": "Triage completed: ticket BUG-102 has been resolved."}], "role": "model" }, "timestamp": ... }`.
+- **Implementation Notes**:
+  - The test file must configure `os.environ.setdefault("DJANGO_SETTINGS_MODULE", "web.settings")` and `os.environ.setdefault("DJANGO", "true")`, then call `django.setup()`.
+- **Status**: `- [x]` Completed
+
+### Step 4: Verification, Test Execution & Live Sanity Checking
+- **Files to modify/create**: N/A (execution step)
+- **Changes needed**:
+  1. Execute `uv run pytest tests/test_chat_ui_endpoints.py` to ensure all tests pass.
+  2. Execute the full test suite `uv run pytest` to guarantee no regressions in database session or A2A components.
+  3. Run live sanity `curl` commands against the Django application (or test client) verifying all HTTP status codes and payloads.
+- **Status**: `- [x]` Completed
+
+---
+
+## 🧪 Verification & Testing Strategy
+
+### Unit & Integration Tests (`tests/test_chat_ui_endpoints.py`)
+
+The test suite must be implemented with the following precise structure:
+
+```python
+import os
+import json
+import pytest
+from unittest.mock import patch, MagicMock
+
+# Ensure DJANGO environment flags are set before importing Django modules
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "web.settings")
+os.environ.setdefault("DJANGO", "true")
+
+import django
+django.setup()
+
+from django.test import AsyncClient
+from google.genai import types as genai_types
+
+
+@pytest.mark.asyncio
+async def test_get_root_url_renders_ui():
+    """Verifies that GET / renders the full chat UI template."""
+    client = AsyncClient()
+    response = await client.get("/")
+    assert response.status_code == 200
+    assert "text/html" in response["Content-Type"]
+    content = response.content.decode("utf-8")
+    assert "<title>IT Bug Assistant - AI Support</title>" in content
+    assert "id=\"chat-input\"" in content
+    assert "id=\"send-btn\"" in content
+    assert "id=\"messages-list\"" in content
+    assert "id=\"btn-theme-toggle\"" in content
+    assert "jquery-3.7.1.min.js" in content
+    assert "marked.min.js" in content
+
+
+@pytest.mark.asyncio
+async def test_get_all_chat_routes_render_ui():
+    """Verifies that all aliased chat routes serve the UI."""
+    client = AsyncClient()
+    for route in ["/", "/agent/", "/agent/interact/", "/agent/chat/"]:
+        response = await client.get(route)
+        assert response.status_code == 200
+        assert "text/html" in response["Content-Type"]
+
+
+@pytest.mark.asyncio
+async def test_post_empty_body_returns_400():
+    """Verifies that an empty JSON payload returns HTTP 400."""
+    client = AsyncClient()
+    response = await client.post(
+        "/agent/interact/",
+        data=json.dumps({}),
+        content_type="application/json"
+    )
+    assert response.status_code == 400
+    data = response.json()
+    assert data["error"] == "Invalid payload structure."
+
+
+@pytest.mark.asyncio
+async def test_post_empty_query_text_returns_400():
+    """Verifies that empty message text returns HTTP 400."""
+    client = AsyncClient()
+    payload = {
+        "appName": "adk_agent",
+        "userId": "user_test_123",
+        "sessionId": "session_test_123",
+        "newMessage": {"parts": [{"text": ""}]}
+    }
+    response = await client.post(
+        "/agent/interact/",
+        data=json.dumps(payload),
+        content_type="application/json"
+    )
+    assert response.status_code == 400
+    data = response.json()
+    assert data["error"] == "No message provided"
+
+
+@pytest.mark.asyncio
+async def test_post_invalid_json_returns_400():
+    """Verifies that malformed JSON returns HTTP 400."""
+    client = AsyncClient()
+    response = await client.post(
+        "/agent/interact/",
+        data="not-a-json-string",
+        content_type="application/json"
+    )
+    assert response.status_code == 400
+    data = response.json()
+    assert data["error"] == "Invalid JSON in request"
+
+
+@pytest.mark.asyncio
+async def test_unsupported_methods_return_405():
+    """Verifies that DELETE and PUT methods return HTTP 405."""
+    client = AsyncClient()
+    for method in [client.delete, client.put]:
+        response = await method("/agent/interact/")
+        assert response.status_code == 405
+        assert response.json()["error"] == "Unsupported method"
+
+
+@pytest.mark.asyncio
+async def test_post_valid_chat_mocked_runner():
+    """Verifies that a valid chat POST returns the expected response contract."""
+    mock_event = MagicMock()
+    mock_event.is_final_response.return_value = True
+    mock_part = MagicMock()
+    mock_part.text = "Hello! I am your IT Bug Assistant."
+    mock_event.content.parts = [mock_part]
+
+    async def mock_run_async(*args, **kwargs):
+        yield mock_event
+
+    with patch("adk_bug_ticket_agent.views.Runner") as mock_runner_cls, \
+         patch("adk_bug_ticket_agent.views._service_manager") as mock_sm:
+        
+        mock_session_service = MagicMock()
+        mock_session_service.get_session = MagicMock(return_value=None)
+        mock_session_service.create_session = MagicMock(return_value=MagicMock())
+        mock_sm.session_service = mock_session_service
+        mock_sm.memory_service = MagicMock()
+        mock_sm.root_agent = MagicMock()
+
+        mock_runner_instance = MagicMock()
+        mock_runner_instance.run_async = mock_run_async
+        mock_runner_cls.return_value = mock_runner_instance
+
+        client = AsyncClient()
+        payload = {
+            "appName": "adk_agent",
+            "userId": "user_test_999",
+            "sessionId": "session_test_999",
+            "newMessage": {"parts": [{"text": "Hello assistant"}]}
+        }
+        response = await client.post(
+            "/agent/interact/",
+            data=json.dumps(payload),
+            content_type="application/json"
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "content" in data
+        assert data["content"]["role"] == "model"
+        assert data["content"]["parts"][0]["text"] == "Hello! I am your IT Bug Assistant."
+        assert "timestamp" in data
+```
+
+### Precise Execution Commands
+```bash
+# 1. Run the new Chat UI endpoint tests
+uv run pytest tests/test_chat_ui_endpoints.py -v
+
+# 2. Run the full project test suite
+uv run pytest
+
+# 3. Perform Django configuration check
+uv run python manage.py check
+```
+
+### Live Sanity `curl` Verification Commands
+When the local Django server is running (`uv run python manage.py runserver 8000`), the following `curl` commands must be executed to verify behavior on new and existing URIs:
+
+```bash
+# 1. Sanity check GET / (Root UI)
+curl -I -s http://127.0.0.1:8000/ | grep -E "HTTP/|Content-Type"
+# Expected: HTTP/1.1 200 OK, Content-Type: text/html; charset=utf-8
+
+# 2. Sanity check GET /agent/interact/ (Direct UI endpoint)
+curl -I -s http://127.0.0.1:8000/agent/interact/ | grep -E "HTTP/|Content-Type"
+# Expected: HTTP/1.1 200 OK, Content-Type: text/html; charset=utf-8
+
+# 3. Sanity check GET /agent/chat/ (Aliased UI endpoint)
+curl -I -s http://127.0.0.1:8000/agent/chat/ | grep -E "HTTP/|Content-Type"
+# Expected: HTTP/1.1 200 OK, Content-Type: text/html; charset=utf-8
+
+# 4. Sanity check POST /agent/interact/ with empty payload (Validation test)
+curl -s -X POST http://127.0.0.1:8000/agent/interact/ \
+  -H "Content-Type: application/json" \
+  -d '{}'
+# Expected: {"error": "Invalid payload structure."}
+
+# 5. Sanity check POST /agent/interact/ with valid payload (End-to-End Chat API)
+curl -s -X POST http://127.0.0.1:8000/agent/interact/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "appName": "adk_agent",
+    "userId": "user_curl_sanity",
+    "sessionId": "session_curl_sanity",
+    "newMessage": {
+      "parts": [
+        {"text": "Ping: Respond with Pong."}
+      ]
+    }
+  }'
+# Expected: JSON object with content.role == "model", content.parts[0].text, and timestamp
+
+# 6. Sanity check DELETE /agent/interact/ (Method Not Allowed)
+curl -s -X DELETE http://127.0.0.1:8000/agent/interact/
+# Expected: {"error": "Unsupported method"}
+```
+
+---
+
+## 🎯 Success Criteria
+1. **Complete & Modern Template**: `adk_bug_ticket_agent/templates/adk_agent/interact.html` is fully implemented without truncation, featuring dark/light theme switching without FOUC, responsive layout, message bubbles with Marked.js rendering, typing animations, auto-resizing input, and copy-code functionality.
+2. **Robust jQuery Integration**: All client interactions (DOM manipulation, UUID generation, `localStorage`/`sessionStorage` state management, error handling, and AJAX POST requests) are implemented using modular jQuery.
+3. **API Contract Adherence**: The client strictly produces the OpenAPI-defined JSON payload (`appName`, `userId`, `sessionId`, `newMessage.parts`) and correctly consumes the model response structure (`content.parts[0].text`, `timestamp`).
+4. **100% Automated Test Pass Rate**: All unit and integration tests in `tests/test_chat_ui_endpoints.py` pass cleanly via `uv run pytest`.
+5. **Live Sanity Verified**: Live execution of the prescribed `curl` commands confirms expected HTTP status codes (200 for GETs and valid POSTs, 400 for malformed payloads, 405 for unsupported methods) across all configured routes.
