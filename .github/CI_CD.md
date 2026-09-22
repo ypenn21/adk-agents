@@ -345,21 +345,125 @@ After running Terraform, configure the following secrets/variables in **GitHub R
 
 ---
 
-## 8. Local Testing & Verification
+## 8. Multi-Level Testing & Verification Architecture
 
-You can execute the test suites locally using `uv`:
+The repository enforces a three-tiered testing strategy to validate everything from isolated utility functions to full workflow integration and live generative model reasoning.
 
-### Run Unit Tests (Agent Modules)
+### 8.1 Testing Levels Hierarchy & Differences
+
+```mermaid
+flowchart TD
+    subgraph L1 ["Level 1: Unit Tests (.github/scripts/tests/)"]
+        direction TB
+        U_Scope["Scope: Isolated Python functions, classes, and Pydantic validation"]
+        U_Env["Environment: 100% offline, zero network calls, fully mocked APIs"]
+        U_Target["Focus: Deterministic correctness, regex, token math, budget halting"]
+        U_Speed["Execution: Sub-second (< 0.2s for batches, ~6s for 191+ tests)"]
+    end
+
+    subgraph L2 ["Level 2: Acceptance & Contract Tests (.github/tests/)"]
+        direction TB
+        A_Scope["Scope: End-to-end component contracts and workflow syntax"]
+        A_Env["Environment: Synthetic filesystem fixtures (tmp_path, mocked CLI)"]
+        A_Target["Focus: Fail-closed policies, report generation, spec compliance (D-1 to D-14)"]
+        A_Speed["Execution: Fast (1s - 3s)"]
+    end
+
+    subgraph L3 ["Level 3: Inference Pipeline Eval Tests (.github/scripts/tests/eval/)"]
+        direction TB
+        E_Scope["Scope: Autonomous agent intelligence, reasoning quality, prompt efficacy"]
+        E_Env["Environment: Live or replayed Gemini 3.7 Flash inference across golden fixtures"]
+        E_Target["Focus: Vulnerability recall, schema conformance, clean FPR, cost, latency"]
+        E_Speed["Execution: Multi-second (~7s per case, ~1m total)"]
+    end
+
+    CodeChange["Code Change / PR"] --> L1
+    L1 -->|All Unit Tests Pass| L2
+    L2 -->|All Contracts Pass| L3
+    L3 -->|Threshold Gates Met| MergeApproved["Merge Approved / Production Ready"]
+
+    L1 -.->|Assertion Failure| Reject["CI Blocked / PR Rejected"]
+    L2 -.->|Contract Breach| Reject
+    L3 -.->|Threshold Breach| Reject
+```
+
+### 8.2 Comparison of Testing Tiers
+
+| Dimension | Level 1: Unit Tests | Level 2: Acceptance Tests | Level 3: Inference Eval Tests |
+| :--- | :--- | :--- | :--- |
+| **Directory** | [`.github/scripts/tests/`](scripts/tests/) | [`.github/tests/`](tests/) | [`.github/scripts/tests/eval/`](scripts/tests/eval/) |
+| **Primary Goal** | Verify isolated function logic and edge cases | Verify component contracts and workflow compliance | Benchmark model reasoning and security triage quality |
+| **Target Under Test** | Individual functions, schemas, token math, deduplication | CLI entrypoints, report creation, fail-closed handlers | Prompt templates, Gemini agent inference, MCP tools |
+| **External Dependencies** | 100% mocked (no network, no GCP APIs, no GitHub) | Environment-level mocks (`tmp_path`, simulated files) | Real Vertex AI Gemini inference or cassette replays |
+| **Determinism** | Fully deterministic (binary pass/fail) | Fully deterministic (binary pass/fail against specs) | Probabilistic (evaluated via statistical quality thresholds) |
+| **Success Criteria** | All assertions pass (`exit 0`) | All contract assertions pass (`exit 0`) | Threshold gates: Recall $\ge 85\%$, Schema $\ge 85\%$, FPR $< 5\%$ |
+| **Execution Speed** | Sub-second (~0.14s - 6s for entire suite) | 1 - 3 seconds | ~7 seconds per test case (~1 minute total) |
+| **Trigger Point** | Every local save, pre-commit, and PR push | Pre-merge pull request validation | Nightly, prompt revisions, model upgrades |
+
+---
+
+### 8.3 Mocking Strategy & LLM Boundary Isolation
+
+A critical design distinction in the testing architecture is how LLM interactions are handled across tiers:
+
+#### Does Level 2 (Acceptance Tests) parse outputs from the LLM as mocks?
+**No.** Level 2 acceptance tests do **not** capture raw text outputs from the LLM or parse model strings dynamically. Instead, they isolate the application from the model at the Google Antigravity SDK boundary (`unittest.mock.patch.object(pr_reviewer_agent, "Agent")`) and inject **pre-instantiated, strongly typed Pydantic objects**:
+
+```python
+# Level 2 Acceptance Test Pattern (.github/tests/test_pr_reviewer_acceptance.py)
+expected_report = PRReviewReport(
+    overall_status=ReviewStatus.APPROVE,
+    summary="All changes are clean and adhere to repository guidelines.",
+    findings=[],
+)
+
+mock_response = MagicMock()
+mock_response.structured_output = AsyncMock(return_value=expected_report)
+
+mock_agent_instance = MagicMock()
+mock_agent_instance.chat = AsyncMock(return_value=mock_response)
+
+with patch.object(pr_reviewer_agent, "Agent", return_value=mock_agent_instance):
+    report = await run_pr_review(...)
+```
+
+#### Why Level 2 Injects Pre-Constructed Objects
+1. **Focus on Integration Contracts**: Level 2 verifies the surrounding system mechanics:
+   * **GitHub REST API Integration**: Verifies that review payloads sent to `https://api.github.com/repos/{owner}/{repo}/pulls/{id}/reviews` contain the correct authorization headers, inline comment line mappings, and formatted body text.
+   * **Artifact Generation**: Verifies that audit files (`reports/pr-review.json`, `reports/pr-review.txt`, `reports/decision.txt`) are reliably written to disk with correct permissions and format.
+   * **Fail-Closed Security Gating**: Verifies that when input files are missing or unreadable (e.g. absent `reports/pii-scan.txt`), `evaluate_quality_gate()` immediately halts with `GATE_FAILED` without even invoking the LLM.
+2. **Absolute Determinism & Zero API Cost**: Eliminates non-deterministic flake, API token consumption, and rate-limiting from standard pull request CI checks.
+
+#### Where Model Outputs Are Actually Parsed
+Parsing outputs generated by the LLM is reserved for two dedicated mechanisms:
+* **Offline Recorded Cassette Replay Engine** ([`.github/scripts/tests/eval/test_replay_pipeline.py`](scripts/tests/eval/test_replay_pipeline.py)): Replays serialized JSON cassettes containing raw SDK chunk streams (`Thought`, `ToolCall`, `ToolResult`, `Text`) recorded from previous runs. Tests SDK streaming event loops and deserialization with 0 cloud network calls.
+* **Level 3 Inference Pipeline Evaluation** ([`.github/scripts/tests/eval/test_inference_pr_reviewer.py`](scripts/tests/eval/test_inference_pr_reviewer.py)): Sends real prompts to Gemini on Vertex AI, parses raw model output via `response.structured_output()`, and computes statistical **Schema Conformance** and **Vulnerability Recall** via [`.github/scripts/tests/eval/eval_runner.py`](scripts/tests/eval/eval_runner.py).
+
+---
+
+### 8.4 Execution Commands
+
+#### Run Unit Tests (Agent Modules)
 ```bash
 uv run pytest .github/scripts/tests/ -v
 ```
 
-### Run Acceptance Tests (Workflow & Gate Evaluation)
+#### Run Acceptance & Contract Tests (Workflow & Gate Evaluation)
 ```bash
 uv run pytest .github/tests/ -v
 ```
 
-### Run Standalone Local Dry-Run of Quality Gate
+#### Run Inference Pipeline Evaluation Suite
+```bash
+# Offline replay or mock evaluation
+python .github/scripts/tests/eval/eval_runner.py --generate-summary --output-dir reports
+
+# Live inference evaluation against Vertex AI (requires GCP credentials)
+pytest .github/scripts/tests/eval/ -m inference --run-inference --junitxml=reports/eval-results.xml -v
+python .github/scripts/tests/eval/eval_runner.py --fail-on-threshold-breach --output-dir reports
+```
+
+#### Run Standalone Local Dry-Run of Quality Gate
 ```bash
 # Create dummy scan files
 mkdir -p reports
@@ -377,7 +481,79 @@ cat reports/decision.txt
 
 The agentic CI/CD pipeline includes an automated evaluation harness (`.github/workflows/inference-evaluation.yml` and [`.github/scripts/tests/eval/eval_runner.py`](scripts/tests/eval/eval_runner.py)) that validates model behavior against a suite of golden test cases before production deployment.
 
-### 9.1 Overall Evaluation Metrics & Threshold Gates
+### 9.1 Evaluation Architecture & Metrics Flow
+
+```mermaid
+flowchart TD
+    subgraph Suite ["1. Golden Test Suite (9 Test Cases)"]
+        direction TB
+        PRCases["PR Reviewer Suite (5 Cases): tc01 Clean, tc02-tc05 Defects"]
+        GateCases["Quality Gate Suite (4 Cases): tc01 Clean, tc02/tc06/tc07 Defects"]
+    end
+
+    subgraph Exec ["2. Agent Execution & Structured Outputs"]
+        direction TB
+        Agent["Gemini 3.7 Flash Agent Inference"]
+        Models["Pydantic Models: PRReviewReport and QualityGateDecision"]
+        Telemetry["Execution Telemetry: Tokens, Cost, Duration"]
+        Agent --> Models
+        Agent --> Telemetry
+    end
+
+    Suite --> Agent
+
+    subgraph Metrics ["3. Evaluation Metrics Engine (eval_runner.py)"]
+        direction TB
+        M1["Overall Pass Rate: 8/9 = 88.9%"]
+        M2["Schema Conformance: 8/9 = 88.9%"]
+        M3["Vulnerability Recall: 6/7 = 85.7%"]
+        M4["Clean False Positive Rate: 0/2 = 0.0%"]
+        M5["Total Evaluated Cost: $0.00"]
+        M6["Average Latency: 6.94s"]
+    end
+
+    Models --> Metrics
+    Telemetry --> Metrics
+
+    subgraph Gates ["4. Threshold Gates (Default 85% Configurable)"]
+        direction TB
+        T1{"Pass Rate >= 85%? (Actual: 88.9%)"}
+        T2{"Schema >= 85%? (Actual: 88.9%)"}
+        T3{"Recall >= 85%? (Actual: 85.7%)"}
+        T4{"Clean FPR < 5%? (Actual: 0.0%)"}
+        T5{"Cost < $0.50? (Actual: $0.00)"}
+        T6{"Latency < 30.0s? (Actual: 6.94s)"}
+    end
+
+    M1 --> T1
+    M2 --> T2
+    M3 --> T3
+    M4 --> T4
+    M5 --> T5
+    M6 --> T6
+
+    subgraph Decision ["5. CI Gate Decision"]
+        direction TB
+        Pass["Quality Gate Passed (Exit Code 0 / Deploy Allowed)"]
+        Fail["Quality Gate Breached (Exit Code 1 / Block PR)"]
+    end
+
+    T1 -->|Pass| Pass
+    T2 -->|Pass| Pass
+    T3 -->|Pass| Pass
+    T4 -->|Pass| Pass
+    T5 -->|Pass| Pass
+    T6 -->|Pass| Pass
+
+    T1 -.->|Fail| Fail
+    T2 -.->|Fail| Fail
+    T3 -.->|Fail| Fail
+    T4 -.->|Fail| Fail
+    T5 -.->|Fail| Fail
+    T6 -.->|Fail| Fail
+```
+
+### 9.2 Overall Evaluation Metrics & Threshold Gates
 
 The evaluation suite tracks six core metrics across test cases spanning the PR Reviewer Agent and Quality Gate Agent:
 
@@ -392,7 +568,7 @@ The evaluation suite tracks six core metrics across test cases spanning the PR R
 
 ---
 
-### 9.2 Metric Breakdown & Definitions
+### 9.3 Metric Breakdown & Definitions
 
 #### 1. Overall Pass Rate
 * **Definition**: The proportion of all evaluated test cases that satisfy every required assertion, including deterministic output validation, severity categorization, and status matching.
@@ -437,7 +613,7 @@ The evaluation suite tracks six core metrics across test cases spanning the PR R
 
 ---
 
-### 9.3 Evaluation Execution & Gate Enforcement
+### 9.4 Evaluation Execution & Gate Enforcement
 
 The evaluation runner can be triggered manually or within CI:
 
@@ -457,5 +633,80 @@ python .github/scripts/tests/eval/eval_runner.py \
   --fail-on-threshold-breach \
   --output-dir reports
 ```
+
+---
+
+### 9.5 Telemetry Collection & Cost Engine Architecture
+
+The CI/CD pipeline and evaluation runner continuously track token consumption, inference costs, execution latency, and budget compliance through an automated telemetry pipeline.
+
+```mermaid
+flowchart TD
+    subgraph S1 ["1. SDK & Vertex AI Gemini"]
+        direction TB
+        Agent["Antigravity Agent (Vertex AI Gemini)"]
+        RawUsage["agent.conversation.total_usage / response.usage_metadata"]
+        RawStop["response.stop_reason (COMPLETED / BUDGET_EXCEEDED)"]
+        Agent --> RawUsage
+        Agent --> RawStop
+    end
+
+    subgraph S2 ["2. Cost Engine (helper.py)"]
+        direction TB
+        SpendFunc["calculate_token_spend()"]
+        PricingModel["Model Pricing: Prompt $0.75, Cached $0.075, Output $3.75 per 1M"]
+        RawUsage --> SpendFunc
+        PricingModel --> SpendFunc
+    end
+
+    subgraph S3 ["3. Telemetry Persistence"]
+        direction TB
+        TokenJSON["reports/token-usage.json"]
+        JobSummary["$GITHUB_STEP_SUMMARY Markdown Table"]
+        SpendFunc --> TokenJSON
+        RawStop --> TokenJSON
+        TokenJSON --> JobSummary
+    end
+
+    subgraph S4 ["4. Evaluation Telemetry (eval_runner.py)"]
+        direction TB
+        JUnitXML["reports/eval-results.xml (Pytest execution duration)"]
+        Runner["eval_runner.py (parse_junit_xml_to_metrics / load_metrics_from_file)"]
+        EvalSummary["EvalSuiteSummary (Pass Rate, Recall, Schema, Cost, Latency)"]
+        JUnitXML --> Runner
+        Runner --> EvalSummary
+    end
+```
+
+#### 1. Token Usage Extraction from Google Antigravity SDK
+During agent execution in [`.github/scripts/pr_reviewer_agent.py`](scripts/pr_reviewer_agent.py), the agent extracts runtime telemetry from the Google Antigravity SDK:
+* **Multi-Turn Session Usage**: Retrieved via `agent.conversation.total_usage`, capturing cumulative token metrics across multi-step tool iterations.
+* **Turn-Level Fallback**: Retrieved via `response.usage_metadata` on single-turn responses.
+* **Extracted Token Metrics**:
+  * `prompt_token_count`: Base input tokens processed by Gemini.
+  * `cached_content_token_count`: Context-cached tokens served from the Gemini prefix cache (discounted at 90%).
+  * `candidates_token_count`: Novel tokens generated in the model response.
+  * `thoughts_token_count`: Internal reasoning tokens produced by Gemini extended thinking.
+  * `total_token_count`: Aggregate tokens across input, cache, output, and thoughts.
+* **Stop Reason Telemetry**: Monitored via `response.stop_reason` to flag budget interruptions (`MAX_TOTAL_TOKENS_EXCEEDED`, `MAX_MODEL_CALLS_EXCEEDED`, `MAX_TOOL_CALLS_EXCEEDED`).
+
+#### 2. Cost Calculation Engine (`helper.py`)
+In [`.github/scripts/helper.py`](scripts/helper.py) via `calculate_token_spend()`, token counts are mapped to Vertex AI rate cards:
+
+1. **Net Novel Input Calculation**:
+   $$\text{net\_input} = \max(0, \text{prompt\_tokens} - \text{cached\_tokens})$$
+   Accounts for multi-turn cache accumulation to prevent negative novel input token values.
+
+2. **Vertex AI Gemini Flash Pricing Formula**:
+   $$\text{Cost} = \left(\text{net\_input} \times \frac{\$0.75}{10^6}\right) + \left(\text{cached\_tokens} \times \frac{\$0.075}{10^6}\right) + \left((\text{candidate\_tokens} + \text{thought\_tokens}) \times \frac{\$3.75}{10^6}\right)$$
+
+#### 3. Structured Artifact Persistence & CI Job Summaries
+* **`reports/token-usage.json`**: Generated by `helper.py::write_token_usage_report()`, recording model identifier, token breakdowns, cost in USD rounded to 6 decimal places, stop reason, and budget thresholds.
+* **GitHub Actions Job Summary**: Rendered into `$GITHUB_STEP_SUMMARY` by [`.github/scripts/generate_job_summary.py`](scripts/generate_job_summary.py) as a markdown table displaying token volume, cache hit ratio, and approximate spend for developer visibility.
+
+#### 4. Evaluation Suite Telemetry (`eval_runner.py`)
+In [`.github/scripts/tests/eval/eval_runner.py`](scripts/tests/eval/eval_runner.py):
+* **Latency Telemetry**: Extracted from Pytest JUnit XML (`reports/eval-results.xml`) via the `time` attribute of each `<testcase>` element, computing the average latency across evaluated cases.
+* **Metrics Aggregation**: Synthesizes pass rates, schema validity (decoupled from semantic assertions by inspecting failure stack traces for `ValidationError`), defect recall, and false positive rates into `EvalSuiteSummary`.
 
 
