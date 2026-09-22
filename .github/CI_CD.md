@@ -358,7 +358,7 @@ flowchart TD
         U_Scope["Scope: Isolated Python functions, classes, and Pydantic validation"]
         U_Env["Environment: 100% offline, zero network calls, fully mocked APIs"]
         U_Target["Focus: Deterministic correctness, regex, token math, budget halting"]
-        U_Speed["Execution: Sub-second (< 0.2s for batches, ~6s for 191+ tests)"]
+        U_Speed["Execution: Sub-second (under 0.2s for batches, ~6s for 191+ tests)"]
     end
 
     subgraph L2 ["Level 2: Acceptance & Contract Tests (.github/tests/)"]
@@ -380,7 +380,7 @@ flowchart TD
     CodeChange["Code Change / PR"] --> L1
     L1 -->|All Unit Tests Pass| L2
     L2 -->|All Contracts Pass| L3
-    L3 -->|Threshold Gates Met| MergeApproved["Merge Approved / Production Ready"]
+    L3 -->|Threshold Gates Pass| MergeApproved["Merge Approved / Production Ready (>= 85%)"]
 
     L1 -.->|Assertion Failure| Reject["CI Blocked / PR Rejected"]
     L2 -.->|Contract Breach| Reject
