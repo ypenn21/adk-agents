@@ -848,5 +848,54 @@ Despite the extensive deterministic scaffolding and boundary constraints, severa
 | **Tool Call Trajectory** | **Non-Deterministic** | Dynamic agent planning and loop halting conditions |
 | **Latency & Token Spend** | **Non-Deterministic** | Cloud network latency, cache status, and output token count |
 
+---
+
+## 11. PR Reviewer Agent Tooling & Architecture Profile
+
+To maintain high execution speed, strict resource bounds, and CI reproducibility, the PR Reviewer Agent ([`.github/scripts/pr_reviewer_agent.py`](scripts/pr_reviewer_agent.py)) uses a targeted tool and orchestration profile:
+
+### 11.1 MCP Server Integration: YES
+* **Containerized GitHub MCP Server**: The agent connects to the official GitHub Model Context Protocol server (`ghcr.io/github/github-mcp-server:v0.27.0`) via STDIO using [`create_github_mcp_server()`](scripts/helper.py):
+  ```python
+  types.McpStdioServer(
+      name="github",
+      command="docker",
+      args=[
+          "run", "-i", "--rm",
+          "-e", "GITHUB_PERSONAL_ACCESS_TOKEN",
+          "-e", "GITHUB_REPOSITORY",
+          "ghcr.io/github/github-mcp-server:v0.27.0",
+      ],
+      env={
+          "GITHUB_PERSONAL_ACCESS_TOKEN": token,
+          "GITHUB_REPOSITORY": repo,
+      },
+  )
+  ```
+* **Capabilities Provided**: Exposes native GitHub tools to the Gemini model, allowing it to inspect repository files outside the immediate diff, query git commit history, and examine repository context dynamically during review.
+* **Offline Mocking**: During local testing, acceptance verification, and offline evaluation, [`.github/scripts/tests/eval/mock_mcp_server.py`](scripts/tests/eval/mock_mcp_server.py) injects an in-memory mock MCP server with zero Docker or cloud dependencies.
+
+### 11.2 Skills Architecture: NO
+* **No `SKILL.md` Files Used**: The PR Reviewer Agent running in CI/CD does not load or execute Antigravity/ADK skill folders (`SKILL.md`).
+* **Versioned Prompt Bundles Instead**: The agent externalizes prompt logic into versioned markdown templates ([`.github/prompts/pr_reviewer_agent.md`](prompts/pr_reviewer_agent.md) and [`.github/prompts/batch_pr_reviewer_agent.md`](prompts/batch_pr_reviewer_agent.md)) managed by [`.github/scripts/prompt_loader.py`](scripts/prompt_loader.py). These bundles feature YAML frontmatter, semver tagging, and SHA256 integrity verification, ensuring strict prompt governance without skill runtime overhead.
+
+### 11.3 Subagent Architecture: NO
+* **No Multi-Agent Delegation**: The agent does not spawn or invoke subagents (e.g. delegating to specialized linting, styling, or security subagents).
+* **Single-Agent Iterative Execution**: Orchestration is handled deterministically in Python rather than through LLM-to-LLM delegation:
+  1. **Deterministic Triage**: Python triages diffs and partitions modified files into bounded batches (capped at 25 files or 60,000 estimated tokens).
+  2. **Isolated Batch Reviews**: The same `google.antigravity.Agent` instance reviews each batch sequentially with `response_schema=BatchReviewResult`.
+  3. **Deterministic Aggregation**: Python merges findings across batches, sanitizes line numbers against git diff hunks, deduplicates existing comments, and submits the final review to the GitHub REST API.
+
+### 11.4 Tooling & Architecture Summary Matrix
+
+| Architectural Feature | Status | Implementation Mechanism |
+| :--- | :--- | :--- |
+| **MCP Server** | **YES** | `ghcr.io/github/github-mcp-server:v0.27.0` over STDIO via `types.McpStdioServer` |
+| **Skills (`SKILL.md`)** | **NO** | Versioned prompt templates (`prompt_loader.py`) with YAML frontmatter & SHA256 hashes |
+| **Subagents** | **NO** | Single-agent execution with deterministic Python batch partitioning & triage |
+| **Schema Constrained** | **YES** | Pydantic model decoding via `response_schema=BatchReviewResult` |
+| **Budget Enforcement** | **YES** | `types.BudgetConfig` capping tokens, model calls, and tool calls |
+
+
 
 
