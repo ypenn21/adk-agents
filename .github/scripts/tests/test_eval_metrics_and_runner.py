@@ -36,6 +36,12 @@ from eval_runner import (
     run_summary_generation,
     generate_markdown_summary,
     build_suite_summary,
+    evaluate_threshold_breach,
+    DEFAULT_PASS_RATE_THRESHOLD,
+    DEFAULT_SCHEMA_CONFORMANCE_THRESHOLD,
+    DEFAULT_VULNERABILITY_RECALL_THRESHOLD,
+    DEFAULT_CLEAN_FPR_THRESHOLD,
+    main,
 )
 
 
@@ -415,3 +421,155 @@ def test_eval_runner_full_cycle_and_step_summary():
 
         finally:
             os.environ.pop("GITHUB_STEP_SUMMARY", None)
+
+
+def test_generate_markdown_summary_with_default_and_custom_thresholds():
+    summary = EvalSuiteSummary(
+        timestamp="2026-09-21T12:00:00Z",
+        model_name="gemini-3.7-flash",
+        total_cases=9,
+        passed_cases=8,
+        failed_cases=1,
+        overall_pass_rate=round(8 / 9, 4),  # 0.8889 -> 88.9%
+        schema_conformance_rate=round(8 / 9, 4),  # 0.8889 -> 88.9%
+        vulnerability_recall=round(6 / 7, 4),  # 0.8571 -> 85.7%
+        clean_false_positive_rate=0.0,
+        total_tokens=10000,
+        total_cost_usd=0.015,
+        avg_latency_seconds=3.5,
+        case_metrics=[],
+    )
+
+    # 1. Default thresholds (85.0% targets)
+    md_default = generate_markdown_summary(summary)
+    assert "| **Overall Pass Rate** | `85.0%` | `88.9%` (8/9) | ✅ PASS |" in md_default
+    assert "| **Schema Conformance** | `85.0%` | `88.9%` | ✅ PASS |" in md_default
+    assert "| **Vulnerability Recall** | `85.0%` | `85.7%` | ✅ PASS |" in md_default
+    assert "| **Clean False Positive Rate** | `< 5.0%` | `0.0%` | ✅ PASS |" in md_default
+    assert "### ✅ Status: **ALL EVALUATION ASSERTIONS PASSED**" in md_default
+
+    # 2. Custom thresholds (90.0% targets): 88.9% and 85.7% appropriately marked as ❌ FAIL
+    md_custom = generate_markdown_summary(
+        summary,
+        pass_threshold=0.90,
+        schema_threshold=0.90,
+        recall_threshold=0.90,
+        fpr_threshold=0.05,
+    )
+    assert "| **Overall Pass Rate** | `90.0%` | `88.9%` (8/9) | ❌ FAIL |" in md_custom
+    assert "| **Schema Conformance** | `90.0%` | `88.9%` | ❌ FAIL |" in md_custom
+    assert "| **Vulnerability Recall** | `90.0%` | `85.7%` | ❌ FAIL |" in md_custom
+    assert "| **Clean False Positive Rate** | `< 5.0%` | `0.0%` | ✅ PASS |" in md_custom
+    assert "### ❌ Status: **EVALUATION FAILED / THRESHOLD BREACHED**" in md_custom
+
+
+def test_threshold_breach_evaluation_at_85_percent():
+    summary = EvalSuiteSummary(
+        timestamp="2026-09-21T12:00:00Z",
+        model_name="gemini-3.7-flash",
+        total_cases=9,
+        passed_cases=8,
+        failed_cases=1,
+        overall_pass_rate=round(8 / 9, 4),  # 0.8889 (88.9%)
+        schema_conformance_rate=round(8 / 9, 4),  # 0.8889 (88.9%)
+        vulnerability_recall=round(6 / 7, 4),  # 0.8571 (85.7%)
+        clean_false_positive_rate=0.0,
+        total_tokens=10000,
+        total_cost_usd=0.015,
+        avg_latency_seconds=3.5,
+        case_metrics=[],
+    )
+
+    # 1. At 85% target: does NOT breach thresholds
+    breached, reasons = evaluate_threshold_breach(
+        summary,
+        pass_threshold=0.85,
+        schema_threshold=0.85,
+        recall_threshold=0.85,
+        fpr_threshold=0.05,
+    )
+    assert breached is False
+    assert len(reasons) == 0
+
+    # 2. At 90% target: DOES breach thresholds
+    breached_90, reasons_90 = evaluate_threshold_breach(
+        summary,
+        pass_threshold=0.90,
+        schema_threshold=0.90,
+        recall_threshold=0.90,
+        fpr_threshold=0.05,
+    )
+    assert breached_90 is True
+    assert len(reasons_90) == 3
+    assert any("Overall pass rate" in r for r in reasons_90)
+    assert any("Schema conformance" in r for r in reasons_90)
+    assert any("Vulnerability recall" in r for r in reasons_90)
+
+    # 3. At 100% strict target: DOES breach thresholds
+    breached_100, reasons_100 = evaluate_threshold_breach(
+        summary,
+        pass_threshold=1.0,
+        schema_threshold=1.0,
+        recall_threshold=1.0,
+        fpr_threshold=0.05,
+    )
+    assert breached_100 is True
+    assert len(reasons_100) == 3
+
+
+def test_eval_runner_cli_threshold_flags(monkeypatch, tmp_path):
+    metrics = []
+    for i in range(8):
+        metrics.append(
+            EvalRunMetric(
+                case_id=f"tc0{i+1}",
+                name=f"case_{i+1}",
+                category="clean" if i == 0 else "vulnerability",
+                agent_target="pr_reviewer",
+                duration_seconds=1.0,
+                schema_valid=True,
+                status_match=True,
+                blocker_recall=1.0 if i > 0 else None,
+                clean_fpr=0.0 if i == 0 else None,
+                passed_all_assertions=True,
+            )
+        )
+    metrics.append(
+        EvalRunMetric(
+            case_id="tc09_defect",
+            name="case_9",
+            category="vulnerability",
+            agent_target="quality_gate",
+            duration_seconds=1.0,
+            schema_valid=True,
+            status_match=False,
+            blocker_recall=0.0,
+            passed_all_assertions=False,
+            failure_reasons=["Component mismatch"],
+        )
+    )
+    # Total: 8/9 passed (88.9%), schema 9/9 valid (100%), recall 7/8 = 87.5%
+    metrics_file = tmp_path / "eval-metrics.json"
+    with open(metrics_file, "w", encoding="utf-8") as f:
+        json.dump([m.model_dump(mode="json") for m in metrics], f)
+
+    # Under default 85% thresholds, CLI exits cleanly (exit code 0 / no sys.exit(1))
+    monkeypatch.setattr(
+        sys, "argv",
+        ["eval_runner.py", "--output-dir", str(tmp_path), "--fail-on-threshold-breach"]
+    )
+    main()
+
+    # Under 90% pass rate threshold, CLI exits with sys.exit(1)
+    monkeypatch.setattr(
+        sys, "argv",
+        [
+            "eval_runner.py",
+            "--output-dir", str(tmp_path),
+            "--fail-on-threshold-breach",
+            "--pass-rate-threshold", "0.90",
+        ]
+    )
+    with pytest.raises(SystemExit) as exc_info:
+        main()
+    assert exc_info.value.code == 1

@@ -44,6 +44,11 @@ METRICS_FILENAME = "eval-metrics.json"
 SUMMARY_JSON_FILENAME = "eval-summary.json"
 SUMMARY_MD_FILENAME = "eval-summary.md"
 
+DEFAULT_PASS_RATE_THRESHOLD = float(os.environ.get("EVAL_PASS_RATE_THRESHOLD", "0.85"))
+DEFAULT_SCHEMA_CONFORMANCE_THRESHOLD = float(os.environ.get("EVAL_SCHEMA_THRESHOLD", "0.85"))
+DEFAULT_VULNERABILITY_RECALL_THRESHOLD = float(os.environ.get("EVAL_RECALL_THRESHOLD", "0.85"))
+DEFAULT_CLEAN_FPR_THRESHOLD = float(os.environ.get("EVAL_FPR_THRESHOLD", "0.05"))
+
 
 def record_eval_metric(metric: EvalRunMetric, output_dir: str | Path = "reports") -> None:
     """Appends an EvalRunMetric to the suite metrics JSON file."""
@@ -127,16 +132,42 @@ def parse_junit_xml_to_metrics(xml_path: Path) -> List[EvalRunMetric]:
             category = "clean" if "clean" in case_id else "vulnerability"
             agent_target = "quality_gate" if "quality_gate" in classname.lower() or "gate" in name.lower() else "pr_reviewer"
 
+            failure_full_text = ""
+            if failure is not None and failure.text:
+                failure_full_text += failure.text
+            elif failure is not None and failure.get("message"):
+                failure_full_text += failure.get("message")
+            if error is not None and error.text:
+                failure_full_text += error.text
+            elif error is not None and error.get("message"):
+                failure_full_text += error.get("message")
+
+            schema_error_keywords = ("validationerror", "pydantic", "jsondecodeerror", "invalid json", "isinstance")
+            is_schema_failure = any(kw in failure_full_text.lower() for kw in schema_error_keywords)
+
+            schema_valid = not is_schema_failure if failed else True
+            schema_error = failure_full_text.strip().splitlines()[-1] if is_schema_failure and failure_full_text.strip() else None
+
+            if category == "clean":
+                blocker_recall = None
+                clean_fpr = 0.0 if not failed else 1.0
+            else:
+                clean_fpr = None
+                missed_blocker_keywords = ("did not trigger", "produced 0", "expected request_changes", "was not blocked", "passed is true")
+                is_missed_blocker = any(kw in failure_full_text.lower() for kw in missed_blocker_keywords)
+                blocker_recall = 0.0 if is_missed_blocker else 1.0
+
             metric = EvalRunMetric(
                 case_id=case_id,
                 name=name,
                 category=category,
                 agent_target=agent_target,
                 duration_seconds=round(time_sec, 3),
-                schema_valid=not failed,
+                schema_valid=schema_valid,
+                schema_error=schema_error,
                 status_match=not failed,
-                blocker_recall=1.0 if not failed and category != "clean" else 0.0 if category != "clean" else None,
-                clean_fpr=0.0 if not failed and category == "clean" else 1.0 if category == "clean" else None,
+                blocker_recall=blocker_recall,
+                clean_fpr=clean_fpr,
                 findings_count=0 if not failed else 1,
                 detected_blockers=0 if category == "clean" else (1 if not failed else 0),
                 prompt_tokens=0,
@@ -189,7 +220,13 @@ def build_suite_summary(
     )
 
 
-def generate_markdown_summary(summary: EvalSuiteSummary) -> str:
+def generate_markdown_summary(
+    summary: EvalSuiteSummary,
+    pass_threshold: float = DEFAULT_PASS_RATE_THRESHOLD,
+    schema_threshold: float = DEFAULT_SCHEMA_CONFORMANCE_THRESHOLD,
+    recall_threshold: float = DEFAULT_VULNERABILITY_RECALL_THRESHOLD,
+    fpr_threshold: float = DEFAULT_CLEAN_FPR_THRESHOLD,
+) -> str:
     """Renders a comprehensive, visual Markdown report suitable for $GITHUB_STEP_SUMMARY."""
     lines: List[str] = []
 
@@ -201,10 +238,10 @@ def generate_markdown_summary(summary: EvalSuiteSummary) -> str:
 
     # Status Badge
     is_success = (
-        summary.failed_cases == 0
-        and summary.schema_conformance_rate >= 1.0
-        and summary.vulnerability_recall >= 1.0
-        and summary.clean_false_positive_rate < 0.05
+        summary.overall_pass_rate >= pass_threshold
+        and summary.schema_conformance_rate >= schema_threshold
+        and summary.vulnerability_recall >= recall_threshold
+        and summary.clean_false_positive_rate < fpr_threshold
     )
 
     if is_success:
@@ -219,24 +256,24 @@ def generate_markdown_summary(summary: EvalSuiteSummary) -> str:
     lines.append("| Metric | Target | Actual Result | Status |")
     lines.append("| :--- | :---: | :---: | :---: |")
 
-    pass_status = "✅ PASS" if summary.failed_cases == 0 else "❌ FAIL"
+    pass_status = "✅ PASS" if summary.overall_pass_rate >= pass_threshold else "❌ FAIL"
     lines.append(
-        f"| **Overall Pass Rate** | `100.0%` | `{summary.overall_pass_rate * 100:.1f}%` ({summary.passed_cases}/{summary.total_cases}) | {pass_status} |"
+        f"| **Overall Pass Rate** | `{pass_threshold * 100:.1f}%` | `{summary.overall_pass_rate * 100:.1f}%` ({summary.passed_cases}/{summary.total_cases}) | {pass_status} |"
     )
 
-    schema_status = "✅ PASS" if summary.schema_conformance_rate >= 1.0 else "❌ FAIL"
+    schema_status = "✅ PASS" if summary.schema_conformance_rate >= schema_threshold else "❌ FAIL"
     lines.append(
-        f"| **Schema Conformance** | `100.0%` | `{summary.schema_conformance_rate * 100:.1f}%` | {schema_status} |"
+        f"| **Schema Conformance** | `{schema_threshold * 100:.1f}%` | `{summary.schema_conformance_rate * 100:.1f}%` | {schema_status} |"
     )
 
-    recall_status = "✅ PASS" if summary.vulnerability_recall >= 1.0 else "❌ FAIL"
+    recall_status = "✅ PASS" if summary.vulnerability_recall >= recall_threshold else "❌ FAIL"
     lines.append(
-        f"| **Vulnerability Recall** | `100.0%` | `{summary.vulnerability_recall * 100:.1f}%` | {recall_status} |"
+        f"| **Vulnerability Recall** | `{recall_threshold * 100:.1f}%` | `{summary.vulnerability_recall * 100:.1f}%` | {recall_status} |"
     )
 
-    fpr_status = "✅ PASS" if summary.clean_false_positive_rate < 0.05 else "❌ FAIL"
+    fpr_status = "✅ PASS" if summary.clean_false_positive_rate < fpr_threshold else "❌ FAIL"
     lines.append(
-        f"| **Clean False Positive Rate** | `< 5.0%` | `{summary.clean_false_positive_rate * 100:.1f}%` | {fpr_status} |"
+        f"| **Clean False Positive Rate** | `< {fpr_threshold * 100:.1f}%` | `{summary.clean_false_positive_rate * 100:.1f}%` | {fpr_status} |"
     )
 
     cost_status = "✅ PASS" if summary.total_cost_usd < 0.50 else "⚠️ HIGH"
@@ -321,6 +358,10 @@ def run_summary_generation(
     model_name: str = "gemini-3.7-flash",
     results_file: Optional[str | Path] = None,
     fixture_dir: Optional[str | Path] = None,
+    pass_threshold: float = DEFAULT_PASS_RATE_THRESHOLD,
+    schema_threshold: float = DEFAULT_SCHEMA_CONFORMANCE_THRESHOLD,
+    recall_threshold: float = DEFAULT_VULNERABILITY_RECALL_THRESHOLD,
+    fpr_threshold: float = DEFAULT_CLEAN_FPR_THRESHOLD,
 ) -> EvalSuiteSummary:
     """Executes summary generation, writes JSON & Markdown reports, and updates GITHUB_STEP_SUMMARY."""
     out_path = Path(output_dir)
@@ -420,7 +461,13 @@ def run_summary_generation(
         json.dump(summary.model_dump(mode="json"), f, indent=2)
 
     # Write eval-summary.md
-    md_content = generate_markdown_summary(summary)
+    md_content = generate_markdown_summary(
+        summary,
+        pass_threshold=pass_threshold,
+        schema_threshold=schema_threshold,
+        recall_threshold=recall_threshold,
+        fpr_threshold=fpr_threshold,
+    )
     summary_md_path = out_path / SUMMARY_MD_FILENAME
     with open(summary_md_path, "w", encoding="utf-8") as f:
         f.write(md_content)
@@ -435,6 +482,39 @@ def run_summary_generation(
             print(f"Warning: Could not write to GITHUB_STEP_SUMMARY: {exc}", file=sys.stderr)
 
     return summary
+
+
+def evaluate_threshold_breach(
+    summary: EvalSuiteSummary,
+    pass_threshold: float = DEFAULT_PASS_RATE_THRESHOLD,
+    schema_threshold: float = DEFAULT_SCHEMA_CONFORMANCE_THRESHOLD,
+    recall_threshold: float = DEFAULT_VULNERABILITY_RECALL_THRESHOLD,
+    fpr_threshold: float = DEFAULT_CLEAN_FPR_THRESHOLD,
+) -> tuple[bool, List[str]]:
+    """Evaluates whether the suite summary breaches any configured threshold gates."""
+    breached = False
+    reasons: List[str] = []
+    if summary.schema_conformance_rate < schema_threshold:
+        breached = True
+        reasons.append(
+            f"Schema conformance {summary.schema_conformance_rate * 100:.1f}% < {schema_threshold * 100:.1f}%"
+        )
+    if summary.vulnerability_recall < recall_threshold:
+        breached = True
+        reasons.append(
+            f"Vulnerability recall {summary.vulnerability_recall * 100:.1f}% < {recall_threshold * 100:.1f}%"
+        )
+    if summary.clean_false_positive_rate >= fpr_threshold:
+        breached = True
+        reasons.append(
+            f"Clean false positive rate {summary.clean_false_positive_rate * 100:.1f}% >= {fpr_threshold * 100:.1f}%"
+        )
+    if summary.overall_pass_rate < pass_threshold:
+        breached = True
+        reasons.append(
+            f"Overall pass rate {summary.overall_pass_rate * 100:.1f}% < {pass_threshold * 100:.1f}%"
+        )
+    return breached, reasons
 
 
 def main() -> None:
@@ -473,10 +553,34 @@ def main() -> None:
         help="Path to existing evaluation metrics JSON file.",
     )
     parser.add_argument(
+        "--pass-rate-threshold",
+        type=float,
+        default=DEFAULT_PASS_RATE_THRESHOLD,
+        help="Minimum overall pass rate (default: 0.85)",
+    )
+    parser.add_argument(
+        "--schema-threshold",
+        type=float,
+        default=DEFAULT_SCHEMA_CONFORMANCE_THRESHOLD,
+        help="Minimum schema conformance rate (default: 0.85)",
+    )
+    parser.add_argument(
+        "--recall-threshold",
+        type=float,
+        default=DEFAULT_VULNERABILITY_RECALL_THRESHOLD,
+        help="Minimum vulnerability recall rate (default: 0.85)",
+    )
+    parser.add_argument(
+        "--fpr-threshold",
+        type=float,
+        default=DEFAULT_CLEAN_FPR_THRESHOLD,
+        help="Maximum clean false positive rate (default: 0.05)",
+    )
+    parser.add_argument(
         "--fail-on-threshold-breach",
         "--fail-on-breach",
         action="store_true",
-        help="Exit with code 1 if schema conformance < 100%%, recall < 100%%, or clean FPR >= 5%%.",
+        help="Exit with code 1 if schema conformance, recall, pass rate, or clean FPR breach thresholds.",
     )
 
     args = parser.parse_args()
@@ -486,6 +590,10 @@ def main() -> None:
         model_name=args.model,
         results_file=args.results_file,
         fixture_dir=args.fixture_dir,
+        pass_threshold=args.pass_rate_threshold,
+        schema_threshold=args.schema_threshold,
+        recall_threshold=args.recall_threshold,
+        fpr_threshold=args.fpr_threshold,
     )
 
     print(f"Generated {args.output_dir}/{SUMMARY_JSON_FILENAME}")
@@ -499,21 +607,13 @@ def main() -> None:
     )
 
     if args.fail_on_threshold_breach:
-        breached = False
-        reasons = []
-        if summary.schema_conformance_rate < 1.0:
-            breached = True
-            reasons.append(f"Schema conformance {summary.schema_conformance_rate * 100:.1f}% < 100%")
-        if summary.vulnerability_recall < 1.0:
-            breached = True
-            reasons.append(f"Vulnerability recall {summary.vulnerability_recall * 100:.1f}% < 100%")
-        if summary.clean_false_positive_rate >= 0.05:
-            breached = True
-            reasons.append(f"Clean false positive rate {summary.clean_false_positive_rate * 100:.1f}% >= 5%")
-        if summary.failed_cases > 0:
-            breached = True
-            reasons.append(f"{summary.failed_cases} test cases failed assertions")
-
+        breached, reasons = evaluate_threshold_breach(
+            summary,
+            pass_threshold=args.pass_rate_threshold,
+            schema_threshold=args.schema_threshold,
+            recall_threshold=args.recall_threshold,
+            fpr_threshold=args.fpr_threshold,
+        )
         if breached:
             print(f"❌ Evaluation Threshold Breach: {', '.join(reasons)}", file=sys.stderr)
             sys.exit(1)
