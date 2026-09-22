@@ -709,4 +709,144 @@ In [`.github/scripts/tests/eval/eval_runner.py`](scripts/tests/eval/eval_runner.
 * **Latency Telemetry**: Extracted from Pytest JUnit XML (`reports/eval-results.xml`) via the `time` attribute of each `<testcase>` element, computing the average latency across evaluated cases.
 * **Metrics Aggregation**: Synthesizes pass rates, schema validity (decoupled from semantic assertions by inspecting failure stack traces for `ValidationError`), defect recall, and false positive rates into `EvalSuiteSummary`.
 
+---
+
+## 10. Pipeline Determinism & Resilience Optimizations
+
+Generative AI pipelines are inherently non-deterministic if unconstrained. To maintain enterprise-grade CI/CD stability, the pipeline surrounds the probabilistic LLM with deterministic boundaries, schemas, and fallback logic:
+
+### 10.1 Determinism Architecture Flow
+
+```mermaid
+flowchart TD
+    subgraph Inputs ["1. Deterministic Input Preparation"]
+        direction TB
+        Sort["Stable Diff Sorting: (risk_score, changes, additions)"]
+        Batch["Bounded Batch Partitioning: 25 files / 60,000 tokens"]
+        PromptVer["Prompt Bundles: Versioned YAML Frontmatter & SHA256 Verification"]
+        Sort --> Batch
+        Batch --> PromptVer
+    end
+
+    subgraph Guards ["2. Fail-Closed Pre-Model Interceptors"]
+        direction TB
+        DLPCheck{"Cloud DLP report missing or empty?"}
+        PRCheck{"PR review missing on active PR?"}
+        FailClosed["Halt immediately with GATE_FAILED (No LLM called)"]
+        DLPCheck -->|Yes| FailClosed
+        PRCheck -->|Yes| FailClosed
+    end
+
+    subgraph LLMBounds ["3. Constrained LLM Execution"]
+        direction TB
+        SchemaConstrained["Structured Output: response_schema = BatchReviewResult / QualityGateDecision"]
+        BudgetBounds["BudgetConfig: max_total_tokens, max_model_calls, max_tool_calls"]
+        PydanticInvariants["Model Validators: passed=True rejects failures; passed=False requires failures"]
+        SchemaConstrained --> PydanticInvariants
+        BudgetBounds --> SchemaConstrained
+    end
+
+    subgraph PostProcess ["4. Deterministic Post-Processing & Deduplication"]
+        direction TB
+        DiffSanitize["Line Hunk Sanitization: Out-of-hunk findings moved to summary (prevents 422s)"]
+        Dedup["is_duplicate_comment(): Filters previously posted findings by path, line, title"]
+        Fallback["Rule-Based Fallback: Deterministic regex/string scanner if agent fails"]
+        DiffSanitize --> Dedup
+        Dedup --> Fallback
+    end
+
+    Inputs --> Guards
+    Guards -->|Inputs Valid| LLMBounds
+    LLMBounds --> PostProcess
+```
+
+---
+
+### 10.2 Core Mechanisms for Determinism
+
+#### 1. Schema-Constrained Decoding (`response_schema`)
+* **SDK Schema Enforcement**: When initializing agents in [`.github/scripts/pr_reviewer_agent.py`](scripts/pr_reviewer_agent.py) and [`.github/scripts/quality_gate_agent.py`](scripts/quality_gate_agent.py), `response_schema` is bound to concrete Pydantic models (`BatchReviewResult`, `QualityGateDecision`). The underlying model cannot generate arbitrary markdown text and is constrained to output structured JSON conforming to the schema.
+* **Pydantic Invariant Validators**: In [`QualityGateDecision`](scripts/quality_gate_agent.py), `@model_validator` enforces strict logical consistency:
+  * A decision with `passed=True` and non-empty `failures` raises a `ValueError`.
+  * A decision with `passed=False` and empty `failures` raises a `ValueError`.
+
+#### 2. Deterministic Fail-Closed Pre-Model Interceptors
+* In [`quality_gate_agent.py`](scripts/quality_gate_agent.py), missing prerequisites trigger hard, zero-cost stops before invoking Vertex AI:
+  * If `reports/pii-scan.txt` is missing or 0 bytes, the gate halts immediately with `GATE_FAILED` and `CRITICAL` severity without calling the LLM.
+  * If an active pull request is missing `reports/pr-review.txt`, it halts immediately with `GATE_FAILED`.
+
+#### 3. Deterministic Rule-Based Fallback Engine
+* If Vertex AI is unreachable, times out, or encounters authentication errors, [`quality_gate_agent.py`](scripts/quality_gate_agent.py) executes a deterministic string/regex scan over `reports/pii-scan.txt` and `reports/pr-review.txt` (checking for `REQUEST_CHANGES`, `[BLOCKER]`, `PII finding`, `API_KEY`). This guarantees an identical structured `QualityGateDecision` without failing open.
+
+#### 4. Stable Compound Diff Sorting & Bounded Batch Partitioning
+* **Deterministic Sorting**: [`helper.py::triage_and_filter_files()`](scripts/helper.py) sorts modified files using a multi-key tuple `(item.risk_score, item.changes, item.additions)` in descending order, ensuring diffs are processed in an identical sequence on every CI run.
+* **Bounded Batches**: [`helper.py::partition_files_into_batches()`](scripts/helper.py) packs files deterministically into batches capped at 25 files or 60,000 estimated tokens, preventing token context overflow and hallucination drift.
+
+#### 5. Line-Hunk Diff Sanitization (Preventing GitHub 422 Errors)
+* In [`helper.py::validate_and_sanitize_findings()`](scripts/helper.py), line numbers generated by the agent are validated against actual git diff modified line numbers (`modified_files_diff[file_path]`).
+* If the LLM generates a finding referencing a line outside the git diff hunk, it is deterministically routed to the general review summary body rather than being posted as an inline comment, preventing GitHub REST API `422 Unprocessable Entity` failures.
+
+#### 6. Comment Deduplication Engine (`is_duplicate_comment`)
+* In [`helper.py::is_duplicate_comment()`](scripts/helper.py), prospective findings are checked against previously posted PR comments by path, line number, and normalized title. Re-running the pipeline on an existing PR will never post duplicate comments.
+
+#### 7. Prompt Versioning & Variable Pre-Validation
+* [`.github/scripts/prompt_loader.py`](scripts/prompt_loader.py) loads external markdown prompt templates with YAML frontmatter, calculating and verifying SHA256 hashes.
+* `render_user_prompt()` validates that all required variables are non-empty before substituting placeholders, preventing malformed prompts from reaching the model.
+
+#### 8. Hard Resource Ceilings (`BudgetConfig`)
+* Agents are bounded using `types.BudgetConfig` (`max_total_tokens`, `max_input_tokens`, `max_output_tokens`, `max_model_calls`, `max_tool_calls`).
+* When limits are reached, the agent halts with an explicit stop reason (`MAX_TOTAL_TOKENS_EXCEEDED`) rather than entering indeterminate loops.
+
+#### 9. Offline Cassette Replay Engine
+* [`.github/scripts/tests/eval/test_replay_pipeline.py`](scripts/tests/eval/test_replay_pipeline.py) provides 100% deterministic test execution by replaying serialized JSON cassettes of chunk streams (`Thought`, `ToolCall`, `ToolResult`, `Text`) with 0 network calls.
+
+---
+
+### 10.3 Non-Deterministic Elements in the Pipeline
+
+Despite the extensive deterministic scaffolding and boundary constraints, several components within the inference lifecycle remain inherently stochastic:
+
+#### 1. Stochastic Model Sampling & Token Generation
+* **Default Sampling Temperature**: In [`.github/scripts/pr_reviewer_agent.py`](scripts/pr_reviewer_agent.py) and [`.github/scripts/quality_gate_agent.py`](scripts/quality_gate_agent.py), agents run without hardcoded zero-temperature pinning (`temperature=0.0`) or fixed seeds, allowing Gemini to use default probabilistic token sampling.
+* **Accelerator Floating-Point Non-Determinism**: Even with greedy decoding (`temperature=0.0`), distributed inference on Vertex AI TPUs/GPUs with Mixture-of-Experts (MoE) architectures and parallel reduction introduces minor mathematical variations in token log probabilities.
+* **Extended Thinking & Reasoning Drift**: Internal reasoning trajectories (`thoughts_token_count`) explore dynamic chain-of-thought paths. Multiple runs on an identical diff can traverse different reasoning sequences before settling on the output.
+
+#### 2. Semantic Classification & Severity Judgment
+* **Severity Boundary Drift**: Borderline code issues (e.g. unhandled null pointers or unchecked return values) may be categorized as `HIGH` in one run and `MEDIUM` or `CRITICAL` in another.
+* **Category Ambiguity**: Structural flaws can be labeled under either `ARCHITECTURAL_DEFECT` or `SECURITY_VULNERABILITY` depending on model attention context.
+* **Finding Granularity**: The model may group adjacent lines into a single compound finding in one run, or split them into multiple distinct `InlineFinding` items in another.
+
+#### 3. Line Number Attribution (Localization Jitter)
+* In multi-line code constructs, the model may anchor findings to the function header, the statement line, or the closing bracket. The line-hunk sanitization in `helper.py` bounds this jitter, but the exact anchor line within the hunk remains non-deterministic.
+
+#### 4. Natural Language Phrasing
+* While schema structure is strictly enforced, free-text fields (`title`, `details`, `remediation`, `summary`) are generated autoregressively. Suggested code fixes, explanations, and linguistic tone naturally vary across runs.
+
+#### 5. Dynamic Tool-Calling Trajectory & Iteration Depth
+* When MCP tools are enabled, the order of tool invocations (e.g. reading file contents vs inspecting git blame) and the total number of tool-calling loops before synthesizing a verdict can vary.
+
+#### 6. Operational Telemetry (Latency & Cost)
+* **Dollar Cost Variance**: Because candidate token count and thought token count fluctuate per run, the exact cost per review is non-deterministic (e.g. `$0.0038` vs `$0.0041`).
+* **Execution Latency**: Wall-clock time varies based on Vertex AI prompt cache hit status (warm vs cold prompt), cloud infrastructure load, and network transit time.
+
+---
+
+### 10.4 Deterministic vs Non-Deterministic Boundary Matrix
+
+| Pipeline Component | Determinism Status | Governed By |
+| :--- | :--- | :--- |
+| **Fail-Closed Gate Checks** | **Deterministic** | File existence and size checks in Python (`os.path.exists`) |
+| **Diff Sorting & Batching** | **Deterministic** | `item.risk_score` tuple sorting & 25-file / 60k-token caps |
+| **Output JSON Structure** | **Deterministic** | Pydantic schema validation (`response_schema`) |
+| **Hunk Boundary Checks** | **Deterministic** | `modified_files_diff` line containment check |
+| **Duplicate Comment Filter** | **Deterministic** | Path, line, and title matching in `is_duplicate_comment` |
+| **Rule-Based Fallback** | **Deterministic** | Regex/string pattern matcher in `quality_gate_agent.py` |
+| **Model Token Generation** | **Non-Deterministic** | Probabilistic softmax sampling & TPU floating-point reductions |
+| **Severity & Category Choice** | **Non-Deterministic** | LLM semantic interpretation of code context |
+| **Exact Line Selection** | **Non-Deterministic** | Attention weight distribution across diff hunk lines |
+| **Remediation Text Phrasing**| **Non-Deterministic** | Autoregressive natural language generation |
+| **Tool Call Trajectory** | **Non-Deterministic** | Dynamic agent planning and loop halting conditions |
+| **Latency & Token Spend** | **Non-Deterministic** | Cloud network latency, cache status, and output token count |
+
+
 
