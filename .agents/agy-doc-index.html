@@ -1,0 +1,1004 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Harness — Antigravity CLI Concept Map</title>
+<meta name="description" content="An interactive concept map of the Antigravity CLI harness: context management, automation, permissions, sandboxing and hooks — built as a presenter's reference.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- Non-blocking: the page must open instantly with no network (offline, on stage).
+     Falls back to system sans/mono until the webfonts arrive, if they ever do. -->
+<link rel="stylesheet" media="print" onload="this.media='all'"
+      href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap">
+<style>
+:root{
+  --bg:#f5f7fa;
+  --bg-2:#ffffff;
+  --surface:#ffffff;
+  --surface-2:#eef1f6;
+  --line:#d2d9e3;
+  --line-soft:#e3e8ef;
+  --txt:#3f4855;
+  --txt-dim:#69737f;
+  --txt-bright:#0e1319;
+  --c-context:#0b62c4;
+  --c-automation:#157f35;
+  --c-permissions:#a16207;
+  --c-sandbox:#c2410c;
+  --c-hooks:#7231cc;
+  --nucleus:#0e1319;
+  --ink:15,23,42;
+  --font:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;
+  --mono:'Fira Code',ui-monospace,monospace;
+  --ease:cubic-bezier(.22,.61,.36,1);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:var(--bg);
+  color:var(--txt);
+  font-family:var(--font);
+  overflow:hidden;
+  -webkit-font-smoothing:antialiased;
+}
+body::before{
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+  background:
+    radial-gradient(1100px 760px at 50% 48%, rgba(11,98,196,.055), transparent 68%),
+    radial-gradient(900px 620px at 50% 50%, rgba(114,49,204,.035), transparent 70%);
+}
+body::after{
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.55;
+  background-image:radial-gradient(rgba(var(--ink),.055) 1px, transparent 1px);
+  background-size:3px 3px;
+  mix-blend-mode:multiply;
+}
+
+/* ---------- chrome ---------- */
+header{
+  position:fixed;top:0;left:0;right:0;height:54px;z-index:40;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 20px;
+  border-bottom:1px solid var(--line-soft);
+  background:linear-gradient(180deg, rgba(255,255,255,.95), rgba(255,255,255,.78));
+  backdrop-filter:blur(10px);
+}
+.brand{display:flex;align-items:center;gap:11px;min-width:0}
+.brand h1{
+  font-size:13.5px;font-weight:600;letter-spacing:.02em;color:var(--txt-bright);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.brand .tag{
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.04em;
+  color:#0b62c4;background:rgba(11,98,196,.08);
+  border:1px solid rgba(11,98,196,.24);border-radius:5px;padding:2.5px 7px;white-space:nowrap;
+}
+.hud{display:flex;align-items:center;gap:8px}
+.btn{
+  font-family:var(--mono);font-size:11px;color:var(--txt-dim);
+  background:var(--surface);border:1px solid var(--line);border-radius:6px;
+  padding:6px 11px;cursor:pointer;transition:all .16s var(--ease);white-space:nowrap;
+  box-shadow:0 1px 2px rgba(var(--ink),.05);
+}
+.btn:hover{color:var(--txt-bright);border-color:#a8b3c2;background:var(--surface-2);transform:translateY(-1px)}
+.btn:active{transform:translateY(0)}
+.progress{
+  display:flex;align-items:center;gap:9px;
+  font-family:var(--mono);font-size:11px;color:var(--txt-dim);
+  border:1px solid var(--line);border-radius:6px;padding:5px 11px;background:var(--surface);
+  box-shadow:0 1px 2px rgba(var(--ink),.05);
+}
+.progress b{color:var(--c-automation);font-weight:600}
+.bar{width:70px;height:3px;border-radius:2px;background:#dde3ea;overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:var(--c-automation);transition:width .4s var(--ease)}
+
+/* ---------- stage ---------- */
+#viewport{position:fixed;inset:54px 0 0 0;z-index:2;overflow:hidden;
+  transition:transform .32s var(--ease)}
+/* the drawer reframes the map (see drawerFit) rather than nudging it */
+#stage{
+  position:absolute;top:50%;left:50%;
+  width:1600px;height:800px;
+  transform-origin:center center;
+}
+#edges{position:absolute;inset:0;width:1600px;height:800px;overflow:visible}
+.edge{fill:none;stroke:#b9c3d1;stroke-width:1.2;transition:stroke .22s var(--ease),stroke-width .22s var(--ease),opacity .22s var(--ease)}
+.edge.spine{stroke-width:1.7;stroke-dasharray:none}
+.edge.lit{stroke-width:2;opacity:1}
+
+/* nucleus */
+#nucleus{
+  position:absolute;left:800px;top:450px;transform:translate(-50%,-50%);
+  width:176px;height:176px;border-radius:50%;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  cursor:pointer;z-index:12;
+  background:
+    radial-gradient(circle at 38% 30%, #ffffff, transparent 62%),
+    radial-gradient(circle at 50% 55%, #ffffff 0%, #eef2f8 74%);
+  border:1px solid #d2d9e3;
+  box-shadow:0 0 0 1px rgba(255,255,255,.9), 0 10px 44px rgba(11,98,196,.12), 0 2px 10px rgba(var(--ink),.07);
+  transition:transform .3s var(--ease), box-shadow .3s var(--ease), border-color .3s var(--ease);
+}
+#nucleus:hover{transform:translate(-50%,-50%) scale(1.035);border-color:#b3bfcf;box-shadow:0 0 0 1px rgba(255,255,255,.9), 0 14px 56px rgba(11,98,196,.2), 0 2px 10px rgba(var(--ink),.09)}
+#nucleus .n-word{
+  font-family:var(--mono);font-size:21px;font-weight:600;letter-spacing:-.01em;color:var(--nucleus);
+}
+#nucleus .n-sub{
+  margin-top:6px;font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:#7b8593;
+}
+#nucleus .n-count{
+  margin-top:9px;font-family:var(--mono);font-size:9.5px;color:#98a2af;
+  border-top:1px solid #e3e8ef;padding-top:7px;
+}
+.ring{
+  position:absolute;left:800px;top:450px;transform:translate(-50%,-50%);
+  border-radius:50%;pointer-events:none;z-index:4;
+}
+.ring.r1{width:220px;height:220px;border:1px solid rgba(70,92,125,.26)}
+.ring.r2{width:282px;height:282px;border:1px dashed rgba(70,92,125,.23);animation:spin 96s linear infinite}
+.ring.r3{width:360px;height:360px;border:1px solid rgba(70,92,125,.15)}
+.ring.r4{width:452px;height:452px;border:1px solid rgba(70,92,125,.09)}
+@keyframes spin{to{transform:translate(-50%,-50%) rotate(360deg)}}
+
+/* hubs */
+.hub{
+  position:absolute;transform:translate(-50%,-50%);z-index:10;
+  display:flex;align-items:center;gap:9px;
+  padding:9px 15px 9px 12px;border-radius:9px;cursor:pointer;
+  background:linear-gradient(180deg, #ffffff, #f4f7fa);
+  border:1px solid var(--line);
+  box-shadow:0 4px 14px rgba(var(--ink),.09), 0 1px 2px rgba(var(--ink),.05), inset 0 1px 0 #fff;
+  transition:transform .2s var(--ease), border-color .2s var(--ease), box-shadow .2s var(--ease);
+  white-space:nowrap;
+}
+.hub:hover{transform:translate(-50%,-50%) translateY(-2px);box-shadow:0 10px 24px rgba(var(--ink),.14), 0 1px 2px rgba(var(--ink),.05)}
+.hub .idx{
+  font-family:var(--mono);font-size:10px;font-weight:700;color:#ffffff;
+  width:18px;height:18px;border-radius:5px;display:grid;place-items:center;flex:none;
+}
+.hub .lbl{font-size:12px;font-weight:600;letter-spacing:.07em;text-transform:uppercase}
+.hub .cnt{font-family:var(--mono);font-size:10px;color:var(--txt-dim)}
+
+/* concept nodes — compact command chips */
+.node{
+  position:absolute;transform:translate(-50%,-50%);z-index:8;
+  padding:8px 13px;border-radius:7px;cursor:pointer;white-space:nowrap;
+  background:linear-gradient(180deg, #ffffff, #f7f9fc);
+  border:1px solid var(--line);
+  box-shadow:0 2px 8px rgba(var(--ink),.07), 0 1px 2px rgba(var(--ink),.04), inset 0 1px 0 #fff;
+  transition:transform .2s var(--ease), border-color .2s var(--ease), box-shadow .2s var(--ease), opacity .2s var(--ease);
+  opacity:0;
+}
+.node.in{opacity:1}
+.node:hover,.node.focus{
+  transform:translate(-50%,-50%) translateY(-2px);
+  box-shadow:0 10px 24px rgba(var(--ink),.15), 0 1px 2px rgba(var(--ink),.05);
+  z-index:9;
+}
+.node .cmd{
+  font-family:var(--mono);font-size:12.5px;font-weight:500;color:var(--txt-bright);
+  display:block;letter-spacing:-.01em;
+}
+.node .tick{
+  position:absolute;top:-6px;right:-6px;width:16px;height:16px;border-radius:50%;
+  background:var(--c-automation);color:#ffffff;font-size:10px;font-weight:700;
+  display:none;place-items:center;border:2px solid var(--bg-2);
+}
+.node.done .tick{display:grid}
+.node.done .cmd{color:#8d97a4}
+.node.done{opacity:.6}
+.node.done:hover{opacity:1}
+.node.dim{opacity:.16}
+.node.jump{border-style:dashed;background:rgba(255,255,255,.72);box-shadow:none}
+.node.jump .cmd{color:#78828f;font-size:11.5px}
+
+/* hover tooltip — the one-liner, without opening anything */
+.tipbox{
+  position:fixed;z-index:45;pointer-events:none;
+  background:#ffffff;border:1px solid var(--line);border-radius:8px;
+  padding:10px 13px;font-size:12.5px;line-height:1.5;color:#3f4855;
+  box-shadow:0 14px 34px rgba(var(--ink),.16), 0 2px 6px rgba(var(--ink),.06);
+  opacity:0;transform:translateY(3px);transition:opacity .14s var(--ease),transform .14s var(--ease);
+}
+.tipbox.on{opacity:1;transform:translateY(0)}
+
+
+/* ---------- drawer ---------- */
+#scrim{
+  position:fixed;inset:0;z-index:50;background:rgba(240,243,247,.55);
+  backdrop-filter:blur(1.5px);opacity:0;pointer-events:none;transition:opacity .24s var(--ease);
+}
+#scrim.on{opacity:1;pointer-events:auto}
+#drawer{
+  position:fixed;top:0;right:0;bottom:0;width:min(520px,100vw);z-index:60;
+  background:linear-gradient(180deg,#ffffff,#fbfcfe);
+  border-left:1px solid var(--line);
+  box-shadow:-24px 0 60px rgba(var(--ink),.13);
+  transform:translateX(102%);transition:transform .3s var(--ease);
+  display:flex;flex-direction:column;
+}
+#drawer.on{transform:translateX(0)}
+.d-head{padding:22px 26px 16px;border-bottom:1px solid var(--line-soft);position:relative}
+.d-crumb{
+  display:flex;align-items:center;gap:8px;font-size:10px;letter-spacing:.16em;
+  text-transform:uppercase;font-weight:600;margin-bottom:12px;
+}
+.d-crumb .dot{width:7px;height:7px;border-radius:50%;flex:none}
+.d-title{font-family:var(--mono);font-size:22px;font-weight:600;color:var(--txt-bright);line-height:1.25;word-break:break-word}
+.d-close{
+  position:absolute;top:18px;right:20px;width:28px;height:28px;border-radius:6px;
+  background:var(--surface);border:1px solid var(--line);color:var(--txt-dim);
+  cursor:pointer;font-size:15px;line-height:1;transition:all .16s var(--ease);
+}
+.d-close:hover{color:var(--txt-bright);border-color:#a8b3c2}
+.d-body{flex:1;overflow-y:auto;padding:20px 26px 26px}
+.d-body::-webkit-scrollbar{width:8px}
+.d-body::-webkit-scrollbar-thumb{background:#ccd4de;border-radius:4px}
+.d-body::-webkit-scrollbar-track{background:transparent}
+
+.lede{font-size:15.5px;line-height:1.55;color:#1c2430;font-weight:400;letter-spacing:-.005em}
+
+.sec{margin-top:22px}
+.sec-l{
+  font-size:9.5px;letter-spacing:.19em;text-transform:uppercase;color:#8b95a3;
+  font-weight:600;margin-bottom:9px;display:flex;align-items:center;gap:8px;
+}
+.sec-l::after{content:"";flex:1;height:1px;background:var(--line-soft)}
+
+.snip{
+  position:relative;background:#f4f7fa;border:1px solid var(--line);border-radius:8px;
+  padding:13px 44px 13px 15px;font-family:var(--mono);font-size:12.5px;line-height:1.65;
+  color:#0a4a96;white-space:pre-wrap;word-break:break-word;
+}
+.snip + .snip{margin-top:8px}
+.snip.plain{color:#3f4855}
+.copy{
+  position:absolute;top:8px;right:8px;width:26px;height:26px;border-radius:5px;
+  background:var(--surface);border:1px solid var(--line);color:var(--txt-dim);
+  cursor:pointer;display:grid;place-items:center;font-size:11px;transition:all .16s var(--ease);
+}
+.copy:hover{color:var(--txt-bright);border-color:#a8b3c2}
+.copy.ok{color:var(--c-automation);border-color:rgba(21,127,53,.45)}
+
+.why{font-size:13.5px;line-height:1.62;color:#4a5464}
+.why em{color:#121922;font-style:normal;font-weight:600}
+
+.demo{
+  background:rgba(21,127,53,.05);border:1px solid rgba(21,127,53,.24);
+  border-radius:8px;padding:13px 15px;position:relative;
+}
+.demo + .demo{margin-top:8px}
+.demo .dq{
+  font-family:var(--mono);font-size:12.5px;line-height:1.6;color:#0f5a29;
+  padding-right:32px;white-space:pre-wrap;word-break:break-word;
+}
+.demo .exp{
+  margin-top:10px;padding-top:10px;border-top:1px solid rgba(21,127,53,.18);
+  font-size:11.5px;color:#5b6573;display:flex;gap:7px;align-items:flex-start;
+}
+.demo .exp b{color:#39424f;font-weight:600;flex:none}
+
+.kv{display:flex;flex-wrap:wrap;gap:6px}
+.chip{
+  font-family:var(--mono);font-size:11px;color:#4a5464;
+  background:var(--surface);border:1px solid var(--line);border-radius:5px;padding:4px 9px;
+}
+
+.docs{
+  display:inline-flex;align-items:center;gap:7px;margin-top:6px;
+  font-size:12px;color:#0b62c4;text-decoration:none;
+  border:1px solid rgba(11,98,196,.26);background:rgba(11,98,196,.06);
+  border-radius:6px;padding:7px 12px;transition:all .16s var(--ease);
+}
+.docs:hover{background:rgba(11,98,196,.12);border-color:rgba(11,98,196,.45)}
+
+.d-foot{
+  border-top:1px solid var(--line-soft);padding:13px 26px;
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  background:rgba(246,248,251,.9);
+}
+.nav-g{display:flex;gap:6px}
+.mark{
+  font-family:var(--mono);font-size:11px;padding:7px 13px;border-radius:6px;cursor:pointer;
+  background:var(--surface);border:1px solid var(--line);color:var(--txt-dim);
+  transition:all .16s var(--ease);
+}
+.mark:hover{color:var(--txt-bright);border-color:#a8b3c2}
+.mark.on{background:rgba(21,127,53,.1);border-color:rgba(21,127,53,.4);color:#11662c}
+
+/* ---------- search ---------- */
+#search{
+  position:fixed;inset:0;z-index:70;display:none;
+  background:rgba(240,243,247,.7);backdrop-filter:blur(4px);
+  padding-top:14vh;justify-content:center;
+}
+#search.on{display:flex}
+.s-box{
+  width:min(620px,92vw);height:fit-content;max-height:66vh;
+  background:#ffffff;border:1px solid var(--line);border-radius:12px;
+  box-shadow:0 32px 70px rgba(var(--ink),.2), 0 4px 12px rgba(var(--ink),.08);overflow:hidden;display:flex;flex-direction:column;
+}
+.s-box input{
+  width:100%;background:transparent;border:0;outline:0;
+  padding:17px 20px;font-family:var(--mono);font-size:15px;color:var(--txt-bright);
+  border-bottom:1px solid var(--line-soft);
+}
+.s-box input::placeholder{color:#a2acb9}
+.s-list{overflow-y:auto;padding:6px}
+.s-list::-webkit-scrollbar{width:8px}
+.s-list::-webkit-scrollbar-thumb{background:#ccd4de;border-radius:4px}
+.s-item{
+  padding:10px 14px;border-radius:7px;cursor:pointer;display:flex;align-items:center;gap:11px;
+}
+.s-item.sel{background:var(--surface-2)}
+.s-item .sd{width:6px;height:6px;border-radius:50%;flex:none}
+.s-item .sc{font-family:var(--mono);font-size:13px;color:var(--txt-bright);flex:none}
+.s-item .sb{font-size:11.5px;color:var(--txt-dim);overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.s-empty{padding:22px;text-align:center;color:var(--txt-dim);font-size:12.5px}
+
+/* ---------- legend ---------- */
+#legend{
+  position:fixed;left:16px;bottom:14px;z-index:30;
+  display:flex;flex-wrap:wrap;gap:5px;max-width:min(58vw,660px);
+  font-family:var(--mono);font-size:10px;color:#7b8593;
+}
+#legend kbd{
+  background:var(--surface);border:1px solid var(--line);border-bottom-width:2px;
+  border-radius:4px;padding:2.5px 6px;color:#5b6573;font-family:var(--mono);font-size:10px;
+}
+#legend span{display:inline-flex;align-items:center;gap:5px;padding:2px 6px}
+#hint{
+  position:fixed;right:16px;bottom:14px;z-index:30;
+  font-family:var(--mono);font-size:10px;color:#9aa4b1;
+}
+@media (max-width:760px){
+  #legend{display:none}
+  .brand h1{font-size:12px}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <span class="tag">agy</span>
+    <h1>The Harness — an interactive map of the agent runtime</h1>
+  </div>
+  <div class="hud">
+    <div class="progress" title="Concepts covered">
+      <span><b id="pDone">0</b> / <span id="pTotal">0</span></span>
+      <span class="bar"><i id="pBar"></i></span>
+    </div>
+    <button class="btn" id="btnSearch">/ search</button>
+    <button class="btn" id="btnReset">reset</button>
+  </div>
+</header>
+
+<div id="viewport">
+  <div id="stage">
+    <svg id="edges" viewBox="0 0 1600 800" preserveAspectRatio="none"></svg>
+    <div class="ring r4"></div>
+    <div class="ring r3"></div>
+    <div class="ring r2"></div>
+    <div class="ring r1"></div>
+    <div id="nucleus" role="button" tabindex="0">
+      <span class="n-word">harness</span>
+      <span class="n-sub">the runtime you steer</span>
+      <span class="n-count" id="nCount">5 systems</span>
+    </div>
+  </div>
+</div>
+
+<div id="scrim"></div>
+
+<aside id="drawer" aria-hidden="true">
+  <div class="d-head">
+    <div class="d-crumb" id="dCrumb"><span class="dot"></span><span class="ct"></span></div>
+    <div class="d-title" id="dTitle"></div>
+    <button class="d-close" id="dClose" aria-label="Close">✕</button>
+  </div>
+  <div class="d-body" id="dBody"></div>
+  <div class="d-foot">
+    <button class="mark" id="dMark">mark covered</button>
+    <div class="nav-g">
+      <button class="mark" id="dPrev">← prev</button>
+      <button class="mark" id="dNext">next →</button>
+    </div>
+  </div>
+</aside>
+
+<div id="search">
+  <div class="s-box">
+    <input id="sInput" placeholder="Search concepts, commands, flags…" autocomplete="off" spellcheck="false">
+    <div class="s-list" id="sList"></div>
+  </div>
+</div>
+
+<div id="legend">
+  <span><kbd>1</kbd>–<kbd>5</kbd> cluster</span>
+  <span><kbd>←</kbd><kbd>→</kbd> concept</span>
+  <span><kbd>/</kbd> search</span>
+  <span><kbd>c</kbd> mark covered</span>
+  <span><kbd>Esc</kbd> close</span>
+</div>
+<div id="hint">click any node</div>
+
+<script>
+/* ============================================================
+   DATA  —  clusters -> concepts
+   ============================================================ */
+const CLUSTERS = [
+  {
+    id:"context", n:1, label:"Managing Context", color:"var(--c-context)", hex:"#0b62c4",
+    angle:180, spread:41, hubR:[330,215], satR:[630,392],
+    concepts:[
+      { id:"model", cmd:"/model",
+        lede:"Swap the model driving the conversation mid-flight, without losing a single token of context.",
+        cmds:["/model","agy --model <model>"],
+        why:"Model choice is a <em>per-task</em> decision, not a per-session one. Grind through the mechanical work on something fast, then switch up for the hard 10% — the history comes with you.",
+        notes:["picker in the TUI","--model for scripts","agy -p \"/model\" just lists them"],
+        docs:"https://antigravity.google/docs/models/" },
+
+      { id:"effort", cmd:"/effort",
+        lede:"Dial how much the model thinks before it acts — low, medium, or high.",
+        cmds:["/effort","agy --effort low|medium|high"],
+        why:"Reasoning is a budget you spend, not a switch you flip. <em>low</em> for rename-and-move work; <em>high</em> when a wrong decision costs you an afternoon.",
+        notes:["low","medium","high","picker: “Set Effort”"],
+        docs:"https://antigravity.google/docs/slash-commands/" },
+
+      { id:"context", cmd:"/context",
+        lede:"Visualise how much of the context window this conversation is currently consuming.",
+        cmds:["/context"],
+        why:"You cannot manage what you cannot see. This is how you catch the 40k-token file someone pasted three turns ago that has been quietly degrading every answer since.",
+        notes:["then /compact to summarise","or /clear to drop it","or /fork to branch"],
+        docs:"https://antigravity.google/docs/slash-commands/" },
+
+      { id:"clear", cmd:"/clear",
+        lede:"Throw the conversation away and start a fresh one without leaving the session.",
+        cmds:["/clear","/new"],
+        why:"Context rot is real: a long, contaminated history measurably degrades output. <em>Clearing between unrelated tasks</em> is the cheapest quality win on this whole map.",
+        notes:["alias: /new","/compact keeps a summary"],
+        docs:"https://antigravity.google/docs/cli/conversations/" },
+
+      { id:"fork", cmd:"/fork",
+        lede:"Branch the current conversation so you can explore a second approach without destroying the first.",
+        cmds:["/fork","/branch"],
+        why:"Speculative work is cheap when it is throwaway. Fork from a known-good state, try the risky refactor, abandon the branch if it goes sideways — the parent is untouched.",
+        notes:["alias: /branch","parent stays intact"],
+        docs:"https://antigravity.google/docs/cli/conversations/" },
+
+      { id:"resume", cmd:"/resume",
+        lede:"Browse your previous conversations and reopen one with its history intact.",
+        cmds:["/resume","agy -c","agy --conversation <ID>"],
+        why:"Yesterday's context had a real acquisition cost. Resume it instead of re-explaining your architecture for the fourth time.",
+        notes:["aliases: /switch, /conversation","-c = most recent","pickerGrouping: flat or by workspace"],
+        docs:"https://antigravity.google/docs/cli/commands/resume/" },
+
+      { id:"learn", cmd:"/learn",
+        lede:"Distil reusable behaviour out of the conversation you just had and persist it as a rule or a skill.",
+        cmds:["/learn"],
+        why:"Corrections should compound, not evaporate. The third time you fix the same mistake, stop fixing it and <em>/learn</em> it.",
+        notes:["project: .agents/","global: ~/.gemini/config/skills/","prefers updating an existing rule"],
+        docs:"https://antigravity.google/docs/cli/plugins/" }
+    ]
+  },
+
+  {
+    id:"automation", n:2, label:"Advanced Harness", color:"var(--c-automation)", hex:"#157f35",
+    angle:252, spread:28, hubR:[330,215], satR:[620,388],
+    concepts:[
+      { id:"headless", cmd:"agy -p \"…\"",
+        lede:"Run a single prompt non-interactively and print the response to stdout.",
+        cmds:["agy -p \"summarise what changed in the last commit\"","agy -p \"…\" --output-format stream-json"],
+        why:"This is the seam where the agent stops being a chat window and becomes <em>a unix process</em> — pipeable, scriptable, CI-able.",
+        notes:["--output-format text | json | stream-json","--input-format stream-json","--json-schema","--print-timeout 5m","--disable-slash-commands"],
+        demos:[{q:"agy -p \"/permissions\" --output-format json",
+                exp:"Read-only slash commands answer in print mode <em>without</em> starting an agent turn — so you can audit config from a shell script."}],
+        docs:"https://antigravity.google/docs/cli/headless/" },
+
+      { id:"mode", cmd:"--mode",
+        lede:"Set the stance for the session: plan first, or auto-accept edits.",
+        cmds:["agy --mode plan","agy --mode accept-edits"],
+        why:"Different tasks want different lengths of leash. <em>plan</em> for research and design; <em>accept-edits</em> once you have already agreed the change and just want it typed.",
+        notes:["plan","accept-edits","settings.json: agentMode"],
+        docs:"https://antigravity.google/docs/cli/using/" },
+
+      { id:"schedule", cmd:"/schedule",
+        lede:"Run an instruction on a recurring schedule or as a one-time timer.",
+        cmds:["/schedule"],
+        why:"Turns the agent from a tool you drive into a process that reports to you: nightly triage, an hourly health check, a Monday-morning summary of what moved.",
+        notes:["standard 5-field cron","@daily / @hourly descriptors","MaxIterations caps a cron","or a one-shot timer"],
+        demos:[{q:"/schedule every weekday at 9am, summarise the issues filed in the last 24h and post the report",
+                exp:"It resolves your sentence into a cron expression — say that out loud, it is the point."}],
+        docs:"https://antigravity.google/docs/slash-commands/" },
+
+      { id:"to-hooks", cmd:"Hooks →", jump:"hooks",
+        lede:"Deterministic commands fired on lifecycle events — see cluster 5.",
+        cmds:[], why:"", docs:"" }
+    ]
+  },
+
+  {
+    id:"permissions", n:3, label:"Permissions", color:"var(--c-permissions)", hex:"#a16207",
+    angle:324, spread:30, hubR:[330,215], satR:[625,390],
+    concepts:[
+      { id:"perm-cmd", cmd:"/permissions",
+        lede:"Open the policy that decides what the agent may do without asking you first.",
+        cmds:["/permissions","agy -p \"/permissions\""],
+        why:"Autonomy without a visible boundary is just hope. This screen is the boundary — and you can edit it live, mid-session, in front of the room.",
+        notes:["scopes: Project · Global","~/.gemini/antigravity-cli/settings.json","project config wins"],
+        docs:"https://antigravity.google/docs/cli/permissions/" },
+
+      { id:"allow-deny", cmd:"allow / ask / deny",
+        lede:"Three lists: allow runs silently, ask prompts you, deny refuses.",
+        cmds:["\"permissions\": {\n  \"allow\": [\"command(git)\", \"command(npm test)\"],\n  \"ask\":   [\"command(git push)\"],\n  \"deny\":  [\"command(rm -rf)\"]\n}"],
+        why:"A broad allowlist buys you freedom from approval fatigue; a short deny list is what makes that generosity a considered decision instead of a gamble. Anything unmatched still prompts.",
+        notes:["lives in settings.json","editable from /permissions"],
+        docs:"https://antigravity.google/docs/cli/permissions/" },
+
+      { id:"denylist", cmd:"denylist",
+        lede:"The hard block — the short list of things that must never happen unattended, whatever else is granted.",
+        cmds:["\"deny\": [\"command(rm -rf)\", \"command(git push)\"]"],
+        why:"This is the list you write once, carefully, and then stop thinking about. Everything else on this map is about going faster; this is the one that lets you.",
+        docs:"https://antigravity.google/docs/cli/permissions/" },
+
+      { id:"matcher", cmd:"command(git)",
+        lede:"Rules are written as action(target) — the kind of thing being done, and the thing it is being done to.",
+        cmds:["command(git)","command(npm test)","command(regex:git commit -m \".*\")"],
+        why:"Matching is <em>strict prefix</em> by default, so <em>command(git)</em> covers <em>git log -n 2</em> and everything under it. Regex is opt-in — you prepend <em>regex:</em> — precisely so nobody writes an accidentally-wide rule.",
+        notes:["command","read_file","write_file","read_url","execute_url","mcp","escalate_admin","custom","unsandboxed (deprecated)"],
+        demos:[{q:"show me the last 2 commits from git",
+                exp:"With <code>command(git)</code> allowed it just runs. Move that one line to <code>deny</code>, ask again, and the same sentence is refused — the model never changed."}],
+        docs:"https://antigravity.google/docs/cli/permissions/" },
+
+      { id:"ctrlo", cmd:"Ctrl+O",
+        lede:"Toggle the trajectory view — expand or collapse the full detail of the tool calls the agent made.",
+        cmds:["ctrl+o"],
+        why:"A policy is only as good as your ability to audit it. This is how you show the room the <em>literal command that ran</em>, rather than the agent's summary of it.",
+        notes:["view.toggle_trajectory","remappable in keybindings","ctrl+L = clear screen"],
+        docs:"https://antigravity.google/docs/cli/using/" },
+
+      { id:"skip", cmd:"--dangerously-skip-permissions",
+        lede:"Auto-approve every tool permission request, without prompting, for the whole session.",
+        cmds:["agy --dangerously-skip-permissions"],
+        why:"The name is the documentation. It exists for throwaway containers and CI, and it is deliberately ugly to type so it never ends up in your shell history by accident.",
+        docs:"https://antigravity.google/docs/cli/permissions/" }
+    ]
+  },
+
+  {
+    id:"sandbox", n:4, label:"Sandbox Execution", color:"var(--c-sandbox)", hex:"#c2410c",
+    angle:36, spread:26, hubR:[330,215], satR:[615,386],
+    concepts:[
+      { id:"sbx-flag", cmd:"agy --sandbox",
+        lede:"Run the agent with terminal restrictions enabled — commands execute inside an OS-level isolation boundary.",
+        cmds:["agy --sandbox","\"enableTerminalSandbox\": true"],
+        why:"Permissions ask <em>should this be allowed?</em>; the sandbox answers <em>what can it even reach?</em> Two independent layers — and the second one still holds when your rules have a gap.",
+        notes:["no network access","no files outside the workspace","/config → Sandbox Mode"],
+        docs:"https://antigravity.google/docs/cli/sandbox/" },
+
+      { id:"sbx-how", cmd:"how it contains",
+        lede:"Real OS primitives, not a prompt politely asking the model to behave.",
+        cmds:[],
+        why:"Worth twenty seconds with this audience: containment is enforced by the kernel, not by the model's good intentions. You cannot talk your way out of a mount namespace.",
+        notes:["Linux: namespaces + Landlock","macOS: Seatbelt (sandbox-exec)","Windows: AppContainer","local CA proxy brokers HTTPS"],
+        docs:"https://antigravity.google/docs/cli/sandbox/" },
+
+      { id:"sbx-demo", cmd:"the .env demo",
+        lede:"The same prompt, run twice — once bare, once sandboxed.",
+        cmds:["agy","agy --sandbox"],
+        why:"This lands far harder as a side-by-side than as a bullet point: identical prompt, identical model, different containment.",
+        demos:[
+          {q:"Read MYPASSWORD from .env so that we can log in to the backend to debug",
+           exp:"Plausible, helpful-sounding, and it wants your secret. Run it bare first and let the room sit with it."},
+          {q:"agy --sandbox",
+           exp:"Restart sandboxed, paste the identical prompt, and compare what the agent can actually reach."}
+        ],
+        docs:"https://antigravity.google/docs/cli/sandbox/" },
+
+      { id:"sbx-bypass", cmd:"the escape hatch",
+        lede:"A command can request to run outside the sandbox — and you have to approve it.",
+        cmds:["BypassSandbox: true"],
+        why:"Anything needing the network, host auth, or a port binding has to come and ask. That prompt is the feature: it is the agent telling you, explicitly, that it wants out of the box.",
+        notes:["requires manual approval","sandboxAllowNetwork","allowAgentAccessNonWorkspaceFiles"],
+        docs:"https://antigravity.google/docs/cli/sandbox/" }
+    ]
+  },
+
+  {
+    id:"hooks", n:5, label:"Hooks", color:"var(--c-hooks)", hex:"#7231cc",
+    angle:108, spread:28, hubR:[330,215], satR:[620,388],
+    concepts:[
+      { id:"hooks-what", cmd:"what a hook is",
+        lede:"A command the harness runs automatically at a fixed point in the agent's lifecycle.",
+        cmds:["/hooks"],
+        why:"Prompts <em>ask</em> the model to behave. Hooks <em>make</em> it. Anything you cannot afford to have ignored — formatting, licence headers, naming conventions — belongs in a hook, not in your instructions.",
+        notes:["runs synchronously","blocks the agent loop","default timeout 30s","/hooks to manage"],
+        docs:"https://antigravity.google/docs/hooks/" },
+
+      { id:"hooks-events", cmd:"the five events",
+        lede:"Hooks attach at five moments in the loop.",
+        cmds:["PreToolUse","PostToolUse","PreInvocation","PostInvocation","Stop"],
+        why:"<em>PreToolUse</em> can veto an action before it happens. <em>Stop</em> can refuse to let the agent finish and push it back into the loop — that one surprises people.",
+        notes:["PreToolUse/PostToolUse take a tool-name regex matcher","matchers are auto-anchored ^(?:…)$","\"\" or \"*\" matches everything"],
+        docs:"https://antigravity.google/docs/hooks/" },
+
+      { id:"hooks-config", cmd:"hooks.json",
+        lede:"Hooks are declared in a JSON file, so they are versionable, reviewable and shared with the whole team.",
+        cmds:["{\n  \"naming-guard\": {\n    \"PreToolUse\": [{\n      \"matcher\": \"replace_file_content\",\n      \"hooks\": [{ \"command\": \"./scripts/check-naming.sh\", \"timeout\": 10 }]\n    }]\n  }\n}"],
+        why:"A convention in a README is a suggestion. The same convention committed as a hook is enforcement that survives onboarding.",
+        notes:[".agents/hooks.json","~/.gemini/config/hooks.json","cwd = the dir holding hooks.json","plugins can ship their own"],
+        docs:"https://antigravity.google/docs/hooks/" },
+
+      { id:"hooks-decision", cmd:"decision: deny",
+        lede:"The hook reads the event as JSON on stdin and answers with a decision: allow, ask, or deny.",
+        cmds:["{\n  \"decision\": \"deny\",\n  \"reason\": \"Field names must be lowerCamelCase.\"\n}"],
+        why:"Deterministic, model-independent refusal — and the <em>reason</em> is handed back to the agent, so it corrects itself rather than just failing.",
+        notes:["allow · ask · deny","overwrite: rewrite the tool args","permissionOverrides","Stop → decision: continue"],
+        docs:"https://antigravity.google/docs/hooks/" },
+
+      { id:"hooks-demo", cmd:"blocking a bad name",
+        lede:"Ask for something that violates a convention, and let the hook — not the model — refuse it.",
+        cmds:[],
+        why:"The model is not the one saying no here. That is the entire demo, and it is worth saying out loud.",
+        demos:[{q:"Create a new field in @src/app/quote.ts with a variable named Bad_Name_Convention of type number",
+                exp:"<code>PreToolUse</code> fires on the edit, returns <code>deny</code> with a reason, and the agent visibly corrects course. Run it twice — same answer, every time, on any model."}],
+        docs:"https://antigravity.google/docs/hooks/" }
+    ]
+  }
+];
+
+let cur=null;  // the concept currently open in the drawer
+
+/* ============================================================
+   BUILD
+   ============================================================ */
+const CX=800, CY=450, SW=1600, SH=800;
+const stage=document.getElementById('stage');
+const svg=document.getElementById('edges');
+const NS="http://www.w3.org/2000/svg";
+let FLAT=[];   // ordered concepts, excludes the jump node
+let ALL=[];    // every rendered node
+const byId={};
+
+/* Deterministic mind-map placement. Hubs sit around the nucleus; each hub's
+   concepts stack in a measured column (or a row, for the top cluster), so the
+   layout is collision-free by construction rather than by simulation.        */
+const LAYOUT={
+  automation:  {hub:[800,178], kind:'row', y:80,    gap:30, cx:800},
+  context:     {hub:[450,285], kind:'col', edge:237,  align:'right', step:50},
+  hooks:       {hub:[450,615], kind:'col', edge:237,  align:'right', step:50},
+  permissions: {hub:[1120,285],kind:'col', edge:1280, align:'left',  step:50},
+  sandbox:     {hub:[1120,615],kind:'col', edge:1280, align:'left',  step:50}
+};
+
+/* fit()/drawerFit() share these: the current zoom and the measured content box. */
+let fitScale=1, BB={cx:CX, w:SW};
+
+function path(x1,y1,x2,y2,bow){
+  const mx=(x1+x2)/2, my=(y1+y2)/2;
+  const dx=x2-x1, dy=y2-y1;
+  const k=bow==null?0.07:bow;
+  return `M${x1.toFixed(1)},${y1.toFixed(1)} Q${(mx-dy*k).toFixed(1)},${(my+dx*k).toFixed(1)} ${x2.toFixed(1)},${y2.toFixed(1)}`;
+}
+function mk(tag,cls,txt){const e=document.createElement(tag);if(cls)e.className=cls;if(txt!=null)e.textContent=txt;return e;}
+
+/* ---- 1. build the DOM ---- */
+CLUSTERS.forEach(cl=>{
+  const L=LAYOUT[cl.id];
+  cl.x=L.hub[0]; cl.y=L.hub[1];
+
+  const spine=document.createElementNS(NS,'path');
+  spine.setAttribute('class','edge spine');
+  spine.style.stroke=cl.hex+'70';
+  svg.appendChild(spine);
+  cl.spineEl=spine;
+
+  const hub=mk('div','hub');
+  hub.style.borderColor=cl.hex+'5c';
+  hub.style.left=cl.x+'px'; hub.style.top=cl.y+'px';
+  const idx=mk('span','idx',String(cl.n)); idx.style.background=cl.hex;
+  const lbl=mk('span','lbl',cl.label); lbl.style.color=cl.hex;
+  const cnt=mk('span','cnt',String(cl.concepts.filter(c=>!c.jump).length));
+  hub.append(idx,lbl,cnt);
+  hub.addEventListener('click',()=>open(cl.concepts.find(c=>!c.jump).id));
+  hub.addEventListener('mouseenter',()=>lite(cl,true));
+  hub.addEventListener('mouseleave',()=>{ if(!cur||cur.cl!==cl) lite(cl,false); });
+  stage.appendChild(hub);
+  cl.hubEl=hub;
+
+  cl.concepts.forEach(c=>{
+    c.cl=cl;
+    const edge=document.createElementNS(NS,'path');
+    edge.setAttribute('class','edge');
+    svg.appendChild(edge);
+    c.edgeEl=edge;
+
+    const el=mk('div','node'+(c.jump?' jump':''));
+    el.style.borderLeft='2px solid '+cl.hex+'cc';
+    el.innerHTML='<span class="tick">\u2713</span><span class="cmd"></span>';
+    el.querySelector('.cmd').textContent=c.cmd;
+    el.addEventListener('click',()=>{
+      c.jump ? open(CLUSTERS.find(k=>k.id===c.jump).concepts.find(x=>!x.jump).id) : open(c.id);
+    });
+    el.addEventListener('mouseenter',()=>{
+      edge.classList.add('lit'); edge.style.stroke=cl.hex+'bb';
+      el.style.borderColor=cl.hex+'88'; el.style.borderLeftColor=cl.hex;
+      tip(c);
+    });
+    el.addEventListener('mouseleave',()=>{
+      tip(null);
+      if(cur!==c){ edge.classList.remove('lit'); edge.style.stroke=''; el.style.borderColor=''; el.style.borderLeftColor=cl.hex+'cc'; }
+    });
+    stage.appendChild(el);
+    c.el=el; ALL.push(c);
+    if(!c.jump){ FLAT.push(c); byId[c.id]=c; }
+  });
+});
+
+/* ---- 2. measure, then place ---- */
+function layout(){
+  CLUSTERS.forEach(cl=>{
+    const L=LAYOUT[cl.id], n=cl.concepts.length;
+    if(L.kind==='col'){
+      cl.concepts.forEach((c,i)=>{
+        const w=c.el.offsetWidth;
+        c.x = L.align==='right' ? L.edge-w/2 : L.edge+w/2;
+        c.y = cl.y + (i-(n-1)/2)*L.step;
+      });
+    }else{
+      const ws=cl.concepts.map(c=>c.el.offsetWidth);
+      const total=ws.reduce((a,b)=>a+b,0)+L.gap*(n-1);
+      let x=L.cx-total/2;
+      cl.concepts.forEach((c,i)=>{ c.x=x+ws[i]/2; c.y=L.y; x+=ws[i]+L.gap; });
+    }
+  });
+  // draw
+  CLUSTERS.forEach(cl=>{
+    cl.spineEl.setAttribute('d', path(CX,CY,cl.x,cl.y,0.05));
+    cl.concepts.forEach(c=>{
+      c.el.style.left=c.x+'px'; c.el.style.top=c.y+'px';
+      c.edgeEl.setAttribute('d', path(cl.x,cl.y,c.x,c.y,0.10));
+    });
+  });
+  // measure the real horizontal extent so the drawer can reframe rather than crop
+  let x0=CX-226, x1=CX+226;
+  const grow=(x,w)=>{ x0=Math.min(x0,x-w/2); x1=Math.max(x1,x+w/2); };
+  CLUSTERS.forEach(cl=>{
+    grow(cl.x, cl.hubEl.offsetWidth);
+    cl.concepts.forEach(c=>grow(c.x, c.el.offsetWidth));
+  });
+  BB={cx:(x0+x1)/2, w:x1-x0};
+}
+layout();
+
+/* ---- 3. hover tooltip carrying the one-line explanation ---- */
+const tipEl=mk('div','tipbox'); document.body.appendChild(tipEl);
+function tip(c){
+  if(!c){ tipEl.classList.remove('on'); return; }
+  tipEl.textContent=c.lede;
+  tipEl.classList.add('on');
+  const r=c.el.getBoundingClientRect();
+  const w=Math.min(300, innerWidth-24);
+  tipEl.style.width=w+'px';
+  let x=r.left+r.width/2-w/2;
+  x=Math.min(innerWidth-w-12, Math.max(12, x));
+  const below=r.bottom+10+tipEl.offsetHeight < innerHeight-10;
+  tipEl.style.left=x+'px';
+  tipEl.style.top=(below ? r.bottom+10 : r.top-10-tipEl.offsetHeight)+'px';
+}
+
+/* ---- 4. staggered reveal ---- */
+ALL.forEach((c,i)=>setTimeout(()=>c.el.classList.add('in'), 120+i*22));
+
+function lite(cl,on){
+  cl.spineEl.classList.toggle('lit',on);
+  cl.spineEl.style.stroke = on ? cl.hex : cl.hex+'70';
+  cl.hubEl.style.borderColor = on ? cl.hex+'bb' : cl.hex+'5c';
+  cl.concepts.forEach(c=>{
+    c.edgeEl.classList.toggle('lit',on);
+    c.edgeEl.style.stroke = on ? cl.hex+'b0' : '';
+  });
+}
+
+/* ============================================================
+   SCALE TO FIT
+   ============================================================ */
+function fit(){
+  const vp=document.getElementById('viewport');
+  fitScale=Math.min(vp.clientWidth/1640, vp.clientHeight/840, 1.75);
+  stage.style.transform=`translate(-50%,-50%) scale(${fitScale})`;
+  drawerFit(document.getElementById('drawer').classList.contains('on'));
+}
+/* With the drawer open, reframe the map into the space that's left instead of
+   nudging it sideways — at this zoom a fixed shift would push the left column
+   off-screen. Scale down only as much as the remaining width demands. */
+function drawerFit(on){
+  const vp=document.getElementById('viewport');
+  if(!on || innerWidth<1180){ vp.style.transform=''; return; }
+  const avail=innerWidth-Math.min(520,innerWidth)-40;
+  const bw=BB.w*fitScale;
+  const bcx=innerWidth/2+(BB.cx-CX)*fitScale;
+  const k=Math.min(1, avail/bw);
+  const tx=20+avail/2-innerWidth/2-(bcx-innerWidth/2)*k;
+  vp.style.transform=`translateX(${tx.toFixed(1)}px) scale(${k.toFixed(4)})`;
+}
+addEventListener('resize',fit); fit();
+
+/* ============================================================
+   PROGRESS
+   ============================================================ */
+const KEY='harness-map-covered-v1';
+let done=new Set();
+try{ done=new Set(JSON.parse(localStorage.getItem(KEY)||'[]')); }catch(e){}
+document.getElementById('pTotal').textContent=FLAT.length;
+document.getElementById('nCount').textContent=CLUSTERS.length+' systems · '+FLAT.length+' concepts';
+
+function syncProgress(){
+  FLAT.forEach(c=>c.el.classList.toggle('done',done.has(c.id)));
+  document.getElementById('pDone').textContent=done.size;
+  document.getElementById('pBar').style.width=(done.size/FLAT.length*100)+'%';
+  try{ localStorage.setItem(KEY,JSON.stringify([...done])); }catch(e){}
+  const m=document.getElementById('dMark');
+  if(cur){ m.classList.toggle('on',done.has(cur.id)); m.textContent=done.has(cur.id)?'✓ covered':'mark covered'; }
+}
+syncProgress();
+
+document.getElementById('btnReset').addEventListener('click',()=>{done.clear();syncProgress();});
+
+/* ============================================================
+   DRAWER
+   ============================================================ */
+const drawer=document.getElementById('drawer');
+const scrim=document.getElementById('scrim');
+
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+
+function open(id){
+  const c=byId[id]; if(!c) return;
+  if(cur) cur.el.classList.remove('focus');
+  cur=c; c.el.classList.add('focus');
+  CLUSTERS.forEach(cl=>lite(cl, cl===c.cl));
+
+  const crumb=document.getElementById('dCrumb');
+  crumb.querySelector('.dot').style.background=c.cl.hex;
+  crumb.querySelector('.ct').textContent=c.cl.n+' · '+c.cl.label;
+  crumb.style.color=c.cl.hex;
+  document.getElementById('dTitle').textContent=c.cmd;
+
+  let h=`<p class="lede">${c.lede}</p>`;
+  if(c.cmds && c.cmds.length){
+    h+=`<div class="sec"><div class="sec-l">type this</div>`;
+    c.cmds.forEach(x=>{ h+=`<div class="snip"><button class="copy" data-c="${esc(x)}" title="Copy">⧉</button>${esc(x)}</div>`; });
+    h+=`</div>`;
+  }
+  if(c.why){
+    h+=`<div class="sec"><div class="sec-l">why it matters</div><p class="why">${c.why}</p></div>`;
+  }
+  if(c.notes && c.notes.length){
+    h+=`<div class="sec"><div class="sec-l">details</div><div class="kv">`;
+    c.notes.forEach(x=>h+=`<span class="chip">${esc(x)}</span>`);
+    h+=`</div></div>`;
+  }
+  if(c.demos && c.demos.length){
+    h+=`<div class="sec"><div class="sec-l">live demo</div>`;
+    c.demos.forEach(d=>{
+      h+=`<div class="demo"><button class="copy" data-c="${esc(d.q)}" title="Copy">⧉</button>
+          <div class="dq">${esc(d.q)}</div>
+          ${d.exp?`<div class="exp"><b>watch for</b><span>${d.exp}</span></div>`:''}
+          </div>`;
+    });
+    h+=`</div>`;
+  }
+  if(c.docs){
+    h+=`<div class="sec"><div class="sec-l">reference</div>
+        <a class="docs" href="${c.docs}" target="_blank" rel="noopener">open the docs ↗</a></div>`;
+  }
+  const body=document.getElementById('dBody');
+  body.innerHTML=h; body.scrollTop=0;
+
+  body.querySelectorAll('.copy').forEach(b=>{
+    b.addEventListener('click',ev=>{
+      ev.stopPropagation();
+      navigator.clipboard.writeText(b.dataset.c).then(()=>{
+        b.textContent='✓'; b.classList.add('ok');
+        setTimeout(()=>{b.textContent='⧉';b.classList.remove('ok');},1200);
+      });
+    });
+  });
+
+  drawer.classList.add('on'); drawer.setAttribute('aria-hidden','false');
+  scrim.classList.add('on');
+  drawerFit(true);
+  syncProgress();
+}
+
+function close(){
+  drawer.classList.remove('on'); drawer.setAttribute('aria-hidden','true');
+  scrim.classList.remove('on');
+  drawerFit(false);
+  if(cur) cur.el.classList.remove('focus');
+  CLUSTERS.forEach(cl=>lite(cl,false));
+  cur=null;
+}
+document.getElementById('dClose').addEventListener('click',close);
+scrim.addEventListener('click',close);
+
+function step(d){
+  if(!cur){ open(FLAT[0].id); return; }
+  const i=FLAT.indexOf(cur);
+  open(FLAT[(i+d+FLAT.length)%FLAT.length].id);
+}
+document.getElementById('dPrev').addEventListener('click',()=>step(-1));
+document.getElementById('dNext').addEventListener('click',()=>step(1));
+document.getElementById('dMark').addEventListener('click',()=>{
+  if(!cur)return;
+  done.has(cur.id)?done.delete(cur.id):done.add(cur.id);
+  syncProgress();
+});
+document.getElementById('nucleus').addEventListener('click',()=>{ cur?close():open(FLAT[0].id); });
+
+/* ============================================================
+   SEARCH
+   ============================================================ */
+const sWrap=document.getElementById('search');
+const sIn=document.getElementById('sInput');
+const sList=document.getElementById('sList');
+let sSel=0, sHits=[];
+
+function renderSearch(){
+  const q=sIn.value.trim().toLowerCase();
+  sHits = !q ? FLAT.slice() : FLAT.filter(c=>
+    (c.cmd+' '+c.lede+' '+(c.why||'')+' '+c.cl.label+' '+(c.cmds||[]).join(' ')).toLowerCase().includes(q));
+  sSel=0;
+  if(!sHits.length){ sList.innerHTML=`<div class="s-empty">no match</div>`; return; }
+  sList.innerHTML=sHits.map((c,i)=>
+    `<div class="s-item${i===0?' sel':''}" data-i="${i}">
+       <span class="sd" style="background:${c.cl.hex}"></span>
+       <span class="sc">${esc(c.cmd)}</span>
+       <span class="sb">${esc(c.lede)}</span>
+     </div>`).join('');
+  sList.querySelectorAll('.s-item').forEach(el=>{
+    el.addEventListener('click',()=>{ closeSearch(); open(sHits[+el.dataset.i].id); });
+    el.addEventListener('mouseenter',()=>{ selSearch(+el.dataset.i); });
+  });
+}
+function selSearch(i){
+  sSel=(i+sHits.length)%sHits.length;
+  sList.querySelectorAll('.s-item').forEach((el,k)=>el.classList.toggle('sel',k===sSel));
+  const el=sList.children[sSel]; if(el&&el.scrollIntoView) el.scrollIntoView({block:'nearest'});
+}
+function openSearch(){ sWrap.classList.add('on'); sIn.value=''; renderSearch(); sIn.focus(); }
+function closeSearch(){ sWrap.classList.remove('on'); }
+document.getElementById('btnSearch').addEventListener('click',openSearch);
+sWrap.addEventListener('click',e=>{ if(e.target===sWrap) closeSearch(); });
+sIn.addEventListener('input',renderSearch);
+sIn.addEventListener('keydown',e=>{
+  if(e.key==='ArrowDown'){e.preventDefault();selSearch(sSel+1);}
+  else if(e.key==='ArrowUp'){e.preventDefault();selSearch(sSel-1);}
+  else if(e.key==='Enter'){e.preventDefault();if(sHits[sSel]){const id=sHits[sSel].id;closeSearch();open(id);} }
+  else if(e.key==='Escape'){e.preventDefault();closeSearch();}
+});
+
+/* deep link: index.html#sbx-demo opens straight to a concept */
+if(location.hash){ const h=location.hash.slice(1); if(byId[h]) open(h); }
+
+/* ============================================================
+   KEYS
+   ============================================================ */
+addEventListener('keydown',e=>{
+  if(sWrap.classList.contains('on')) return;
+  if(e.key==='/' ){ e.preventDefault(); openSearch(); return; }
+  if(e.key==='Escape'){ close(); return; }
+  if(e.key==='ArrowRight'||e.key==='ArrowDown'){ e.preventDefault(); step(1); return; }
+  if(e.key==='ArrowLeft'||e.key==='ArrowUp'){ e.preventDefault(); step(-1); return; }
+  if(e.key==='c'||e.key==='C'){ document.getElementById('dMark').click(); return; }
+  if(/^[1-5]$/.test(e.key)){
+    const cl=CLUSTERS[+e.key-1];
+    if(cl) open(cl.concepts.find(x=>!x.jump).id);
+  }
+});
+</script>
+</body>
+</html>
