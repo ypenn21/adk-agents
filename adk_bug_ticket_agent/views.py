@@ -96,7 +96,7 @@ async def interact_with_agent(request): # Removed the initial check for session_
             print("----------------------------------------------------")
             return JsonResponse({'error': str(e), 'traceback': traceback.format_exc()}, status=500)
 
-    elif request.method == 'GET':
+    elif request.method in ('GET', 'HEAD'):
         return render(request, 'adk_agent/interact.html')
     
     return JsonResponse({'error': 'Unsupported method'}, status=405)
