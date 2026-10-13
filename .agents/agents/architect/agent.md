@@ -9,6 +9,14 @@ mcp_servers:
   - google-developer-knowledge
   - context7
   - atlassian-mcp-server
+tools:
+  - view_file
+  - write_to_file
+  - replace_file_content
+  - multi_replace_file_content
+  - list_dir
+  - grep_search
+  - find_by_name
 mainAgent: true
 subagent: true
 ---

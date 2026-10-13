@@ -116,12 +116,16 @@ def get_toolbox_tools():
     global _toolbox_tools_cache
     if _toolbox_tools_cache is None:
         if "collectstatic" not in sys.argv:
-            # Load tools initially to get names and create wrappers
-            real_tools = load_toolset_cached("tickets_toolset")
-            _toolbox_tools_cache = [
-                LazyToolboxTool(t.__name__, "tickets_toolset", t) 
-                for t in real_tools
-            ]
+            try:
+                # Load tools initially to get names and create wrappers
+                real_tools = load_toolset_cached("tickets_toolset")
+                _toolbox_tools_cache = [
+                    LazyToolboxTool(t.__name__, "tickets_toolset", t) 
+                    for t in real_tools
+                ]
+            except Exception as e:
+                print(f"Warning: Could not connect to MCP Toolbox server: {e}")
+                _toolbox_tools_cache = []
         else:
             _toolbox_tools_cache = []
     return _toolbox_tools_cache
