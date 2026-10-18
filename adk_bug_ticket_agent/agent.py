@@ -22,6 +22,7 @@ class AgentMode(Enum):
 # For SQLite, make sure the directory for the DB file is writable by the Django process.
 # Explore using VertexAiSessionService or InMemorySessionService for production https://google.github.io/adk-docs/sessions/session/#managing-sessions-with-a-sessionservice
 
+DEFAULT_MODEL_NAME = "gemini-3.8-flash"
 AGENT_PORT = os.environ.get("AGENT_PORT", "8000")
 AGENT_URL = os.environ.get("AGENT_URL", f"http://127.0.0.1:{AGENT_PORT}")
 AGENT_MODE = os.environ.get("AGENT_MODE", f"{AgentMode.GEMINI.value}")
@@ -92,7 +93,7 @@ class ServiceManager:
     def _init_agent(self):
         """Initializes the root agent."""
         print("Initializing Root Agent...")
-        MODEL_NAME = os.getenv("MODEL_NAME") 
+        MODEL_NAME = os.getenv("MODEL_NAME") or DEFAULT_MODEL_NAME
         return Agent(
             model=MODEL_NAME,
             name="it_bug_assistant_agent",
@@ -116,7 +117,7 @@ class ServiceManager:
     def _init_gke_ai_agent(self):
         """Initializes the GKE AI agent."""
         api_base_url = os.getenv("GKE_INFERENCE_ENDPOINT")
-        MODEL_NAME = os.getenv("MODEL_NAME") 
+        MODEL_NAME = os.getenv("MODEL_NAME") or DEFAULT_MODEL_NAME
         print(f"Initializing GKE AI Agent: {api_base_url} and {MODEL_NAME}")
         root_agent = Agent(
             model=LiteLlm(

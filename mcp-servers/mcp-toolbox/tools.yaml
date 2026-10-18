@@ -19,16 +19,26 @@ tools:
   search-tickets:
     kind: postgres-sql
     source: postgresql
-    description: Search for similar tickets based on their descriptions.
+    description: Search for similar tickets based on their descriptions or titles.
     parameters:
       - name: query
         type: string
-        description: The query to perform vector search with.
+        description: The search query or keywords to match against ticket titles and descriptions.
+    # Cloud SQL / AlloyDB vector search statement (requires pgvector + google_ml_integration + embedding column):
+    # statement: |
+    #   SELECT ticket_id, title, description, assignee, priority, status, (embedding <=> embedding('text-embedding-005', $1)::vector) as distance
+    #   FROM tickets
+    #   ORDER BY distance ASC
+    #   LIMIT 3;
     statement: |
-      SELECT ticket_id, title, description, assignee, priority, status, (embedding <=> embedding('text-embedding-005', $1)::vector) as distance
+      SELECT ticket_id, title, description, assignee, priority, status,
+             ts_rank(to_tsvector('english', coalesce(title, '') || ' ' || coalesce(description, '')), websearch_to_tsquery('english', $1)) AS rank
       FROM tickets
-      ORDER BY distance ASC
-      LIMIT 3;
+      WHERE to_tsvector('english', coalesce(title, '') || ' ' || coalesce(description, '')) @@ websearch_to_tsquery('english', $1)
+         OR title ILIKE '%' || $1 || '%'
+         OR description ILIKE '%' || $1 || '%'
+      ORDER BY rank DESC, ticket_id ASC
+      LIMIT 5;
   get-ticket-by-id:
     kind: postgres-sql
     source: postgresql

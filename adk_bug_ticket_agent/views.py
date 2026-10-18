@@ -1,6 +1,8 @@
 from django.shortcuts import render
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
+import asyncio
+from contextlib import aclosing
 import json
 import time
 import os
@@ -8,6 +10,8 @@ from google.adk.runners import Runner
 from google.genai import types as genai_types  # Aliased to avoid conflict if Django has a 'types'
 from . import system_prompt
 from .agent import _service_manager
+
+AGENT_INTERACTION_TIMEOUT = float(os.environ.get("AGENT_INTERACTION_TIMEOUT", "110"))
 
 # Using an absolute path or ensuring BASE_DIR is correctly set for Django is important.
 @csrf_exempt
@@ -32,44 +36,49 @@ async def interact_with_agent(request): # Removed the initial check for session_
             if not user_query:
                 return JsonResponse({'error': 'No message provided'}, status=400)
 
-            # The client now manages the session ID. We get the session if it
-            # exists, or create a new one. This allows for a persistent
-            # conversation history within a single browser session.
-            current_session_service = _service_manager.session_service # Get the lazy-loaded instance
-            current_session = await current_session_service.get_session(
-                app_name=app_name, user_id=user_id, session_id=session_id
-            )
-
-            if not current_session:
-                print(f"Creating new session for app: {app_name}, user: {user_id}, session: {session_id} is {current_session}")
-                current_session = await current_session_service.create_session(
+            final_response_text = None
+            async with asyncio.timeout(AGENT_INTERACTION_TIMEOUT):
+                # The client now manages the session ID. We get the session if it
+                # exists, or create a new one. This allows for a persistent
+                # conversation history within a single browser session.
+                current_session_service = _service_manager.session_service # Get the lazy-loaded instance
+                current_session = await current_session_service.get_session(
                     app_name=app_name, user_id=user_id, session_id=session_id
                 )
-            else:
-                print(f"Existing session for app: {app_name}, user: {user_id}, session: {session_id}")
-            runner = Runner(
-                app_name=app_name,
-                agent=_service_manager.root_agent, # Use the lazy-loaded agent
-                session_service=current_session_service,
-                memory_service=_service_manager.memory_service, # Use the lazy-loaded instance
-            )
 
-            user_message_content = genai_types.Content(
-                role="user", parts=[genai_types.Part.from_text(text=user_query)]
-            )
-            
-            events = runner.run_async(
-                user_id=user_id,
-                session_id=session_id,
-                new_message=user_message_content,
-            )
+                if not current_session:
+                    print(f"Creating new session for app: {app_name}, user: {user_id}, session: {session_id} is {current_session}")
+                    current_session = await current_session_service.create_session(
+                        app_name=app_name, user_id=user_id, session_id=session_id
+                    )
+                else:
+                    print(f"Existing session for app: {app_name}, user: {user_id}, session: {session_id}")
+                runner = Runner(
+                    app_name=app_name,
+                    agent=_service_manager.root_agent, # Use the lazy-loaded agent
+                    session_service=current_session_service,
+                    memory_service=_service_manager.memory_service, # Use the lazy-loaded instance
+                )
 
-            final_response_text = None
-            async for event in events:
-                if event.is_final_response():
-                    if event.content and event.content.parts and event.content.parts[0].text:
-                        final_response_text = event.content.parts[0].text
-                        break
+                user_message_content = genai_types.Content(
+                    role="user", parts=[genai_types.Part.from_text(text=user_query)]
+                )
+                
+                events = runner.run_async(
+                    user_id=user_id,
+                    session_id=session_id,
+                    new_message=user_message_content,
+                )
+
+                async with aclosing(events) as agen:
+                    async for event in agen:
+                        if event.is_final_response():
+                            if event.content and event.content.parts:
+                                text_parts = [
+                                    part.text for part in event.content.parts if getattr(part, "text", None)
+                                ]
+                                if text_parts:
+                                    final_response_text = "".join(text_parts)
             
             if final_response_text is None:
                 final_response_text = "Agent did not provide a clear text response."
@@ -89,6 +98,17 @@ async def interact_with_agent(request): # Removed the initial check for session_
 
         except json.JSONDecodeError:
             return JsonResponse({'error': 'Invalid JSON in request'}, status=400)
+        except TimeoutError:
+            print(f"Agent interaction timed out after {AGENT_INTERACTION_TIMEOUT}s.")
+            return JsonResponse(
+                {
+                    'error': (
+                        f'The agent took longer than {int(AGENT_INTERACTION_TIMEOUT)} seconds '
+                        'to respond and timed out. Please try again.'
+                    )
+                },
+                status=504,
+            )
         except Exception as e:
             import traceback
             print("---------- EXCEPTION IN interact_with_agent ----------")
