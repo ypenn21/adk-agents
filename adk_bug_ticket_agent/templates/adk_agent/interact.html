@@ -7,35 +7,1113 @@
 
   <!-- Prevent dark mode flicker / FOUC -->
   <script>
+    (function() {
+      try {
+        var savedTheme = localStorage.getItem('it_assistant_theme');
+        var systemPrefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = savedTheme ? savedTheme : (systemPrefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-theme', theme);
+      } catch (e) {
+        document.documentElement.setAttribute('data-theme', 'light');
+      }
+    })();
   </script>
+
   <!-- Google Fonts: Inter -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
   <!-- jQuery 3.7.1 CDN -->
   <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+
   <!-- Marked.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+  <style>
+    /* CSS Variables for Light and Dark Themes */
+    :root[data-theme="light"] {
+      --bg-primary: #f8fafc;
+      --bg-surface: #ffffff;
+      --bg-input: #f1f5f9;
+      --border-color: #e2e8f0;
+      --border-focus: #3b82f6;
+      --text-primary: #0f172a;
+      --text-secondary: #64748b;
+      --text-muted: #94a3b8;
+      --user-bubble-bg: #2563eb;
+      --user-bubble-text: #ffffff;
+      --bot-bubble-bg: #ffffff;
+      --bot-bubble-text: #1e293b;
+      --bot-bubble-border: #e2e8f0;
+      --brand-primary: #2563eb;
+      --brand-hover: #1d4ed8;
+      --accent-green: #10b981;
+      --accent-red: #ef4444;
+      --code-bg: #0f172a;
+      --code-text: #f8fafc;
+      --table-border: #cbd5e1;
+      --table-stripe: #f8fafc;
+      --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+      --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    }
+
+    :root[data-theme="dark"] {
+      --bg-primary: #0f172a;
+      --bg-surface: #1e293b;
+      --bg-input: #334155;
+      --border-color: #334155;
+      --border-focus: #60a5fa;
+      --text-primary: #f8fafc;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --user-bubble-bg: #3b82f6;
+      --user-bubble-text: #ffffff;
+      --bot-bubble-bg: #1e293b;
+      --bot-bubble-text: #f1f5f9;
+      --bot-bubble-border: #334155;
+      --brand-primary: #3b82f6;
+      --brand-hover: #60a5fa;
+      --accent-green: #34d399;
+      --accent-red: #f87171;
+      --code-bg: #0b1120;
+      --code-text: #e2e8f0;
+      --table-border: #475569;
+      --table-stripe: #1e293b;
+      --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
+      --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.4), 0 2px 4px -2px rgb(0 0 0 / 0.3);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-primary);
+      color: var(--text-primary);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: stretch;
+      overflow: hidden;
+      transition: background-color 0.2s ease, color 0.2s ease;
+    }
+
+    /* Main Container */
+    #chat-container {
+      width: 100%;
+      max-width: 900px;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background-color: var(--bg-surface);
+      border-left: 1px solid var(--border-color);
+      border-right: 1px solid var(--border-color);
+      box-shadow: var(--shadow-md);
+      position: relative;
+    }
+
+    /* Header */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.875rem 1.25rem;
+      border-bottom: 1px solid var(--border-color);
+      background-color: var(--bg-surface);
+      flex-shrink: 0;
+      z-index: 10;
+    }
+
+    .header-brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .brand-icon {
+      width: 38px;
+      height: 38px;
+      background: linear-gradient(135deg, var(--brand-primary), #6366f1);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #ffffff;
+      flex-shrink: 0;
+    }
+
+    .brand-icon svg {
+      width: 22px;
+      height: 22px;
+    }
+
+    .brand-info h1 {
+      font-size: 1.0625rem;
+      font-weight: 700;
+      line-height: 1.2;
+      color: var(--text-primary);
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.375rem;
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: var(--text-secondary);
+      margin-top: 0.125rem;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background-color: var(--accent-green);
+      display: inline-block;
+      position: relative;
+    }
+
+    .status-dot::after {
+      content: '';
+      position: absolute;
+      top: -2px;
+      left: -2px;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background-color: var(--accent-green);
+      opacity: 0.4;
+      animation: pulse-ring 2s infinite ease-out;
+    }
+
+    @keyframes pulse-ring {
+      0% { transform: scale(0.8); opacity: 0.6; }
+      100% { transform: scale(2); opacity: 0; }
+    }
+
+    .header-controls {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .header-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.375rem;
+      background-color: var(--bg-input);
+      border: 1px solid var(--border-color);
+      color: var(--text-primary);
+      padding: 0.45rem 0.75rem;
+      border-radius: 0.5rem;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .header-btn:hover {
+      background-color: var(--border-color);
+      color: var(--text-primary);
+    }
+
+    .header-btn svg {
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+    }
+
+    /* Chat Messages Area */
+    #chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.125rem;
+      scroll-behavior: smooth;
+    }
+
+    /* Custom Scrollbar */
+    #chat-messages::-webkit-scrollbar {
+      width: 6px;
+    }
+    #chat-messages::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    #chat-messages::-webkit-scrollbar-thumb {
+      background-color: var(--border-color);
+      border-radius: 3px;
+    }
+
+    /* Welcome Hero Card */
+    #welcome-hero {
+      text-align: center;
+      margin: auto 0;
+      padding: 2.5rem 1rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      max-width: 640px;
+      align-self: center;
+    }
+
+    .welcome-icon {
+      width: 56px;
+      height: 56px;
+      background: linear-gradient(135deg, var(--brand-primary), #6366f1);
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #ffffff;
+      margin-bottom: 1rem;
+      box-shadow: 0 8px 16px -4px rgba(37, 99, 235, 0.25);
+    }
+
+    .welcome-icon svg {
+      width: 32px;
+      height: 32px;
+    }
+
+    #welcome-hero h2 {
+      font-size: 1.375rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      color: var(--text-primary);
+    }
+
+    #welcome-hero p {
+      font-size: 0.9375rem;
+      color: var(--text-secondary);
+      line-height: 1.5;
+      margin-bottom: 1.5rem;
+    }
+
+    .suggestion-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      justify-content: center;
+      width: 100%;
+    }
+
+    .suggestion-chip {
+      background-color: var(--bg-input);
+      border: 1px solid var(--border-color);
+      color: var(--text-primary);
+      padding: 0.5rem 0.875rem;
+      border-radius: 9999px;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.375rem;
+      transition: all 0.2s ease;
+      text-align: left;
+    }
+
+    .suggestion-chip:hover {
+      background-color: var(--bg-surface);
+      border-color: var(--brand-primary);
+      color: var(--brand-primary);
+      transform: translateY(-1px);
+      box-shadow: var(--shadow-sm);
+    }
+
+    /* Message Rows */
+    .message-row {
+      display: flex;
+      gap: 0.625rem;
+      width: 100%;
+      animation: fadeIn 0.2s ease-in-out;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .message-row.user-row {
+      justify-content: flex-end;
+    }
+
+    .message-row.bot-row {
+      justify-content: flex-start;
+    }
+
+    .avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    .avatar.bot-avatar {
+      background: linear-gradient(135deg, var(--brand-primary), #6366f1);
+      color: #ffffff;
+    }
+
+    .avatar svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .message-wrapper {
+      display: flex;
+      flex-direction: column;
+      max-width: 82%;
+    }
+
+    .user-row .message-wrapper {
+      align-items: flex-end;
+    }
+
+    .bot-row .message-wrapper {
+      align-items: flex-start;
+    }
+
+    .user-bubble {
+      background-color: var(--user-bubble-bg);
+      color: var(--user-bubble-text);
+      padding: 0.75rem 1rem;
+      border-radius: 1.125rem 1.125rem 0.25rem 1.125rem;
+      font-size: 0.9375rem;
+      line-height: 1.5;
+      word-break: break-word;
+      white-space: pre-wrap;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .bot-bubble {
+      background-color: var(--bot-bubble-bg);
+      color: var(--bot-bubble-text);
+      border: 1px solid var(--bot-bubble-border);
+      padding: 0.875rem 1.125rem;
+      border-radius: 1.125rem 1.125rem 1.125rem 0.25rem;
+      font-size: 0.9375rem;
+      line-height: 1.55;
+      word-break: break-word;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .message-timestamp {
+      font-size: 0.6875rem;
+      color: var(--text-muted);
+      margin-top: 0.25rem;
+      padding: 0 0.25rem;
+    }
+
+    /* Markdown Styling in Bot Bubble */
+    .bot-bubble p {
+      margin-bottom: 0.625rem;
+    }
+    .bot-bubble p:last-child {
+      margin-bottom: 0;
+    }
+
+    .bot-bubble ul, .bot-bubble ol {
+      margin: 0.5rem 0 0.625rem 1.375rem;
+    }
+
+    .bot-bubble li {
+      margin-bottom: 0.25rem;
+    }
+
+    .bot-bubble h1, .bot-bubble h2, .bot-bubble h3, .bot-bubble h4 {
+      font-weight: 600;
+      margin: 0.875rem 0 0.375rem 0;
+      color: var(--text-primary);
+    }
+    .bot-bubble h1:first-child, .bot-bubble h2:first-child, .bot-bubble h3:first-child {
+      margin-top: 0;
+    }
+
+    .bot-bubble table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 0.75rem 0;
+      font-size: 0.875rem;
+    }
+
+    .bot-bubble th, .bot-bubble td {
+      border: 1px solid var(--table-border);
+      padding: 0.5rem 0.75rem;
+      text-align: left;
+    }
+
+    .bot-bubble th {
+      background-color: var(--table-stripe);
+      font-weight: 600;
+    }
+
+    .bot-bubble tr:nth-child(even) {
+      background-color: var(--table-stripe);
+    }
+
+    .bot-bubble pre {
+      background-color: var(--code-bg);
+      color: var(--code-text);
+      padding: 0.875rem 1rem;
+      border-radius: 0.5rem;
+      overflow-x: auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.84375rem;
+      line-height: 1.45;
+      margin: 0.625rem 0;
+    }
+
+    .bot-bubble code {
+      background-color: var(--bg-input);
+      color: var(--brand-primary);
+      padding: 0.15rem 0.375rem;
+      border-radius: 0.25rem;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.875em;
+    }
+
+    .bot-bubble pre code {
+      background-color: transparent;
+      color: inherit;
+      padding: 0;
+      font-size: inherit;
+    }
+
+    .bot-bubble blockquote {
+      border-left: 3px solid var(--brand-primary);
+      margin: 0.625rem 0;
+      padding-left: 0.75rem;
+      color: var(--text-secondary);
+      font-style: italic;
+    }
+
+    /* Error Bubble */
+    .error-bubble {
+      background-color: rgba(239, 68, 68, 0.1);
+      border: 1px solid var(--accent-red);
+      color: var(--accent-red);
+      padding: 0.75rem 1rem;
+      border-radius: 0.75rem;
+      font-size: 0.875rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .retry-btn {
+      align-self: flex-start;
+      background-color: var(--accent-red);
+      color: #ffffff;
+      border: none;
+      padding: 0.25rem 0.625rem;
+      border-radius: 0.25rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+
+    .retry-btn:hover {
+      opacity: 0.9;
+    }
+
+    /* Typing Indicator */
+    .typing-indicator {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 0.75rem 1rem;
+      background-color: var(--bot-bubble-bg);
+      border: 1px solid var(--bot-bubble-border);
+      border-radius: 1.125rem 1.125rem 1.125rem 0.25rem;
+      width: fit-content;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .typing-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background-color: var(--text-muted);
+      animation: typing-bounce 1.4s infinite ease-in-out both;
+    }
+
+    .typing-dot:nth-child(1) { animation-delay: -0.32s; }
+    .typing-dot:nth-child(2) { animation-delay: -0.16s; }
+
+    @keyframes typing-bounce {
+      0%, 80%, 100% {
+        transform: scale(0);
+        opacity: 0.4;
+      }
+      40% {
+        transform: scale(1);
+        opacity: 1;
+      }
+    }
+
+    /* Input Dock */
+    #input-dock {
+      padding: 0.875rem 1.25rem;
+      border-top: 1px solid var(--border-color);
+      background-color: var(--bg-surface);
+      flex-shrink: 0;
+    }
+
+    #chat-form {
+      display: flex;
+      align-items: flex-end;
+      gap: 0.625rem;
+      background-color: var(--bg-input);
+      border: 1px solid var(--border-color);
+      border-radius: 1.5rem;
+      padding: 0.5rem 0.75rem 0.5rem 1rem;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    #chat-form:focus-within {
+      border-color: var(--border-focus);
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+    }
+
+    #message-input {
+      flex: 1;
+      border: none;
+      background: transparent;
+      outline: none;
+      resize: none;
+      font-family: inherit;
+      font-size: 0.9375rem;
+      line-height: 1.45;
+      color: var(--text-primary);
+      max-height: 140px;
+      min-height: 24px;
+      padding: 0.25rem 0;
+    }
+
+    #message-input::placeholder {
+      color: var(--text-muted);
+    }
+
+    #send-button {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background-color: var(--brand-primary);
+      color: #ffffff;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: background-color 0.2s, transform 0.1s, opacity 0.2s;
+    }
+
+    #send-button:hover:not(:disabled) {
+      background-color: var(--brand-hover);
+      transform: scale(1.05);
+    }
+
+    #send-button:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    #send-button svg {
+      width: 18px;
+      height: 18px;
+      margin-left: 2px;
+    }
+
+    .input-hint {
+      font-size: 0.71875rem;
+      color: var(--text-muted);
+      text-align: center;
+      margin-top: 0.375rem;
+    }
+
+    @media (max-width: 640px) {
+      #chat-container {
+        border-left: none;
+        border-right: none;
+      }
+      header {
+        padding: 0.75rem 1rem;
+      }
+      #chat-messages {
+        padding: 1rem;
+      }
+      #input-dock {
+        padding: 0.625rem 1rem;
+      }
+      .message-wrapper {
+        max-width: 90%;
+      }
+    }
+  </style>
 </head>
 <body>
 
-  <!-- App Header -->
-  <header>
-    <div class="header-brand">
-      <div class="brand-icon">
-        <!-- Robot Icon -->
-        <svg fill="currentColor" viewBox="0 0 24 24">
-          <path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h2a6 6 0 0 1 6 6v1h1a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2h-1v1a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4v-1H3a2 2 0 0 1-2-2v-2a2 2 0 0 1 2-2h1v-1a6 6 0 0 1 6-6h2V5.73A2 2 0 0 1 12 2zm-3 9a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-7 8a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-1H8v1z"/>
-        </svg>
+  <!-- Chat Application Outer Container -->
+  <main id="chat-container">
+    <!-- App Header -->
+    <header>
+      <div class="header-brand">
+        <div class="brand-icon">
+          <!-- Robot Icon SVG -->
+          <svg fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h2a6 6 0 0 1 6 6v1h1a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2h-1v1a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4v-1H3a2 2 0 0 1-2-2v-2a2 2 0 0 1 2-2h1v-1a6 6 0 0 1 6-6h2V5.73A2 2 0 0 1 12 2zm-3 9a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-7 8a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-1H8v1z"/>
+          </svg>
+        </div>
+        <div class="brand-info">
+          <h1>IT Bug Assistant</h1>
+          <div class="status-pill">
+            <span class="status-dot"></span>
+            <span>Online</span>
+          </div>
+        </div>
       </div>
-      <div class="brand-text">
-        <h1>IT Bug Assistant</h1>
-        <div class="status-pill">
-          <span class="status-dot"></span>
-          <span>Online</span>
+
+      <div class="header-controls">
+        <!-- New Chat / Clear Chat Buttons -->
+        <button id="new-chat-button" class="header-btn" title="Start new session">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"></path>
+          </svg>
+          <span>New Chat</span>
+        </button>
+        <button id="clear-chat-button" class="header-btn" title="Clear chat messages">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+          </svg>
+          <span>Clear</span>
+        </button>
+        <!-- Dark / Light Mode Toggle Button -->
+        <button id="theme-toggle" class="header-btn" title="Toggle dark/light theme" aria-label="Toggle theme">
+          <span id="theme-toggle-icon">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
+            </svg>
+          </span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Scrollable Message Stream -->
+    <div id="chat-messages" role="log" aria-live="polite">
+      <!-- Welcome Hero (shown when chat is empty) -->
+      <div id="welcome-hero">
+        <div class="welcome-icon">
+          <svg fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h2a6 6 0 0 1 6 6v1h1a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2h-1v1a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4v-1H3a2 2 0 0 1-2-2v-2a2 2 0 0 1 2-2h1v-1a6 6 0 0 1 6-6h2V5.73A2 2 0 0 1 12 2zm-3 9a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-7 8a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-1H8v1z"/>
+          </svg>
+        </div>
+        <h2>Welcome to IT Bug Assistant</h2>
+        <p>I can help triage software bugs, look up Jira tickets in PostgreSQL, check system errors, and search documentation. Select a suggestion below or type your question.</p>
+        <div class="suggestion-chips">
+          <button class="suggestion-chip" data-prompt="List all open bug tickets with high priority">
+            <span>🔥 Open high-priority bugs</span>
+          </button>
+          <button class="suggestion-chip" data-prompt="Show details and resolution notes for ticket BUG-101">
+            <span>🔍 Details for BUG-101</span>
+          </button>
+          <button class="suggestion-chip" data-prompt="Search tickets related to database connection timeout">
+            <span>⚡ DB connection timeouts</span>
+          </button>
+          <button class="suggestion-chip" data-prompt="Summarize tickets assigned to the backend team">
+            <span>👥 Backend team tickets</span>
+          </button>
         </div>
       </div>
     </div>
 
+    <!-- Input Dock -->
+    <footer id="input-dock">
+      <form id="chat-form" onsubmit="return false;">
+        <textarea
+          id="message-input"
+          placeholder="Type a message or bug query..."
+          rows="1"
+          aria-label="Chat input message"
+        ></textarea>
+        <button id="send-button" type="button" title="Send message" aria-label="Send message">
+          <svg fill="currentColor" viewBox="0 0 24 24">
+            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path>
+          </svg>
+        </button>
+      </form>
+      <div class="input-hint">Press <strong>Enter</strong> to send, <strong>Shift + Enter</strong> for a new line</div>
+    </footer>
+  </main>
+
+  <!-- Client-side JavaScript Controller -->
+  <script>
+    (function($) {
+      'use strict';
+
+      // Configure Marked.js options for markdown parsing
+      if (typeof marked !== 'undefined') {
+        marked.setOptions({
+          gfm: true,
+          breaks: true
+        });
+      }
+
+      // 1. Theme Controller
+      function updateThemeIcon(theme) {
+        var sunSvg = '<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 9H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>';
+        var moonSvg = '<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>';
+        $('#theme-toggle-icon').html(theme === 'dark' ? sunSvg : moonSvg);
+      }
+
+      function initTheme() {
+        var currentTheme = $('html').attr('data-theme') || 'light';
+        updateThemeIcon(currentTheme);
+      }
+
+      function toggleTheme() {
+        var currentTheme = $('html').attr('data-theme') || 'light';
+        var nextTheme = currentTheme === 'dark' ? 'light' : 'dark';
+        $('html').attr('data-theme', nextTheme);
+        try {
+          localStorage.setItem('it_assistant_theme', nextTheme);
+        } catch (e) {
+          console.warn('Could not save theme to localStorage:', e);
+        }
+        updateThemeIcon(nextTheme);
+      }
+
+      // 2. Session and User Management
+      function generateId(prefix) {
+        var rand = Math.random().toString(36).substring(2, 10);
+        return prefix + '_' + Date.now().toString(36) + '_' + rand;
+      }
+
+      function getOrCreateUserId() {
+        var uid = '';
+        try {
+          uid = sessionStorage.getItem('it_assistant_userId');
+          if (!uid) {
+            uid = generateId('user');
+            sessionStorage.setItem('it_assistant_userId', uid);
+          }
+        } catch (e) {
+          uid = generateId('user');
+        }
+        return uid;
+      }
+
+      function getOrCreateSessionId() {
+        var sid = '';
+        try {
+          sid = sessionStorage.getItem('it_assistant_sessionId');
+          if (!sid) {
+            sid = generateId('session');
+            sessionStorage.setItem('it_assistant_sessionId', sid);
+          }
+        } catch (e) {
+          sid = generateId('session');
+        }
+        return sid;
+      }
+
+      function resetSession() {
+        var newSid = generateId('session');
+        try {
+          sessionStorage.setItem('it_assistant_sessionId', newSid);
+        } catch (e) {
+          console.warn('Could not save new sessionId to sessionStorage:', e);
+        }
+        // Reset transcript to initial welcome screen
+        renderWelcomeScreen();
+      }
+
+      function formatTime(date) {
+        var d = date || new Date();
+        var hours = d.getHours().toString().padStart(2, '0');
+        var minutes = d.getMinutes().toString().padStart(2, '0');
+        return hours + ':' + minutes;
+      }
+
+      function scrollToBottom() {
+        var messagesDiv = document.getElementById('chat-messages');
+        if (messagesDiv) {
+          messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+      }
+
+      function escapeHtml(text) {
+        var div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+      }
+
+      function renderWelcomeScreen() {
+        var welcomeHtml = [
+          '<div id="welcome-hero">',
+          '  <div class="welcome-icon">',
+          '    <svg fill="currentColor" viewBox="0 0 24 24"><path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h2a6 6 0 0 1 6 6v1h1a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2h-1v1a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4v-1H3a2 2 0 0 1-2-2v-2a2 2 0 0 1 2-2h1v-1a6 6 0 0 1 6-6h2V5.73A2 2 0 0 1 12 2zm-3 9a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-7 8a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-1H8v1z"/></svg>',
+          '  </div>',
+          '  <h2>Welcome to IT Bug Assistant</h2>',
+          '  <p>I can help triage software bugs, look up Jira tickets in PostgreSQL, check system errors, and search documentation. Select a suggestion below or type your question.</p>',
+          '  <div class="suggestion-chips">',
+          '    <button class="suggestion-chip" data-prompt="List all open bug tickets with high priority">',
+          '      <span>🔥 Open high-priority bugs</span>',
+          '    </button>',
+          '    <button class="suggestion-chip" data-prompt="Show details and resolution notes for ticket BUG-101">',
+          '      <span>🔍 Details for BUG-101</span>',
+          '    </button>',
+          '    <button class="suggestion-chip" data-prompt="Search tickets related to database connection timeout">',
+          '      <span>⚡ DB connection timeouts</span>',
+          '    </button>',
+          '    <button class="suggestion-chip" data-prompt="Summarize tickets assigned to the backend team">',
+          '      <span>👥 Backend team tickets</span>',
+          '    </button>',
+          '  </div>',
+          '</div>'
+        ].join('\n');
+
+        $('#chat-messages').html(welcomeHtml);
+      }
+
+      // 3. Message UI Append Operations
+      function appendUserMessage(text) {
+        $('#welcome-hero').remove();
+
+        var timeStr = formatTime();
+        var userHtml = [
+          '<div class="message-row user-row">',
+          '  <div class="message-wrapper">',
+          '    <div class="user-bubble">' + escapeHtml(text) + '</div>',
+          '    <span class="message-timestamp">' + timeStr + '</span>',
+          '  </div>',
+          '</div>'
+        ].join('\n');
+
+        $('#chat-messages').append(userHtml);
+        scrollToBottom();
+      }
+
+      function appendBotMessage(markdownText) {
+        $('#welcome-hero').remove();
+
+        var parsedHtml = '';
+        if (typeof marked !== 'undefined' && typeof marked.parse === 'function') {
+          parsedHtml = marked.parse(markdownText);
+        } else {
+          parsedHtml = '<p>' + escapeHtml(markdownText) + '</p>';
+        }
+
+        var timeStr = formatTime();
+        var botHtml = [
+          '<div class="message-row bot-row">',
+          '  <div class="avatar bot-avatar">',
+          '    <svg fill="currentColor" viewBox="0 0 24 24"><path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h2a6 6 0 0 1 6 6v1h1a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2h-1v1a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4v-1H3a2 2 0 0 1-2-2v-2a2 2 0 0 1 2-2h1v-1a6 6 0 0 1 6-6h2V5.73A2 2 0 0 1 12 2zm-3 9a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-7 8a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-1H8v1z"/></svg>',
+          '  </div>',
+          '  <div class="message-wrapper">',
+          '    <div class="bot-bubble">' + parsedHtml + '</div>',
+          '    <span class="message-timestamp">' + timeStr + '</span>',
+          '  </div>',
+          '</div>'
+        ].join('\n');
+
+        $('#chat-messages').append(botHtml);
+        scrollToBottom();
+      }
+
+      function showTypingIndicator() {
+        removeTypingIndicator();
+        var indicatorHtml = [
+          '<div id="typing-indicator" class="message-row bot-row">',
+          '  <div class="avatar bot-avatar">',
+          '    <svg fill="currentColor" viewBox="0 0 24 24"><path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h2a6 6 0 0 1 6 6v1h1a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2h-1v1a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4v-1H3a2 2 0 0 1-2-2v-2a2 2 0 0 1 2-2h1v-1a6 6 0 0 1 6-6h2V5.73A2 2 0 0 1 12 2zm-3 9a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-7 8a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-1H8v1z"/></svg>',
+          '  </div>',
+          '  <div class="typing-indicator">',
+          '    <div class="typing-dot"></div>',
+          '    <div class="typing-dot"></div>',
+          '    <div class="typing-dot"></div>',
+          '  </div>',
+          '</div>'
+        ].join('\n');
+
+        $('#chat-messages').append(indicatorHtml);
+        scrollToBottom();
+      }
+
+      function removeTypingIndicator() {
+        $('#typing-indicator').remove();
+      }
+
+      function appendErrorMessage(errorText, retryText) {
+        $('#welcome-hero').remove();
+
+        var timeStr = formatTime();
+        var retryBtnHtml = retryText ? '<button class="retry-btn" data-retry="' + escapeHtml(retryText) + '">Retry</button>' : '';
+        var errorHtml = [
+          '<div class="message-row bot-row">',
+          '  <div class="avatar bot-avatar">',
+          '    <svg fill="currentColor" viewBox="0 0 24 24"><path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h2a6 6 0 0 1 6 6v1h1a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2h-1v1a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4v-1H3a2 2 0 0 1-2-2v-2a2 2 0 0 1 2-2h1v-1a6 6 0 0 1 6-6h2V5.73A2 2 0 0 1 12 2zm-3 9a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-7 8a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-1H8v1z"/></svg>',
+          '  </div>',
+          '  <div class="message-wrapper">',
+          '    <div class="error-bubble">',
+          '      <span>⚠️ ' + escapeHtml(errorText) + '</span>',
+          '      ' + retryBtnHtml,
+          '    </div>',
+          '    <span class="message-timestamp">' + timeStr + '</span>',
+          '  </div>',
+          '</div>'
+        ].join('\n');
+
+        $('#chat-messages').append(errorHtml);
+        scrollToBottom();
+      }
+
+      // 4. Send Message Controller
+      function sendMessage(customText) {
+        var text = customText !== undefined ? customText : $('#message-input').val();
+        text = $.trim(text);
+
+        if (!text) {
+          return;
+        }
+
+        var userId = getOrCreateUserId();
+        var sessionId = getOrCreateSessionId();
+
+        // Append user bubble to DOM
+        appendUserMessage(text);
+
+        // Reset input UI
+        $('#message-input').val('');
+        $('#message-input').css('height', 'auto');
+        $('#send-button').prop('disabled', true);
+        $('#message-input').prop('disabled', true);
+
+        // Show typing indicator
+        showTypingIndicator();
+
+        // Construct OpenAPI 3.0 compliant JSON payload
+        var payload = {
+          appName: 'AgentBugAssistant',
+          userId: userId,
+          sessionId: sessionId,
+          newMessage: {
+            role: 'user',
+            parts: [
+              { text: text }
+            ]
+          }
+        };
+
+        // Execute AJAX POST call with 120s timeout
+        $.ajax({
+          url: '/agent/interact/',
+          type: 'POST',
+          contentType: 'application/json',
+          data: JSON.stringify(payload),
+          timeout: 120000,
+          success: function(response) {
+            removeTypingIndicator();
+            var responseText = '';
+            if (response && response.content && response.content.parts && response.content.parts.length > 0) {
+              responseText = response.content.parts[0].text;
+            } else if (response && response.error) {
+              responseText = 'Error: ' + response.error;
+            } else {
+              responseText = 'Agent did not provide a clear text response.';
+            }
+            appendBotMessage(responseText);
+          },
+          error: function(xhr, status, error) {
+            removeTypingIndicator();
+            var errorMessage = 'Failed to connect to agent. Please try again.';
+            if (status === 'timeout') {
+              errorMessage = 'The agent took longer than 120 seconds to respond and timed out. Please try again.';
+            } else if (xhr.responseJSON && xhr.responseJSON.error) {
+              errorMessage = xhr.responseJSON.error;
+            } else if (error) {
+              errorMessage = 'Request error: ' + error;
+            }
+            appendErrorMessage(errorMessage, text);
+          },
+          complete: function() {
+            $('#send-button').prop('disabled', false);
+            $('#message-input').prop('disabled', false).focus();
+            scrollToBottom();
+          }
+        });
+      }
+
+      // 5. Event Bindings
+      $(document).ready(function() {
+        initTheme();
+
+        // Theme toggle button
+        $('#theme-toggle').on('click', function(e) {
+          e.preventDefault();
+          toggleTheme();
+        });
+
+        // New Chat & Clear Chat buttons
+        $('#new-chat-button, #clear-chat-button').on('click', function(e) {
+          e.preventDefault();
+          resetSession();
+        });
+
+        // Quick Suggestion Chips click
+        $(document).on('click', '.suggestion-chip', function() {
+          var promptText = $(this).attr('data-prompt');
+          if (promptText) {
+            sendMessage(promptText);
+          }
+        });
+
+        // Retry button click
+        $(document).on('click', '.retry-btn', function() {
+          var retryText = $(this).attr('data-retry');
+          if (retryText) {
+            $(this).closest('.message-row').remove();
+            sendMessage(retryText);
+          }
+        });
+
+        // Send button click
+        $('#send-button').on('click', function(e) {
+          e.preventDefault();
+          sendMessage();
+        });
+
+        // Auto-resizing textarea
+        $('#message-input').on('input', function() {
+          this.style.height = 'auto';
+          this.style.height = Math.min(this.scrollHeight, 140) + 'px';
+        });
+
+        // Keyboard handler: Enter sends, Shift+Enter new line
+        $('#message-input').on('keydown', function(e) {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
+          }
+        });
+
+        // Focus input on initial page load
+        $('#message-input').focus();
+      });
+
+    })(jQuery);
+  </script>
 </body>
 </html>
