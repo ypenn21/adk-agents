@@ -39,6 +39,12 @@ tools:
          OR description ILIKE '%' || $1 || '%'
       ORDER BY rank DESC, ticket_id ASC
       LIMIT 5;
+  get-all-tickets:
+    kind: postgres-sql
+    source: postgresql
+    description: Retrieve all tickets in the system ordered by ticket_id.
+    parameters: []
+    statement: SELECT * FROM tickets ORDER BY ticket_id ASC;
   get-ticket-by-id:
     kind: postgres-sql
     source: postgresql
@@ -47,7 +53,9 @@ tools:
       - name: ticket_id
         type: string
         description: The unique ID of the ticket.
-    statement: SELECT * FROM tickets WHERE ticket_id = $1;
+    statement: |
+      SELECT * FROM tickets
+      WHERE ticket_id::text = regexp_replace(trim($1::text), '^(?:tck-|ticket[-_\s]*id\s*[:#]?\s*|ticket\s*#?\s*|id\s*[:#]?\s*|#)', '', 'i');
   get-tickets-by-assignee:
     kind: postgres-sql
     source: postgresql
@@ -68,7 +76,10 @@ tools:
       - name: ticket_id
         type: string
         description: The ID of the ticket.
-    statement: UPDATE tickets SET priority = $1 WHERE ticket_id = $2;
+    statement: |
+      UPDATE tickets
+      SET priority = $1, updated_time = CURRENT_TIMESTAMP
+      WHERE ticket_id::text = regexp_replace(trim($2::text), '^(?:tck-|ticket[-_\s]*id\s*[:#]?\s*|ticket\s*#?\s*|id\s*[:#]?\s*|#)', '', 'i');
   update-ticket-status:
     kind: postgres-sql
     source: postgresql
@@ -80,7 +91,10 @@ tools:
       - name: ticket_id
         type: string
         description: The ID of the ticket.
-    statement: UPDATE tickets SET status = $1 WHERE ticket_id = $2;
+    statement: |
+      UPDATE tickets
+      SET status = $1, updated_time = CURRENT_TIMESTAMP
+      WHERE ticket_id::text = regexp_replace(trim($2::text), '^(?:tck-|ticket[-_\s]*id\s*[:#]?\s*|ticket\s*#?\s*|id\s*[:#]?\s*|#)', '', 'i');
   get-tickets-by-status:
     kind: postgres-sql
     source: postgresql
@@ -89,7 +103,7 @@ tools:
       - name: status
         type: string
         description: The status of the tickets to retrieve (e.g., 'Open', 'In Progress', 'Closed', 'Resolved').
-    statement: SELECT * FROM tickets WHERE status ILIKE '%' || $1 || '%';
+    statement: SELECT * FROM tickets WHERE trim(status) ILIKE '%' || trim($1) || '%' ORDER BY ticket_id ASC;
   get-tickets-by-priority:
     kind: postgres-sql
     source: postgresql
@@ -98,7 +112,7 @@ tools:
       - name: priority
         type: string
         description: The priority of the tickets to retrieve (e.g., 'P0 - Critical', 'P1 - High', 'P2 - Medium', 'P3 - Low').
-    statement: SELECT * FROM tickets WHERE priority ILIKE '%' || $1 || '%';
+    statement: SELECT * FROM tickets WHERE trim(priority) ILIKE '%' || trim($1) || '%' ORDER BY ticket_id ASC;
   create-new-ticket:
     kind: postgres-sql
     source: postgresql
@@ -139,6 +153,7 @@ tools:
 toolsets:
   tickets_toolset:
     - search-tickets
+    - get-all-tickets
     - get-ticket-by-id
     - get-tickets-by-assignee
     - get-tickets-by-status

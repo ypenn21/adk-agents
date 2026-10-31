@@ -7,7 +7,13 @@ from typing import Any, Callable
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
-from adk_bug_ticket_agent.tools.tools import get_current_date, invoke_toolbox_tool
+from adk_bug_ticket_agent.tools.tools import (
+    get_current_date,
+    get_toolbox_tool_by_name,
+    invoke_toolbox_tool,
+)
+
+get_tool_by_name = get_toolbox_tool_by_name
 
 try:
     from adk_bug_ticket_agent.schemas import (
@@ -22,6 +28,7 @@ try:
         TicketUpdatePayload,
         normalize_priority,
         normalize_status,
+        normalize_ticket_id,
     )
 except ImportError:
     # Graceful fallback in case schemas module is being loaded/modified concurrently
@@ -36,6 +43,30 @@ except ImportError:
     DateFilterField = None
     normalize_priority = None
     normalize_status = None
+    normalize_ticket_id = None
+
+if normalize_ticket_id is None:
+    import re
+
+    def normalize_ticket_id(value: Any) -> Any:
+        if value is None:
+            return None
+        raw = str(value).strip()
+        if not raw:
+            return None
+        tck_match = re.search(r"\b(TCK-\d+)\b", raw, re.IGNORECASE)
+        if tck_match:
+            return tck_match.group(1).upper()
+        prefixed_match = re.search(
+            r"(?:ticket[-_\s]*id\s*[:#]?\s*|ticket\s*#?\s*|id\s*[:#]?\s*|#)(\d+)\b",
+            raw,
+            re.IGNORECASE,
+        )
+        if prefixed_match:
+            return prefixed_match.group(1)
+        if re.fullmatch(r"\d+", raw):
+            return raw
+        return raw
 
 logger = logging.getLogger(__name__)
 
@@ -273,8 +304,15 @@ def enrich_session_context(node_input: Any = None, **kwargs: Any) -> WorkflowEve
     state_delta = {
         "current_date": current_date_str,
         "user_query": user_text,
+        "intent_classification": None,
+        "intent_route": None,
+        "create_payload": None,
+        "update_payload": None,
+        "search_query": None,
         "db_operation_result": None,
+        "web_search_query": None,
         "web_search_result": None,
+        "clarification_response": None,
     }
     return WorkflowEvent(data=user_text, state=state_delta)
 
@@ -454,7 +492,18 @@ def execute_create_with_dedup(
         "similar_tickets": existing_duplicates if not skip_duplicate_check else [],
         "payload": payload_dict,
     }
-    return WorkflowEvent(data=db_res, state={"db_operation_result": db_res})
+
+    created_tid = None
+    if isinstance(insert_res, list) and insert_res and isinstance(insert_res[0], dict):
+        created_tid = insert_res[0].get("ticket_id") or insert_res[0].get("id")
+    elif isinstance(insert_res, dict):
+        created_tid = insert_res.get("ticket_id") or insert_res.get("id")
+
+    state_out: dict[str, Any] = {"db_operation_result": db_res}
+    if created_tid is not None:
+        state_out["last_ticket_id"] = str(created_tid)
+
+    return WorkflowEvent(data=db_res, state=state_out)
 
 
 # Aliases for checklist and testing compatibility
@@ -507,6 +556,11 @@ def execute_ticket_update(
         new_status = None
         new_priority = None
 
+    if normalize_ticket_id and ticket_id is not None:
+        norm_tid = normalize_ticket_id(ticket_id)
+        if norm_tid:
+            ticket_id = norm_tid
+
     if not ticket_id or (new_status is None and new_priority is None):
         err_res = {
             "error": "Missing ticket_id or no fields (status/priority) provided for update.",
@@ -533,7 +587,13 @@ def execute_ticket_update(
         "updated_fields": updated_fields,
         "tickets": updated_record,
     }
-    return WorkflowEvent(data=db_res, state={"db_operation_result": db_res})
+    return WorkflowEvent(
+        data=db_res,
+        state={
+            "db_operation_result": db_res,
+            "last_ticket_id": str(ticket_id),
+        },
+    )
 
 
 @node
@@ -582,6 +642,7 @@ def execute_ticket_query(
         date_field = query_obj.date_field
         search_text = query_obj.search_text
         allow_web_fallback = bool(query_obj.allow_web_fallback)
+        research_solutions = bool(getattr(query_obj, "research_solutions", False))
     elif isinstance(query_source, dict):
         mode = query_source.get("query_mode", "semantic_search")
         ticket_id = query_source.get("ticket_id")
@@ -595,6 +656,7 @@ def execute_ticket_query(
         date_field = query_source.get("date_field", "creation_time")
         search_text = query_source.get("search_text")
         allow_web_fallback = bool(query_source.get("allow_web_fallback", False))
+        research_solutions = bool(query_source.get("research_solutions", False))
     else:
         mode = "semantic_search"
         ticket_id = None
@@ -606,10 +668,31 @@ def execute_ticket_query(
         date_field = "creation_time"
         search_text = str(query_source or "")
         allow_web_fallback = False
+        research_solutions = False
+
+    if normalize_ticket_id and ticket_id is not None:
+        norm_tid = normalize_ticket_id(ticket_id)
+        if norm_tid:
+            ticket_id = norm_tid
 
     mode_val = mode.value if hasattr(mode, "value") else str(mode).lower()
 
-    if mode_val in ("by_id", "by-id"):
+    if mode_val in ("all", "all_tickets", "all-tickets"):
+        raw_rows = None
+        if get_tool_by_name is not None:
+            try:
+                if get_tool_by_name("get-all-tickets") is not None:
+                    raw_rows = invoke_toolbox_tool("get-all-tickets")
+            except Exception:
+                raw_rows = None
+        else:
+            raw_rows = invoke_toolbox_tool("get-all-tickets")
+
+        # If 'get-all-tickets' is not loaded in a pre-existing MCP Toolbox process or returned an error dict,
+        # fall back to 'get-tickets-by-status' with status="" (which runs ILIKE '%%' ORDER BY ticket_id ASC).
+        if raw_rows is None or (isinstance(raw_rows, dict) and "error" in raw_rows):
+            raw_rows = invoke_toolbox_tool("get-tickets-by-status", status="")
+    elif mode_val in ("by_id", "by-id"):
         raw_rows = invoke_toolbox_tool("get-ticket-by-id", ticket_id=str(ticket_id or search_text or ""))
     elif mode_val in ("by_assignee", "by-assignee"):
         raw_rows = invoke_toolbox_tool("get-tickets-by-assignee", assignee=str(assignee or search_text or ""))
@@ -645,29 +728,83 @@ def execute_ticket_query(
     else:
         rows_list = []
 
-    is_empty = len(rows_list) == 0
+    # Secondary in-memory filtering when multiple filter criteria are specified
+    if priority is not None and mode_val in ("by_status", "by-status", "by_date_range", "by-date-range"):
+        p_val = priority.value if hasattr(priority, "value") else str(priority)
+        rows_list = [
+            r for r in rows_list
+            if not (isinstance(r, dict) and "priority" in r)
+            or (str(r.get("priority", "")).lower() == p_val.lower() or p_val.split(" - ")[0].lower() in str(r.get("priority", "")).lower())
+        ]
 
-    if is_empty and allow_web_fallback:
-        db_res = {
-            "operation": "search",
-            "query_mode": mode_val,
-            "tickets": [],
-        }
-        return WorkflowEvent(
-            data=search_text or "",
-            route="fallback_web_search",
-            state={"db_operation_result": db_res},
-        )
+    if status is not None and mode_val in ("by_priority", "by-priority", "by_date_range", "by-date-range"):
+        s_val = status.value if hasattr(status, "value") else str(status)
+        rows_list = [
+            r for r in rows_list
+            if not (isinstance(r, dict) and "status" in r)
+            or (str(r.get("status", "")).lower() == s_val.lower())
+        ]
+
+    # Determine last_ticket_id
+    last_tid: str | None = None
+    if mode_val in ("by_id", "by-id") and ticket_id:
+        last_tid = str(ticket_id)
+    elif len(rows_list) == 1 and isinstance(rows_list[0], dict):
+        last_tid = str(rows_list[0].get("ticket_id") or rows_list[0].get("id") or "") or None
+
+    is_empty = len(rows_list) == 0
 
     db_res = {
         "operation": "search",
         "query_mode": mode_val,
         "tickets": rows_list,
+        "status": status.value if hasattr(status, "value") else status,
+        "priority": priority.value if hasattr(priority, "value") else priority,
+        "ticket_id": str(ticket_id) if ticket_id is not None else None,
+        "research_solutions": research_solutions,
     }
+
+    if research_solutions:
+        if rows_list and isinstance(rows_list[0], dict):
+            t0 = rows_list[0]
+            t_id = t0.get("ticket_id") or t0.get("id") or ticket_id or ""
+            t_title = t0.get("title", "")
+            t_desc = t0.get("description", "")
+            web_search_query = f"Solutions, fixes, and troubleshooting steps for software bug (Ticket {t_id}): {t_title}. {t_desc}".strip()
+        else:
+            web_search_query = f"Solutions, fixes, and troubleshooting steps for software bug: {search_text or ticket_id or ''}".strip()
+
+        state_out = {
+            "db_operation_result": db_res,
+            "web_search_query": web_search_query,
+        }
+        if last_tid:
+            state_out["last_ticket_id"] = last_tid
+
+        return WorkflowEvent(
+            data=web_search_query,
+            route="research_solutions",
+            state=state_out,
+        )
+
+    if is_empty and allow_web_fallback:
+        state_out = {"db_operation_result": db_res}
+        if last_tid:
+            state_out["last_ticket_id"] = last_tid
+        return WorkflowEvent(
+            data=search_text or "",
+            route="fallback_web_search",
+            state=state_out,
+        )
+
+    state_out = {"db_operation_result": db_res}
+    if last_tid:
+        state_out["last_ticket_id"] = last_tid
+
     return WorkflowEvent(
         data=rows_list,
         route="has_results",
-        state={"db_operation_result": db_res},
+        state=state_out,
     )
 
 
@@ -753,7 +890,13 @@ def format_final_response(
                 tickets = db_res.get("tickets", [])
                 t_list = tickets if isinstance(tickets, list) else [tickets] if isinstance(tickets, dict) else []
                 if not t_list:
-                    parts.append("No bug tickets were found matching your search criteria.")
+                    query_mode_val = db_res.get("query_mode", "")
+                    if query_mode_val in ("by_status", "by-status") and db_res.get("status"):
+                        parts.append(f"No bug tickets were found with status `{db_res['status']}` matching your search criteria.")
+                    elif query_mode_val in ("by_id", "by-id") and db_res.get("ticket_id"):
+                        parts.append(f"No bug ticket was found with ID `{db_res['ticket_id']}` matching your search criteria.")
+                    else:
+                        parts.append("No bug tickets were found matching your search criteria.")
                 else:
                     parts.append(f"Found {len(t_list)} bug ticket(s):\n")
                     parts.append(_format_tickets_table(t_list))
@@ -770,7 +913,7 @@ def format_final_response(
             else str(web_res)
         )
         if web_text.strip():
-            parts.append(f"\n### External Research & Advisories:\n{web_text.strip()}")
+            parts.append(f"\n### 🌐 Suggested Solutions & Web Research (External Research & Advisories):\n{web_text.strip()}")
 
     if not parts:
         parts.append("Request processed successfully.")

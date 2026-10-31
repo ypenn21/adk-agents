@@ -1,6 +1,47 @@
+import re
 from enum import Enum
 from typing import Any, Optional
 from pydantic import BaseModel, Field, field_validator, model_validator
+
+
+def normalize_ticket_id(value: Any) -> Optional[str]:
+    """
+    Deterministically normalizes natural-language ticket ID strings.
+    Examples:
+      - 'ticket-id 10' -> '10'
+      - 'ticket #10'   -> '10'
+      - 'Ticket 10'    -> '10'
+      - 'ID: 10'       -> '10'
+      - '#10'          -> '10'
+      - '10'           -> '10'
+      - 'TCK-123'      -> 'TCK-123'
+      - 'tck-10'       -> 'TCK-10'
+    """
+    if value is None:
+        return None
+    raw = str(value).strip()
+    if not raw:
+        return None
+
+    # Check explicit TCK-<number> format first to preserve unit test expectations
+    tck_match = re.search(r"\b(TCK-\d+)\b", raw, re.IGNORECASE)
+    if tck_match:
+        return tck_match.group(1).upper()
+
+    # Check natural ticket prefix formats: 'ticket-id 10', 'ticket #10', 'id: 10', '#10'
+    prefixed_match = re.search(
+        r"(?:ticket[-_\s]*id\s*[:#]?\s*|ticket\s*#?\s*|id\s*[:#]?\s*|#)(\d+)\b",
+        raw,
+        re.IGNORECASE,
+    )
+    if prefixed_match:
+        return prefixed_match.group(1)
+
+    # Pure integer string
+    if re.fullmatch(r"\d+", raw):
+        return raw
+
+    return raw
 
 
 class TicketIntent(str, Enum):
@@ -30,6 +71,7 @@ class TicketStatus(str, Enum):
 
 class TicketQueryMode(str, Enum):
     """Deterministic dispatch target for ticket retrieval operations."""
+    ALL = "all"
     BY_ID = "by_id"
     BY_ASSIGNEE = "by_assignee"
     BY_STATUS = "by_status"
@@ -161,6 +203,12 @@ class TicketUpdatePayload(BaseModel):
         description="Optional new priority ('P0 - Critical', 'P1 - High', 'P2 - Medium', 'P3 - Low')."
     )
 
+    @field_validator("ticket_id", mode="before")
+    @classmethod
+    def _validate_ticket_id(cls, v: Any) -> str:
+        normalized = normalize_ticket_id(v)
+        return normalized if normalized is not None else str(v or "").strip()
+
     @field_validator("new_priority", mode="before")
     @classmethod
     def _validate_new_priority(cls, v: Any) -> Optional[TicketPriority]:
@@ -195,6 +243,15 @@ class TicketSearchQuery(BaseModel):
         default=False,
         description="True if external web search (CVEs, docs) should run when internal DB returns 0 results."
     )
+    research_solutions: bool = Field(
+        default=False,
+        description="True when the user wants to find a ticket AND search the web for solutions, fixes, or troubleshooting steps."
+    )
+
+    @field_validator("ticket_id", mode="before")
+    @classmethod
+    def _validate_ticket_id(cls, v: Any) -> Optional[str]:
+        return normalize_ticket_id(v) if v is not None else None
 
     @field_validator("priority", mode="before")
     @classmethod
@@ -211,6 +268,7 @@ class WorkflowState(BaseModel):
     """Typed workflow state dictionary contract."""
     current_date: Optional[str] = Field(default=None, description="Current system date formatted as YYYY-MM-DD.")
     user_query: Optional[str] = Field(default=None, description="Raw input text submitted by the user.")
+    last_ticket_id: Optional[str] = Field(default=None, description="Most recently referenced or retrieved single ticket ID in the session.")
     intent_classification: Optional[TicketClassificationResult] = Field(
         default=None, description="Structured routing intent classified from user message."
     )
@@ -229,6 +287,9 @@ class WorkflowState(BaseModel):
     db_operation_result: Optional[Any] = Field(
         default=None, description="Execution result returned from MCP PostgreSQL operations."
     )
+    web_search_query: Optional[str] = Field(
+        default=None, description="Contextualized web search query constructed from ticket details."
+    )
     web_search_result: Optional[Any] = Field(
         default=None, description="External Google Search results or grounding response."
     )
@@ -243,6 +304,7 @@ __all__ = [
     "TicketStatus",
     "TicketQueryMode",
     "DateFilterField",
+    "normalize_ticket_id",
     "normalize_priority",
     "normalize_status",
     "TicketClassificationResult",
