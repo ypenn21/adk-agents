@@ -1,16 +1,17 @@
-# ADK 1.x to 2.0 Migration Mapping
+# ADK 1.x & ADK 2.x Basic to ADK 2.x Graph Orchestration Mapping
 
-Pattern-by-pattern mapping showing how each ADK 1.x construct translates to ADK 2.0.
+Pattern-by-pattern mapping showing how each ADK 1.x construct or ADK 2.x basic orchestration construct translates to an ADK 2.x `Workflow` graph.
 
-## P1: Single LlmAgent with Tools
+---
+
+## P1: Single `LlmAgent` with Tools
 
 ### P1a: Simple chat — NO MIGRATION
+Keep as-is. Standalone `LlmAgent` works natively in ADK 2.x when no deterministic steps or multi-branch routing exist.
 
-Keep as-is. ADK 1.x `LlmAgent` works unchanged in ADK 2.0. No Workflow needed.
+### P1b: Tool-heavy with deterministic tools $\rightarrow$ `Workflow` with function nodes
 
-### P1b: Tool-heavy with deterministic tools → Workflow with function nodes
-
-**Before (ADK 1.x)**:
+**Before (ADK 1.x or ADK 2.x Basic)**:
 ```python
 def fetch_data(query: str) -> dict:
     """Deterministic DB lookup — no LLM needed."""
@@ -22,13 +23,13 @@ def format_report(data: dict) -> str:
 
 agent = LlmAgent(
     name="analyst",
-    model="gemini-2.5-flash",
+    model="gemini-3.8-flash",
     instruction="Analyze user questions about data...",
     tools=[fetch_data, format_report],
 )
 ```
 
-**After (ADK 2.0)**:
+**After (ADK 2.x Graph `Workflow`)**:
 ```python
 from google.adk.agents.llm_agent import LlmAgent
 from google.adk.events.event import Event
@@ -41,7 +42,7 @@ def fetch_data(node_input: str) -> Event:
 
 analyst = LlmAgent(
     name="analyst",
-    model="gemini-2.5-flash",
+    model="gemini-3.8-flash",
     instruction="Analyze this data and answer the user's question:\n{raw_data}",
     output_key="analysis",
 )
@@ -56,29 +57,28 @@ root_agent = Workflow(
 )
 ```
 
-**Benefit**: Deterministic steps skip LLM invocation entirely. Saves tokens and latency.
+---
 
-### P1c: Callback-heavy → Workflow with function nodes
+### P1c: Callback-heavy $\rightarrow$ `Workflow` with function nodes
 
-**Before (ADK 1.x)**:
+**Before**:
 ```python
 async def before_model_callback(ctx, llm_request):
     ctx.state["context"] = fetch_relevant_context(ctx.state["query"])
 
 async def after_model_callback(ctx, llm_response):
-    # Filter PII from response
     filtered = remove_pii(llm_response.content.parts[0].text)
     llm_response.content.parts[0].text = filtered
 
 agent = LlmAgent(
     name="assistant",
+    model="gemini-3.8-flash",
     before_model_callback=before_model_callback,
     after_model_callback=after_model_callback,
-    ...
 )
 ```
 
-**After (ADK 2.0)**:
+**After (ADK 2.x Graph `Workflow`)**:
 ```python
 def enrich_context(node_input: str) -> Event:
     context = fetch_relevant_context(node_input)
@@ -86,6 +86,7 @@ def enrich_context(node_input: str) -> Event:
 
 assistant = LlmAgent(
     name="assistant",
+    model="gemini-3.8-flash",
     instruction="Answer using this context:\n{context}",
     output_key="raw_response",
 )
@@ -99,73 +100,116 @@ root_agent = Workflow(
 )
 ```
 
-**Benefit**: Pre/post logic becomes explicit, testable graph nodes instead of hidden callbacks.
+---
+
+### P1d: Monolithic Procedural `LlmAgent` with Multi-Category Tools $\rightarrow$ Multi-Branch Routed `Workflow` Graph
+
+When a single `LlmAgent` has a multi-step procedural prompt (e.g., clarify, get date, route between create/update/search/external web search, validate enums, check duplicates, format Markdown table) and 5+ tools attached:
+
+**Before (ADK 1.x or ADK 2.x Basic Single Agent)**:
+```python
+root_agent = Agent(
+    model="gemini-3.8-flash",
+    name="monolithic_assistant",
+    instruction="1. Clarify... 2. Get date... 3. Search before create... 4. Format table...",
+    tools=[load_memory, get_current_date, web_search_tool, *get_db_crud_tools()],
+)
+```
+
+**After (ADK 2.x Multi-Branch `Workflow` Graph)**:
+```python
+from datetime import datetime
+from enum import Enum
+from pydantic import BaseModel
+from google.adk.agents.llm_agent import LlmAgent
+from google.adk.events.event import Event
+from google.adk.workflow import Workflow
+from google.adk.workflow.node import node
+
+class IntentType(str, Enum):
+    CREATE = "create"
+    UPDATE = "update"
+    SEARCH = "search"
+    EXTERNAL_SEARCH = "external_search"
+    CLARIFY = "clarify"
+
+class IntentClassification(BaseModel):
+    intent: IntentType
+    has_required_fields: bool
+    missing_fields_prompt: str = ""
+
+@node
+def enrich_session_context(node_input: str) -> Event:
+    """Deterministic entry node: injects current_date without an LLM tool-call round-trip."""
+    return Event(
+        data=node_input,
+        state={
+            "current_date": datetime.now().strftime("%Y-%m-%d"),
+            "user_query": str(node_input),
+        },
+    )
+
+intent_router_agent = LlmAgent(
+    name="intent_router_agent",
+    model="gemini-3.8-flash",
+    instruction="Classify the user request for date {current_date}: {user_query}",
+    output_schema=IntentClassification,
+    output_key="intent_classification",
+)
+
+@node
+def dispatch_intent_route(node_input, intent_classification: dict) -> Event:
+    parsed = IntentClassification.model_validate(intent_classification)
+    if not parsed.has_required_fields or parsed.intent == IntentType.CLARIFY:
+        return Event(data=node_input, route="clarify")
+    return Event(data=node_input, route=parsed.intent.value)
+
+root_agent = Workflow(
+    name="decomposed_workflow_agent",
+    edges=[
+        ("START", enrich_session_context),
+        (enrich_session_context, intent_router_agent),
+        (intent_router_agent, dispatch_intent_route),
+        (dispatch_intent_route, create_extractor_agent, "create"),
+        (create_extractor_agent, execute_create_with_precheck_node),
+        (execute_create_with_precheck_node, format_response_node),
+        (dispatch_intent_route, update_extractor_agent, "update"),
+        (update_extractor_agent, execute_update_node),
+        (execute_update_node, format_response_node),
+        (dispatch_intent_route, search_extractor_agent, "search"),
+        (search_extractor_agent, execute_search_node),
+        (execute_search_node, format_response_node, "has_results"),
+        (execute_search_node, external_web_search_agent, "fallback_web_search"),
+        (dispatch_intent_route, external_web_search_agent, "external_search"),
+        (external_web_search_agent, format_response_node),
+        (dispatch_intent_route, clarification_agent, "clarify"),
+    ],
+)
+```
 
 ---
 
-## P2: SequentialAgent Chain → Workflow with Edge.chain
+## P2: `SequentialAgent` Chain $\rightarrow$ `Workflow` with `Edge.chain`
 
-**Before (ADK 1.x)**:
-```python
-agent_a = LlmAgent(name="a", output_key="result_a", ...)
-agent_b = LlmAgent(name="b", instruction="...{result_a}...", output_key="result_b", ...)
-agent_c = LlmAgent(name="c", instruction="...{result_b}...", ...)
-
-pipeline = SequentialAgent(name="pipeline", sub_agents=[agent_a, agent_b, agent_c])
-```
-
-**After (ADK 2.0)**:
 ```python
 from google.adk.agents.llm_agent import LlmAgent
 from google.adk.workflow import Edge, Workflow
 
-agent_a = LlmAgent(name="a", output_key="result_a", ...)
-agent_b = LlmAgent(name="b", instruction="...{result_a}...", output_key="result_b", ...)
-agent_c = LlmAgent(name="c", instruction="...{result_b}...", ...)
-
 root_agent = Workflow(
     name="pipeline",
-    edges=Edge.chain("START", agent_a, agent_b, agent_c),
+    edges=Edge.chain("START", agent_a, deterministic_transform_node, agent_b),
 )
 ```
-
-**Benefit**: Minimal change for pure LLM chains. Real benefit comes when you can insert function nodes between LLM agents for deterministic pre/post processing.
 
 ---
 
-## P3: ParallelAgent → Workflow with fan-out + JoinNode
+## P3: `ParallelAgent` $\rightarrow$ `Workflow` with Fan-Out + `JoinNode`
 
-**Before (ADK 1.x)**:
-```python
-researcher_a = LlmAgent(name="a", output_key="findings_a", ...)
-researcher_b = LlmAgent(name="b", output_key="findings_b", ...)
-researcher_c = LlmAgent(name="c", output_key="findings_c", ...)
-
-parallel = ParallelAgent(name="research", sub_agents=[researcher_a, researcher_b, researcher_c])
-
-synthesizer = LlmAgent(
-    name="synthesizer",
-    instruction="Combine: {findings_a}, {findings_b}, {findings_c}",
-)
-
-pipeline = SequentialAgent(name="pipeline", sub_agents=[parallel, synthesizer])
-```
-
-**After (ADK 2.0)**:
 ```python
 from google.adk.agents.llm_agent import LlmAgent
-from google.adk.workflow import Edge, Workflow, JoinNode
-
-researcher_a = LlmAgent(name="a", output_key="findings_a", ...)
-researcher_b = LlmAgent(name="b", output_key="findings_b", ...)
-researcher_c = LlmAgent(name="c", output_key="findings_c", ...)
+from google.adk.workflow import Workflow, JoinNode
 
 join = JoinNode(name="collect")
-
-synthesizer = LlmAgent(
-    name="synthesizer",
-    instruction="Combine: {findings_a}, {findings_b}, {findings_c}",
-)
 
 root_agent = Workflow(
     name="pipeline",
@@ -176,222 +220,109 @@ root_agent = Workflow(
     ],
 )
 ```
-
-**Benefit**: Explicit fan-out/fan-in. JoinNode provides structured merge. Can add function nodes between fan-in and synthesizer.
-
-**Important**: LLM agents feeding into JoinNode should use `output_schema` to avoid serialization errors with database session services.
+**Important**: LLM agents feeding into `JoinNode` should use `output_schema` with JSON-serializable fields to avoid serialization issues with database session services.
 
 ---
 
-## P4: LoopAgent → Workflow with routed edges (cycle)
+## P4: `LoopAgent` $\rightarrow$ `Workflow` with Routed Edges (Cycle)
 
-**Before (ADK 1.x)**:
 ```python
-from google.adk.tools import exit_loop
-
-refiner = LlmAgent(
-    name="refiner",
-    instruction="Improve the draft. Call exit_loop when quality is sufficient.",
-    tools=[exit_loop],
-    output_key="draft",
-)
-
-loop = LoopAgent(name="refine_loop", sub_agents=[refiner], max_iterations=5)
-```
-
-**After (ADK 2.0)**:
-```python
-from google.adk.agents.llm_agent import LlmAgent
+from google.adk.agents.context import Context
 from google.adk.events.event import Event
 from google.adk.workflow import Workflow
 
-refiner = LlmAgent(
-    name="refiner",
-    instruction="Improve the draft:\n{draft}",
-    output_key="draft",
-)
-
-iteration_count = 0
-
-def check_quality(node_input, draft: str) -> Event:
-    global iteration_count
-    iteration_count += 1
-    if iteration_count >= 5 or meets_quality_threshold(draft):
-        return Event(data=draft, route="done")
-    return Event(data=draft, route="continue")
-
-def finalize(node_input) -> str:
-    return str(node_input)
+def check_quality(ctx: Context, node_input, draft: str) -> Event:
+    iteration = ctx.state.get("_iteration_count", 0) + 1
+    if iteration >= 5 or meets_quality_threshold(draft):
+        return Event(data=draft, route="done", state={"_iteration_count": iteration})
+    return Event(data=draft, route="continue", state={"_iteration_count": iteration})
 
 root_agent = Workflow(
     name="refine_loop",
     edges=[
         ("START", refiner),
         (refiner, check_quality),
-        (check_quality, refiner, "continue"),   # Loop back
-        (check_quality, finalize, "done"),       # Exit
+        (check_quality, refiner, "continue"),
+        (check_quality, finalize, "done"),
     ],
 )
 ```
 
-**Benefit**: Exit condition is deterministic (function node), not LLM-decided. Explicit routing makes the loop visible in the graph. Can add validation/transformation nodes within the cycle.
-
-**Note**: Graph cycles require at least one routed edge. Always include a route condition.
-
 ---
 
-## P5: Hierarchical AgentTool → Task Mode or Nested Workflow
+## P5 & P9: Hierarchical `AgentTool` (ADK 1.x) or Coordinator `sub_agents` / Task Mode (ADK 2.x Basic) $\rightarrow$ Routed `Workflow` Graph
 
-### P5a/P5b: Delegation → Task Mode
+When an agent uses ADK 1.x `AgentTool(specialist)` (`P5`) or ADK 2.x Basic Orchestration `LlmAgent(sub_agents=[specialist_a, specialist_b])` (`P9a`), converting to an ADK 2.x `Workflow` graph replaces the open-ended coordinator LLM loop with a structured router + direct routed edges:
 
-**Before (ADK 1.x)**:
-```python
-specialist = LlmAgent(name="specialist", ...)
-parent = LlmAgent(name="coordinator", tools=[AgentTool(specialist)])
-```
-
-**After (ADK 2.0)**:
+**Before (ADK 2.x Basic Coordinator Orchestration - P9a)**:
 ```python
 from google.adk.workflow.agents.base_llm_agent import BaseLlmAgent
 from google.adk.workflow.agents.llm_agent import LlmAgent
-from pydantic import BaseModel
 
-class TaskInput(BaseModel):
-    query: str
+billing_agent = BaseLlmAgent(name="billing", mode="single_turn", ...)
+support_agent = BaseLlmAgent(name="support", mode="single_turn", ...)
 
-class TaskOutput(BaseModel):
-    result: str
-
-specialist = BaseLlmAgent(
-    name="specialist",
-    mode="task",  # or "single_turn" for autonomous
-    input_schema=TaskInput,
-    output_schema=TaskOutput,
-    instruction="Process the query and call finish_task with results.",
-    description="Handles specialized queries.",
-)
-
+# Basic orchestration: LLM coordinator runs before AND after sub-agent invocation
 root_agent = LlmAgent(
     name="coordinator",
-    model="gemini-2.5-flash",
-    sub_agents=[specialist],
-    instruction="Delegate specialized queries via request_task_specialist.",
+    model="gemini-3.8-flash",
+    sub_agents=[billing_agent, support_agent],
+    instruction="Route user queries to billing or support.",
 )
 ```
 
-**Benefit**: Typed input/output schemas. Coordinator gets structured results. `single_turn` mode eliminates unnecessary conversation turns.
-
-### P5b: Multi-delegation routing → Task Mode with multiple sub-agents
-
-**Before (ADK 1.x)**:
+**After (ADK 2.x Graph Orchestration - `Workflow`)**:
 ```python
-parent = LlmAgent(
-    name="router",
-    tools=[AgentTool(agent_a), AgentTool(agent_b), AgentTool(agent_c)],
-    instruction="Route queries to the right specialist...",
+from enum import Enum
+from pydantic import BaseModel
+from google.adk.agents.llm_agent import LlmAgent
+from google.adk.events.event import Event
+from google.adk.workflow import Workflow
+
+class RouteTarget(str, Enum):
+    BILLING = "billing"
+    SUPPORT = "support"
+
+class RoutingDecision(BaseModel):
+    target: RouteTarget
+
+router_agent = LlmAgent(
+    name="router_agent",
+    model="gemini-3.8-flash",
+    instruction="Classify whether the request belongs to billing or support.",
+    output_schema=RoutingDecision,
+    output_key="routing_decision",
 )
-```
 
-**After (ADK 2.0)**:
-```python
-root_agent = LlmAgent(
-    name="router",
-    model="gemini-2.5-flash",
-    sub_agents=[task_agent_a, task_agent_b, task_agent_c],
-    instruction="Route queries to the right specialist...",
-)
-```
-
-**Benefit**: Each sub-agent has typed schemas. Coordinator gets structured results to work with.
-
----
-
-## P6: Custom BaseAgent → Workflow (partial auto-migration)
-
-Custom BaseAgent subclasses require manual analysis. Common sub-patterns that CAN be auto-migrated:
-
-| Custom logic | ADK 2.0 equivalent |
-|-------------|-------------------|
-| Sequential delegation with conditionals | Workflow with routing edges |
-| Retry logic around sub-agent calls | Function node with retry + routed edge |
-| State accumulation across sub-agent calls | Function nodes with `Event(state={...})` |
-| Custom fan-out/fan-in | Workflow fan-out tuples + JoinNode |
-
-**Flag for manual review** when:
-- Custom async generator logic (complex `yield` patterns)
-- Direct manipulation of `InvocationContext` internals
-- Custom event filtering or transformation
-
----
-
-## P7: Callback-Heavy → Function Nodes
-
-See P1c mapping above. General rule:
-
-| Callback | ADK 2.0 equivalent |
-|----------|-------------------|
-| `before_agent_callback` (validation/short-circuit) | Function node BEFORE the LLM agent node |
-| `before_model_callback` (context injection) | Function node with `Event(state={...})` before LLM |
-| `after_model_callback` (output filtering) | Function node AFTER the LLM agent node |
-| `after_agent_callback` (logging/storage) | Function node at the end of the chain |
-| `before_tool_callback` (audit) | Keep as callback (ADK 2.0 still supports these) |
-| `after_tool_callback` (validation) | Keep as callback (ADK 2.0 still supports these) |
-
-**Note**: Tool-level callbacks (`before_tool_callback`, `after_tool_callback`) should generally stay as callbacks even in ADK 2.0 since they operate within an LLM agent node.
-
----
-
-## P8: Mixed/Nested → Decompose and map individually
-
-Break the nested structure into individual patterns, map each one, then compose in a single Workflow:
-
-**Before (ADK 1.x)**:
-```python
-parallel = ParallelAgent(sub_agents=[a, b])
-pipeline = SequentialAgent(sub_agents=[preprocess, parallel, postprocess])
-loop = LoopAgent(sub_agents=[pipeline], max_iterations=3)
-```
-
-**After (ADK 2.0)**:
-```python
-join = JoinNode(name="merge")
+def route_dispatcher(node_input, routing_decision: dict) -> Event:
+    decision = RoutingDecision.model_validate(routing_decision)
+    return Event(data=node_input, route=decision.target.value)
 
 root_agent = Workflow(
-    name="complex_pipeline",
+    name="routed_coordinator_workflow",
     edges=[
-        ("START", preprocess_fn),              # P7: callback → function node
-        (preprocess_fn, (a, b)),               # P3: fan-out
-        ((a, b), join),                        # P3: fan-in
-        (join, postprocess_fn),                # P7: callback → function node
-        (postprocess_fn, check_done),          # P4: loop exit check
-        (check_done, preprocess_fn, "again"),  # P4: loop back
-        (check_done, finalize, "done"),        # P4: exit
+        ("START", router_agent),
+        (router_agent, route_dispatcher),
+        (route_dispatcher, billing_agent, "billing"),
+        (route_dispatcher, support_agent, "support"),
     ],
 )
 ```
+**Benefit**: Eliminates the redundant post-delegation coordinator LLM turn, enforces routing via a Pydantic schema, and allows inserting deterministic validation or database `@node`s before or after each specialist branch.
 
-**Benefit**: Entire complex orchestration visible as one graph. No nested agent types.
+---
 
-## Import Reference
-
-ADK 2.0 imports for generated code:
+## Import Reference for ADK 2.x Graph Orchestration
 
 ```python
-# Workflow core
-from google.adk.workflow import Workflow, Edge
-from google.adk.workflow import JoinNode
+# Workflow graph primitives
+from google.adk.workflow import Workflow, Edge, JoinNode
+from google.adk.workflow.node import node  # @node or @node(parallel_worker=True)
 
-# LLM agent as workflow node (IMPORTANT: use this import, not workflow.agents)
+# LLM agent node inside a Workflow graph
 from google.adk.agents.llm_agent import LlmAgent
 
-# Events and state
+# Events and execution context
 from google.adk.events.event import Event
 from google.adk.agents.context import Context
-
-# Task mode (for hierarchical/delegation patterns)
-from google.adk.workflow.agents.base_llm_agent import BaseLlmAgent
-from google.adk.workflow.agents.llm_agent import LlmAgent as CoordinatorLlmAgent
-
-# Parallel workers
-from google.adk.workflow.node import node  # @node(parallel_worker=True)
 ```
