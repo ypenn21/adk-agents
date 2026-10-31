@@ -807,5 +807,44 @@ PYTHONPATH=. uv run pytest tests/ -v
 ## 🎯 Success Criteria
 1. **Deterministic Graph Decomposition**: The monolithic 12-tool `Agent` is decomposed into a structured ADK 2.0 `Workflow` graph with explicit function `@node`s, Pydantic `output_schema` contracts, and conditional routed edges (`create`, `update`, `search`, `external_search`, `clarify`, `fallback_web_search`).
 2. **Zero LLM Overhead for Deterministic Steps**: `get_current_date()`, pre-creation duplicate lookup (`search-tickets`), SQL CRUD dispatch, and Markdown table formatting execute inside deterministic Python function nodes rather than multi-turn LLM tool loops.
-3. **Strict Model & Architecture Compliance**: All LLM nodes default to `gemini-3.8-flash` (never below Gemini 3.5), zero Django imports exist in the agent/workflow modules, MCP tools remain lazily loaded via `LazyToolboxTool`, and `adk_bug_ticket_agent_adk2/agent.py` is provided alongside the integrated workflow.
+3. **Strict Model & Architecture Compliance**: All LLM nodes default to `gemini-3.8-flash` (never below Gemini 3.5), zero Django imports exist in the agent/workflow modules, and MCP tools remain lazily loaded via `LazyToolboxTool`.
 4. **Full Test Verification**: Both the new `tests/test_adk2_workflow_graph.py` test suite and all existing pytest suites (`tests/test_agent_timeout_and_tools.py`, `tests/test_a2a_integration.py`, `tests/test_database_session.py`) pass completely.
+
+---
+
+## ⚖️ Architectural Trade-Offs: ADK 2.0 Graph vs. Simple `LlmAgent` Orchestration
+
+Choosing between **ADK 2.0 Graph Orchestration** (`adk_bug_ticket_agent/workflow_graph.py`) and **Simple Monolithic `LlmAgent` Orchestration** (`adk_bug_ticket_agent/agent.py` + `adk_bug_ticket_agent/system_prompt.py`) trades **open-ended LLM flexibility and low boilerplate** for **deterministic control flow, schema guarantees, and unit testability**.
+
+### 1. What You Gain with ADK 2.0 Graph Orchestration
+* **Hard Code Invariants Instead of "Best-Effort" Prompt Rules:**
+  In the single-agent setup, rules like *"get today's date first"*, *"always search for duplicates before creating a ticket"*, and *"only use `'P0 - Critical'` through `'P3 - Low'`"* lived in `system_prompt.py`. Under load or ambiguous phrasing, the model could skip the duplicate check or pass `"High"` instead of `"P1 - High"`. In the graph, `enrich_session_context`, `execute_create_with_dedup`, and `TicketCreatePayload` enforce those rules in Python 100% of the time.
+* **No Tool-Selection Confusion Across 12 Tools:**
+  Giving a single LLM 12 overlapping tools at once leads to cross-tool mistakes (e.g., calling `search-tickets` when `get-tickets-by-status` was appropriate, or calling external Google Search for an internal ticket). The graph routes through `dispatch_intent_route` and dispatches the exact SQL tool in `execute_ticket_query`.
+* **Eliminating LLM Round-Trips for Deterministic Work:**
+  Injecting `current_date`, chaining `search-tickets` -> `create-new-ticket`, verifying updates via `get-ticket-by-id`, and rendering the final Markdown table in `format_final_response` all run in `<1ms` of Python instead of requiring extra LLM tool-call turns.
+* **Fast, Deterministic Unit Testing:**
+  Every node in `nodes.py` and every schema in `schemas.py` can be tested offline in under 2 seconds without live LLM calls.
+
+### 2. What You Give Up (The Trade-Offs)
+* **More Upfront Code & Maintenance Surface Area:**
+  The simple `LlmAgent` is ~30 lines in `agent.py` plus a prompt in `system_prompt.py`. Adding a new tool only requires appending it to `tools=[...]`. In the graph architecture, adding a new capability requires updating a Pydantic schema in `schemas.py`, adding logic in `nodes.py`, and wiring edges in `workflow_graph.py`.
+* **Less Ad-Hoc Multi-Intent Improvisation in a Single Turn:**
+  A tool-heavy `LlmAgent` can improvise compound requests in one turn (e.g., *"Find all P0 tickets for Alice, close the first one, and create a follow-up P2 ticket"*). Because the graph routes each turn into a single specialized branch (`create`, `update`, `search`, `external_search`, or `clarify`), compound multi-action requests either require multiple turns or explicit loop/composite edges in the graph.
+* **Router + Extractor Split vs. Single-Step Tool Call:**
+  In the graph, an intent classification step (`intent_router_agent`) runs before the branch-specific schema extractor (e.g., `ticket_search_extractor_agent`), whereas a single `LlmAgent` picks the tool and extracts arguments in one LLM call (though the single `LlmAgent` then spends an extra LLM call *after* the tool runs to format the output table, which `format_final_response` avoids).
+* **Template-Driven Responses vs. Free-Form Prose:**
+  Because `format_final_response` formats database results deterministically in Python, the output is always structured and predictable, but less conversational than having the LLM write custom commentary around every table.
+
+### 3. Summary Comparison Matrix
+
+| Dimension | Simple `LlmAgent` (`USE_ADK2_WORKFLOW=false`) | ADK 2.0 Graph (`USE_ADK2_WORKFLOW=true`) |
+| :--- | :--- | :--- |
+| **Best for** | Rapid prototyping, 1–3 tools, open-ended chat | Production CRUD workflows, 5+ tools, strict business rules |
+| **Control flow** | Decided dynamically by the LLM from prompt text | Enforced by explicit graph edges and `@node` functions |
+| **Pre-create dedup check** | Best-effort (LLM may forget to call `search-tickets`) | Guaranteed in `execute_create_with_dedup` |
+| **Parameter validation** | Prompt instructions | Pydantic `schemas.py` before DB call |
+| **Compound ad-hoc queries** | Flexible (can chain arbitrary tools in one turn) | Constrained to defined graph routes per turn |
+| **Code footprint** | Small (~2 files) | Modular (~5 files) |
+
+Because `ServiceManager` in `adk_bug_ticket_agent/agent.py` supports `USE_ADK2_WORKFLOW=true|false`, both orchestration modes can be toggled via environment variable for side-by-side comparison.
