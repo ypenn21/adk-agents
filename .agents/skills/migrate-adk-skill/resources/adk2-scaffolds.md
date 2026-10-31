@@ -1,88 +1,198 @@
-# ADK 2.0 Code Scaffolds
+# ADK 2.x Workflow Graph Code Scaffolds
 
-Ready-to-use templates for generating ADK 2.0 Workflow code from ADK 1.x patterns. Replace `[PLACEHOLDER]` values with actual agent logic.
+Ready-to-use templates for generating ADK 2.x `Workflow` graph code from either **ADK 1.x** patterns (`P1`–`P8`) or **ADK 2.x Basic Orchestration** patterns (`P1b`/`P1d`/`P9`). Default all model assignments to `gemini-3.8-flash` (or preserve existing `>=3.5` model configurations).
 
-## Scaffold: Sequential Pipeline (from P2)
+---
+
+## Scaffold 1: Decomposed Procedural Agent / Multi-Branch Graph (from P1b, P1d, P9)
+
+Use this scaffold when converting a monolithic tool-heavy `Agent`/`LlmAgent` (or basic coordinator `LlmAgent`) into a deterministic ADK 2.x `Workflow` graph with:
+1. Entry context enrichment `@node`
+2. Typed `output_schema` Intent Router `LlmAgent` + deterministic route dispatcher `@node`
+3. Per-branch Pydantic extractor `LlmAgent` + deterministic pre-check/execution `@node`
+4. Deterministic Markdown/output formatter `@node`
 
 ```python
 """
-ADK 2.0 Migration: Sequential Pipeline
-Migrated from: SequentialAgent with [N] sub-agents
+ADK 2.x Graph Orchestration Workflow
+Migrated from: [ORIGINAL_AGENT_NAME] ([Mode A: ADK 1.x -> 2.x | Mode B: ADK 2.x Basic -> Graph])
 """
 
+from datetime import datetime
+from enum import Enum
+from typing import Any, Optional
+from pydantic import BaseModel, Field
+from google.adk.agents.context import Context
 from google.adk.agents.llm_agent import LlmAgent
-from google.adk.workflow import Edge, Workflow
+from google.adk.events.event import Event
+from google.adk.workflow import Workflow
+from google.adk.workflow.node import node
 
-[AGENT_DEFINITIONS]
-# Each LlmAgent preserves: name, model, instruction, output_key, tools
 
-root_agent = Workflow(
-    name="[PIPELINE_NAME]",
-    description="[DESCRIPTION]",
-    edges=Edge.chain("START", [AGENT_LIST]),
-)
+# --- 1. Typed Pydantic State & Routing Schemas ---
+
+class WorkflowIntent(str, Enum):
+    ACTION_A = "action_a"
+    ACTION_B = "action_b"
+    SEARCH = "search"
+    EXTERNAL_SEARCH = "external_search"
+    CLARIFY = "clarify"
+
+
+class IntentClassificationResult(BaseModel):
+    intent: WorkflowIntent
+    has_required_info: bool = Field(
+        default=True,
+        description="False if required parameters are missing or request is ambiguous.",
+    )
+    clarification_question: Optional[str] = None
+
+
+# --- 2. Deterministic Function Nodes (@node) ---
+
+@node
+def enrich_session_context(ctx: Context, node_input: Any) -> Event:
+    """Deterministic entry node: injects runtime context (e.g., current_date) without an LLM tool call."""
+    current_date = datetime.now().strftime("%Y-%m-%d")
+    user_query = str(node_input) if node_input is not None else ""
+    return Event(
+        data=user_query,
+        state={
+            "current_date": current_date,
+            "user_query": user_query,
+        },
+    )
+
+
+@node
+def dispatch_intent_route(ctx: Context, node_input: Any) -> Event:
+    """Deterministic router reading structured output from intent_router_agent."""
+    raw = ctx.state.get("intent_classification") or {}
+    parsed = (
+        raw
+        if isinstance(raw, IntentClassificationResult)
+        else IntentClassificationResult.model_validate(raw)
+    )
+    if not parsed.has_required_info or parsed.intent == WorkflowIntent.CLARIFY:
+        return Event(data=node_input, route="clarify")
+    return Event(data=node_input, route=parsed.intent.value)
+
+
+@node
+async def execute_action_a_with_precheck(ctx: Context, node_input: Any) -> Event:
+    """Deterministic pre-check (e.g. duplicate search) + database/MCP tool execution."""
+    payload = ctx.state.get("action_a_payload")
+    # 1. Run deterministic pre-condition check
+    # 2. Execute underlying deterministic tool
+    result = {"status": "success", "payload": payload}
+    return Event(data=result, state={"operation_result": result})
+
+
+@node
+def format_final_response(ctx: Context, node_input: Any) -> str:
+    """Deterministic output formatting (e.g., Markdown table serialization)."""
+    result = ctx.state.get("operation_result") or node_input
+    return str(result)
+
+
+# --- 3. Focused LLM Agent Nodes ---
+
+def build_workflow(model: Any = "gemini-3.8-flash") -> Workflow:
+    intent_router_agent = LlmAgent(
+        name="intent_router_agent",
+        model=model,
+        instruction=(
+            "Today is {current_date}. Classify the user's request into one of the supported intents: "
+            "{user_query}"
+        ),
+        output_schema=IntentClassificationResult,
+        output_key="intent_classification",
+    )
+
+    action_a_extractor_agent = LlmAgent(
+        name="action_a_extractor_agent",
+        model=model,
+        instruction="Extract validated parameters for Action A from: {user_query}",
+        # output_schema=ActionAPayload,
+        output_key="action_a_payload",
+    )
+
+    clarification_agent = LlmAgent(
+        name="clarification_agent",
+        model=model,
+        instruction="Ask a concise clarifying question to resolve missing details in: {user_query}",
+        output_key="clarification_response",
+    )
+
+    return Workflow(
+        name="[WORKFLOW_NAME]",
+        description="[DESCRIPTION]",
+        edges=[
+            ("START", enrich_session_context),
+            (enrich_session_context, intent_router_agent),
+            (intent_router_agent, dispatch_intent_route),
+            (dispatch_intent_route, action_a_extractor_agent, "action_a"),
+            (action_a_extractor_agent, execute_action_a_with_precheck),
+            (execute_action_a_with_precheck, format_final_response),
+            (dispatch_intent_route, clarification_agent, "clarify"),
+        ],
+    )
 ```
 
-## Scaffold: Sequential with Function Nodes (from P2b + P7)
+---
+
+## Scaffold 2: Sequential Pipeline with Function Nodes (from P2b + P7)
 
 ```python
-"""
-ADK 2.0 Migration: Sequential Pipeline with Function Nodes
-Migrated from: SequentialAgent with callbacks/deterministic tools
-Original callbacks migrated to: [LIST_OF_FUNCTION_NODES]
-"""
-
 from typing import Any
 from google.adk.agents.llm_agent import LlmAgent
 from google.adk.events.event import Event
 from google.adk.workflow import Edge, Workflow
+from google.adk.workflow.node import node
 
 
-# --- Function nodes (migrated from callbacks/deterministic tools) ---
-
-def [PRE_PROCESS_NAME](node_input: str) -> Event:
+@node
+def pre_process_node(node_input: str) -> Event:
     """Migrated from: [ORIGINAL_CALLBACK_OR_TOOL_NAME]"""
-    [ORIGINAL_LOGIC]
     return Event(
-        data=[PROCESSED_DATA],
-        state={[STATE_KEYS]},
+        data=node_input,
+        state={"enriched_context": "..."},
     )
 
 
-def [POST_PROCESS_NAME](node_input: Any, [STATE_PARAMS]) -> str:
+@node
+def post_process_node(node_input: Any) -> str:
     """Migrated from: [ORIGINAL_CALLBACK_OR_TOOL_NAME]"""
-    [ORIGINAL_LOGIC]
-    return [FORMATTED_OUTPUT]
+    return str(node_input)
 
 
-# --- LLM agent nodes ---
-
-[AGENT_DEFINITIONS]
-
+primary_agent = LlmAgent(
+    name="[AGENT_NAME]",
+    model="gemini-3.8-flash",
+    instruction="[INSTRUCTION_USING_{enriched_context}]",
+    output_key="agent_output",
+)
 
 root_agent = Workflow(
     name="[PIPELINE_NAME]",
     description="[DESCRIPTION]",
-    edges=Edge.chain("START", [PRE_PROCESS], [AGENTS], [POST_PROCESS]),
+    edges=Edge.chain("START", pre_process_node, primary_agent, post_process_node),
 )
 ```
 
-## Scaffold: Parallel Fan-out/Fan-in (from P3)
+---
+
+## Scaffold 3: Parallel Fan-Out / Fan-In with `JoinNode` (from P3)
 
 ```python
-"""
-ADK 2.0 Migration: Parallel Execution with JoinNode
-Migrated from: ParallelAgent with [N] sub-agents
-"""
-
 from google.adk.agents.llm_agent import LlmAgent
-from google.adk.workflow import Edge, Workflow, JoinNode
+from google.adk.workflow import Workflow, JoinNode
 
-[PARALLEL_AGENT_DEFINITIONS]
+[PARALLEL_AGENT_DEFINITIONS]  # Use output_schema on each parallel LlmAgent
 
 join = JoinNode(name="[JOIN_NAME]")
 
-[DOWNSTREAM_AGENT_DEFINITIONS]
+[SYNTHESIZER_AGENT_DEFINITION]
 
 root_agent = Workflow(
     name="[PIPELINE_NAME]",
@@ -90,72 +200,37 @@ root_agent = Workflow(
     edges=[
         ("START", ([PARALLEL_AGENTS_TUPLE])),
         (([PARALLEL_AGENTS_TUPLE]), join),
-        (join, [DOWNSTREAM_AGENT]),
+        (join, [SYNTHESIZER_AGENT]),
     ],
 )
 ```
 
-## Scaffold: Parallel inside Sequential (from P2c + P3)
+---
+
+## Scaffold 4: Loop with Deterministic Exit Condition (from P4)
 
 ```python
-"""
-ADK 2.0 Migration: Sequential pipeline with parallel stage
-Migrated from: SequentialAgent containing ParallelAgent
-"""
-
-from google.adk.agents.llm_agent import LlmAgent
-from google.adk.events.event import Event
-from google.adk.workflow import Edge, Workflow, JoinNode
-
-[PRE_AGENT_DEFINITIONS]
-
-[PARALLEL_AGENT_DEFINITIONS]
-
-join = JoinNode(name="merge")
-
-[POST_AGENT_DEFINITIONS]
-
-root_agent = Workflow(
-    name="[PIPELINE_NAME]",
-    description="[DESCRIPTION]",
-    edges=[
-        ("START", [PRE_AGENT]),
-        ([PRE_AGENT], ([PARALLEL_AGENTS_TUPLE])),
-        (([PARALLEL_AGENTS_TUPLE]), join),
-        (join, [POST_AGENT]),
-    ],
-)
-```
-
-## Scaffold: Loop with Routing (from P4)
-
-```python
-"""
-ADK 2.0 Migration: Loop with deterministic exit condition
-Migrated from: LoopAgent with max_iterations=[N]
-Original exit: exit_loop tool (LLM-decided) -> now deterministic function node
-"""
-
 from typing import Any
-from google.adk.agents.llm_agent import LlmAgent
 from google.adk.agents.context import Context
+from google.adk.agents.llm_agent import LlmAgent
 from google.adk.events.event import Event
 from google.adk.workflow import Workflow
+from google.adk.workflow.node import node
 
-[LOOP_BODY_AGENT_DEFINITIONS]
+[LOOP_BODY_AGENT_DEFINITION]
 
 
-def check_exit(ctx: Context, node_input: Any, [STATE_PARAMS]) -> Event:
-    """Migrated from: exit_loop tool / max_iterations=[N]"""
+@node
+def check_exit(ctx: Context, node_input: Any) -> Event:
+    """Deterministic exit check replacing LLM-invoked exit_loop tool."""
     iteration = ctx.state.get("_iteration_count", 0) + 1
-    # [ORIGINAL_EXIT_CONDITION or max iteration check]
     if iteration >= [MAX_ITERATIONS] or [EXIT_CONDITION]:
         return Event(data=node_input, route="done", state={"_iteration_count": iteration})
     return Event(data=node_input, route="continue", state={"_iteration_count": iteration})
 
 
+@node
 def finalize(node_input: Any) -> str:
-    """Final output after loop completes."""
     return str(node_input)
 
 
@@ -171,148 +246,17 @@ root_agent = Workflow(
 )
 ```
 
-## Scaffold: Routing / Conditional Branching (from P5b or P6)
+---
 
-```python
-"""
-ADK 2.0 Migration: Conditional routing
-Migrated from: [AgentTool multi-delegation / Custom BaseAgent with conditionals]
-"""
+## Common Helper Snippets
 
-from google.adk.agents.llm_agent import LlmAgent
-from google.adk.events.event import Event
-from google.adk.workflow import Workflow
-
-
-def classify(node_input: str) -> Event:
-    """Migrated from: [ORIGINAL_ROUTING_LOGIC]"""
-    [CLASSIFICATION_LOGIC]
-    if [CONDITION_A]:
-        return Event(data=node_input, route="[ROUTE_A]")
-    elif [CONDITION_B]:
-        return Event(data=node_input, route="[ROUTE_B]")
-    return Event(data=node_input, route="default")
-
-
-[BRANCH_AGENT_DEFINITIONS]
-
-
-root_agent = Workflow(
-    name="[ROUTER_NAME]",
-    description="[DESCRIPTION]",
-    edges=[
-        ("START", classify),
-        (classify, [AGENT_A], "[ROUTE_A]"),
-        (classify, [AGENT_B], "[ROUTE_B]"),
-        (classify, [DEFAULT_AGENT], "__DEFAULT__"),
-    ],
-)
-```
-
-## Scaffold: Task Mode Delegation (from P5)
-
-```python
-"""
-ADK 2.0 Migration: Task mode delegation
-Migrated from: AgentTool hierarchy
-"""
-
-from pydantic import BaseModel
-from google.adk.workflow.agents.base_llm_agent import BaseLlmAgent
-from google.adk.workflow.agents.llm_agent import LlmAgent
-
-
-class [TASK_INPUT_NAME](BaseModel):
-    [INPUT_FIELDS]
-
-
-class [TASK_OUTPUT_NAME](BaseModel):
-    [OUTPUT_FIELDS]
-
-
-[TASK_AGENT_NAME] = BaseLlmAgent(
-    name="[AGENT_NAME]",
-    mode="[task_or_single_turn]",
-    input_schema=[TASK_INPUT_NAME],
-    output_schema=[TASK_OUTPUT_NAME],
-    instruction="[INSTRUCTION]. Call finish_task with results when done.",
-    description="[DESCRIPTION]",
-    tools=[[TOOLS]],
-)
-
-root_agent = LlmAgent(
-    name="[COORDINATOR_NAME]",
-    model="[MODEL]",
-    sub_agents=[[TASK_AGENTS]],
-    instruction="[COORDINATOR_INSTRUCTION]",
-)
-```
-
-## Scaffold: Mixed/Nested (from P8)
-
-```python
-"""
-ADK 2.0 Migration: Complex nested workflow
-Migrated from: [DESCRIBE_ORIGINAL_NESTING]
-All nesting levels flattened into a single Workflow graph.
-"""
-
-from typing import Any
-from google.adk.agents.llm_agent import LlmAgent
-from google.adk.agents.context import Context
-from google.adk.events.event import Event
-from google.adk.workflow import Workflow, JoinNode
-
-# --- Function nodes ---
-[FUNCTION_NODE_DEFINITIONS]
-
-# --- LLM agent nodes ---
-[LLM_AGENT_DEFINITIONS]
-
-# --- Join nodes ---
-[JOIN_NODE_DEFINITIONS]
-
-root_agent = Workflow(
-    name="[WORKFLOW_NAME]",
-    description="[DESCRIPTION]",
-    edges=[
-        [EDGE_DEFINITIONS]
-    ],
-)
-```
-
-## Common Code Snippets
-
-### Function node receiving LLM output (no output_schema)
-
+### Extracting text safely from `types.Content` in a function node
 ```python
 from typing import Any
 from google.genai import types
 
-def process_llm_output(node_input: Any) -> str:
-    """Handle LlmAgentNode output which is types.Content, not str."""
+def extract_text(node_input: Any) -> str:
     if isinstance(node_input, types.Content):
         return "".join(p.text for p in (node_input.parts or []) if p.text)
     return str(node_input) if node_input is not None else ""
-```
-
-### Function node with state persistence
-
-```python
-from google.adk.events.event import Event
-
-def persist_data(node_input: str) -> Event:
-    """Use Event(state=...) for replayable state changes."""
-    return Event(
-        data=node_input,
-        state={"key": "value", "nested": {"a": 1}},
-    )
-```
-
-### Function node reading state via auto-resolved params
-
-```python
-def uses_state(node_input: str, user_name: str, settings: dict) -> str:
-    """user_name and settings auto-resolved from ctx.state."""
-    return f"{user_name}: {node_input}"
 ```
