@@ -1,12 +1,12 @@
 # Feature Implementation Plan: adk2-graph-migration
 
 ## 📋 Todo Checklist
-- [ ] Task 1: Upgrade/Verify ADK 2.0 dependencies (`google-adk>=2.0.0`) in `pyproject.toml` and create the parallel `adk_bug_ticket_agent_adk2/` package (or feature-flagged graph module `adk_bug_ticket_agent/workflow_graph.py`) per the `migrate-adk` side-by-side protocol.
-- [ ] Task 2: Define Pydantic state, routing, and structured output schemas (`TicketIntent`, `TicketClassificationResult`, `TicketCreatePayload`, `TicketUpdatePayload`, `TicketSearchQuery`, `WorkflowState`) in `adk_bug_ticket_agent/schemas.py`.
-- [ ] Task 3: Extract deterministic pre-processing and MCP database execution nodes (`enrich_session_context`, `pre_create_duplicate_check`, `execute_ticket_create`, `execute_ticket_update`, `execute_ticket_query`, `format_ticket_response`) in `adk_bug_ticket_agent/nodes.py`.
-- [ ] Task 4: Define focused, single-responsibility `LlmAgent` nodes (`intent_router_agent`, `ticket_create_extractor_agent`, `ticket_update_extractor_agent`, `ticket_search_extractor_agent`, `external_web_research_agent`, `clarification_agent`) using `gemini-3.8-flash` in `adk_bug_ticket_agent/sub_agents.py`.
-- [ ] Task 5: Assemble the ADK 2.0 `Workflow` graph (`bug_ticket_workflow`) with explicit `Edge` chains and conditional routing (`Event(route=...)`) in `adk_bug_ticket_agent/workflow_graph.py` and wire it into `ServiceManager` in `adk_bug_ticket_agent/agent.py`.
-- [ ] Task 6: Write unit and integration tests for deterministic function nodes, routing edges, and workflow execution trajectories in `tests/test_adk2_workflow_graph.py`.
+- [x] Task 1: Upgrade/Verify ADK 2.0 dependencies (`google-adk>=2.0.0`) in `pyproject.toml` and create the parallel `adk_bug_ticket_agent_adk2/` package (or feature-flagged graph module `adk_bug_ticket_agent/workflow_graph.py`) per the `migrate-adk` side-by-side protocol.
+- [x] Task 2: Define Pydantic state, routing, and structured output schemas (`TicketIntent`, `TicketClassificationResult`, `TicketCreatePayload`, `TicketUpdatePayload`, `TicketSearchQuery`, `WorkflowState`) in `adk_bug_ticket_agent/schemas.py`.
+- [x] Task 3: Extract deterministic pre-processing and MCP database execution nodes (`enrich_session_context`, `pre_create_duplicate_check`, `execute_ticket_create`, `execute_ticket_update`, `execute_ticket_query`, `format_ticket_response`) in `adk_bug_ticket_agent/nodes.py`.
+- [x] Task 4: Define focused, single-responsibility `LlmAgent` nodes (`intent_router_agent`, `ticket_create_extractor_agent`, `ticket_update_extractor_agent`, `ticket_search_extractor_agent`, `external_web_research_agent`, `clarification_agent`) using `gemini-3.8-flash` in `adk_bug_ticket_agent/sub_agents.py`.
+- [x] Task 5: Assemble the ADK 2.0 `Workflow` graph (`bug_ticket_workflow`) with explicit `Edge` chains and conditional routing (`Event(route=...)`) in `adk_bug_ticket_agent/workflow_graph.py` and wire it into `ServiceManager` in `adk_bug_ticket_agent/agent.py`.
+- [x] Task 6: Write unit and integration tests for deterministic function nodes, routing edges, and workflow execution trajectories in `tests/test_adk2_workflow_graph.py`.
 
 ---
 
@@ -606,7 +606,7 @@ def build_bug_ticket_workflow(model: Any = "gemini-3.8-flash") -> Any:
   - Inherit enums from `(str, Enum)` so `json.dumps` and SQLAlchemy session serialization in `DatabaseSessionService` work out-of-the-box without custom encoders.
   - Ensure `TicketCreatePayload` validates that `title` and `description` are distinct (appending a triage note if identical) and defaults `priority` to `TicketPriority.P3` (`'P3 - Low'`) and `status` to `TicketStatus.OPEN` (`'Open'`).
   - Do NOT import any Django modules.
-- **Status**: `- [ ]`
+- **Status**: `- [x]`
 
 ---
 
@@ -642,7 +642,7 @@ def build_bug_ticket_workflow(model: Any = "gemini-3.8-flash") -> Any:
       except Exception as exc:
           return {"error": f"Failed to execute '{tool_name}': {exc}"}
   ```
-- **Status**: `- [ ]`
+- **Status**: `- [x]`
 
 ---
 
@@ -690,7 +690,7 @@ def build_bug_ticket_workflow(model: Any = "gemini-3.8-flash") -> Any:
        - Appends `"Let me know if you need any further assistance with your bug tickets."` (satisfying step 6 of `system_prompt.py`).
 - **Implementation Notes**:
   - Use a compatibility import for `Event` and `@node` so `nodes.py` works seamlessly whether `google.adk.workflow` (ADK 2.0) or `google.adk.events.event` is installed.
-- **Status**: `- [ ]`
+- **Status**: `- [x]`
 
 ---
 
@@ -731,7 +731,7 @@ def build_bug_ticket_workflow(model: Any = "gemini-3.8-flash") -> Any:
 - **Implementation Notes**:
   - Default `model` to `os.getenv("MODEL_NAME") or "gemini-3.8-flash"`.
   - When `model` is a `LiteLlm` instance (used in `VERTEXAI` and `GKE` modes), note that `google_search` built-in grounding is only supported on native Gemini models; if ` isinstance(model, LiteLlm)`, only attach `google_search` when supported or fall back gracefully.
-- **Status**: `- [ ]`
+- **Status**: `- [x]`
 
 ---
 
@@ -752,7 +752,7 @@ def build_bug_ticket_workflow(model: Any = "gemini-3.8-flash") -> Any:
      - Update `ServiceManager._init_agent()`, `_init_vertexai_agent()`, and `_init_gke_ai_agent()` to build and return the graph-based workflow via `build_bug_ticket_workflow(model=...)` (controlled by `USE_ADK2_WORKFLOW = os.getenv("USE_ADK2_WORKFLOW", "true").lower() == "true"` so it defaults to the deterministic ADK 2.0 workflow while preserving a zero-downtime fallback flag).
 - **Implementation Notes**:
   - Ensure `agent.model` property is preserved on the returned workflow object so `test_service_manager_default_model_fallback` in `tests/test_agent_timeout_and_tools.py` (`assert agent.model == "gemini-3.8-flash"`) passes without modification.
-- **Status**: `- [ ]`
+- **Status**: `- [x]`
 
 ---
 
@@ -773,7 +773,7 @@ def build_bug_ticket_workflow(model: Any = "gemini-3.8-flash") -> Any:
      - `test_format_final_response_markdown_table`: Verifies multi-ticket results render as a Markdown table with expected headers and concluding question.
   3. **End-to-End Graph Trajectory Tests**:
      - Verifies the full `Workflow` graph execution across the 3 validation prompts required by `migrate-adk` (`search` by status/date, `create` with automatic dedup check, and `clarify` on ambiguous input).
-- **Status**: `- [ ]`
+- **Status**: `- [x]`
 
 ---
 
