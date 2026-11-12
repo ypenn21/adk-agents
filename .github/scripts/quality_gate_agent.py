@@ -104,6 +104,27 @@ def build_quality_gate_prompt(
     )
 
 
+def _write_quality_gate_token_reports(
+    model: str,
+    stop_reason: str,
+    prompt_metadata: Optional[dict] = None,
+    usage_data: Optional[dict] = None,
+) -> None:
+    """Writes token usage telemetry to both quality gate report locations."""
+    resolved_usage = usage_data if usage_data is not None else calculate_token_spend(None, model)
+    for output_path in (
+        "reports/quality-gate-token-usage.json",
+        "reports/telemetry/quality_gate_agent/token-usage.json",
+    ):
+        write_token_usage_report(
+            usage_data=resolved_usage,
+            stop_reason=stop_reason,
+            output_path=output_path,
+            model=model,
+            prompt_metadata=prompt_metadata,
+        )
+
+
 async def evaluate_quality_gate(
     pii_report_path: str = "reports/pii-scan.txt",
     pr_review_path: str = "reports/pr-review.txt",
@@ -149,18 +170,9 @@ async def evaluate_quality_gate(
             ],
         )
         write_gate_reports(decision, prompt_metadata=prompt_metadata_audit)
-        write_token_usage_report(
-            usage_data=calculate_token_spend(None, cfg["model"]),
-            stop_reason="FAIL_CLOSED_SKIP",
-            output_path="reports/quality-gate-token-usage.json",
+        _write_quality_gate_token_reports(
             model=cfg["model"],
-            prompt_metadata=prompt_metadata_audit,
-        )
-        write_token_usage_report(
-            usage_data=calculate_token_spend(None, cfg["model"]),
             stop_reason="FAIL_CLOSED_SKIP",
-            output_path="reports/telemetry/quality_gate_agent/token-usage.json",
-            model=cfg["model"],
             prompt_metadata=prompt_metadata_audit,
         )
         return decision
@@ -186,18 +198,9 @@ async def evaluate_quality_gate(
                 ],
             )
             write_gate_reports(decision, prompt_metadata=prompt_metadata_audit)
-            write_token_usage_report(
-                usage_data=calculate_token_spend(None, cfg["model"]),
-                stop_reason="FAIL_CLOSED_SKIP",
-                output_path="reports/quality-gate-token-usage.json",
+            _write_quality_gate_token_reports(
                 model=cfg["model"],
-                prompt_metadata=prompt_metadata_audit,
-            )
-            write_token_usage_report(
-                usage_data=calculate_token_spend(None, cfg["model"]),
                 stop_reason="FAIL_CLOSED_SKIP",
-                output_path="reports/telemetry/quality_gate_agent/token-usage.json",
-                model=cfg["model"],
                 prompt_metadata=prompt_metadata_audit,
             )
             return decision
@@ -280,19 +283,11 @@ async def evaluate_quality_gate(
             else:
                 stop_reason_str = "COMPLETED"
 
-            write_token_usage_report(
-                usage_data=usage_stats,
-                stop_reason=stop_reason_str,
-                output_path="reports/quality-gate-token-usage.json",
+            _write_quality_gate_token_reports(
                 model=cfg["model"],
-                prompt_metadata=prompt_metadata_audit,
-            )
-            write_token_usage_report(
-                usage_data=usage_stats,
                 stop_reason=stop_reason_str,
-                output_path="reports/telemetry/quality_gate_agent/token-usage.json",
-                model=cfg["model"],
                 prompt_metadata=prompt_metadata_audit,
+                usage_data=usage_stats,
             )
 
             print("\n" + "=" * 60, flush=True)
@@ -312,21 +307,11 @@ async def evaluate_quality_gate(
             return decision
     except Exception:
         # Fallback to deterministic evaluation
-        write_token_usage_report(
-            usage_data=calculate_token_spend(None, cfg["model"]),
-            stop_reason="ERROR_FALLBACK",
-            output_path="reports/quality-gate-token-usage.json",
+        _write_quality_gate_token_reports(
             model=cfg["model"],
+            stop_reason="ERROR_FALLBACK",
             prompt_metadata=prompt_metadata_audit,
         )
-        write_token_usage_report(
-            usage_data=calculate_token_spend(None, cfg["model"]),
-            stop_reason="ERROR_FALLBACK",
-            output_path="reports/telemetry/quality_gate_agent/token-usage.json",
-            model=cfg["model"],
-            prompt_metadata=prompt_metadata_audit,
-        )
-        pass
 
     if failures:
         decision = QualityGateDecision(

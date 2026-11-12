@@ -432,8 +432,9 @@ async def test_budget_limit_early_halt_no_structured_output(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_quality_gate_replay_pass(tmp_path):
+async def test_quality_gate_replay_pass(tmp_path, monkeypatch):
     """Replays quality gate pass cassette and validates QualityGateDecision passed=True."""
+    monkeypatch.chdir(tmp_path)
     cassette_path = CASSETTES_DIR / "quality_gate_pass.json"
     replayer = CassetteReplayAgent(cassette_path)
 
@@ -458,8 +459,8 @@ async def test_quality_gate_replay_pass(tmp_path):
     assert len(decision.failures) == 0
     assert "passed cleanly" in decision.summary
 
-    # Verify quality-gate token usage report is generated
-    qg_usage_file = Path("reports/quality-gate-token-usage.json")
+    # Verify quality-gate token usage report is generated in isolated tmp_path
+    qg_usage_file = tmp_path / "reports" / "quality-gate-token-usage.json"
     assert qg_usage_file.exists()
     usage_data = json.loads(qg_usage_file.read_text(encoding="utf-8"))
     assert usage_data.get("prompt_tokens") == 950
@@ -470,8 +471,9 @@ async def test_quality_gate_replay_pass(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_quality_gate_replay_fail(tmp_path):
+async def test_quality_gate_replay_fail(tmp_path, monkeypatch):
     """Replays quality gate fail cassette and validates QualityGateDecision passed=False with failures."""
+    monkeypatch.chdir(tmp_path)
     cassette_path = CASSETTES_DIR / "quality_gate_fail.json"
     replayer = CassetteReplayAgent(cassette_path)
 
@@ -499,8 +501,8 @@ async def test_quality_gate_replay_fail(tmp_path):
     assert failure.severity == SeverityLevel.CRITICAL
     assert "settings.py" in failure.reason
 
-    # Verify quality-gate token usage report is generated
-    qg_usage_file = Path("reports/quality-gate-token-usage.json")
+    # Verify quality-gate token usage report is generated in isolated tmp_path
+    qg_usage_file = tmp_path / "reports" / "quality-gate-token-usage.json"
     assert qg_usage_file.exists()
     usage_data = json.loads(qg_usage_file.read_text(encoding="utf-8"))
     assert usage_data.get("prompt_tokens") == 1150
