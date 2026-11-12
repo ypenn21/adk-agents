@@ -2,7 +2,7 @@ name: LLM Inference Evaluation Suite
 
 on:
   schedule:
-    - cron: '0 3 * * *'  # Nightly at 3:00 AM UTC
+    - cron: '0 3 */3 * *'  # Every 3 days at 3:00 AM UTC
   pull_request:
     paths:
       - '.github/prompts/**'
