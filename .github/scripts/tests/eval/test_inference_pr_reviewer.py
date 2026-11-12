@@ -186,7 +186,16 @@ async def test_live_inference_pr_reviewer(
         status_match = isinstance(report, PRReviewReport) and report.overall_status == ReviewStatus.REQUEST_CHANGES
         blocker_recall = 1.0 if (status_match and detected_blockers >= 1) else 0.0
     elif case_id == "tc04_zero_division":
-        status_match = isinstance(report, PRReviewReport) and len(report.findings) >= 1
+        finding_texts_check = (
+            " ".join(f"{f.title} {f.details}" for f in report.findings).lower()
+            if isinstance(report, PRReviewReport)
+            else ""
+        )
+        has_zero_div_kw = any(
+            kw in finding_texts_check
+            for kw in ("zero", "division", "zerodivisionerror", "divide", "divisionbyzero")
+        )
+        status_match = isinstance(report, PRReviewReport) and len(report.findings) >= 1 and has_zero_div_kw
         blocker_recall = 1.0 if status_match else 0.0
 
     passed_all_assertions = False
