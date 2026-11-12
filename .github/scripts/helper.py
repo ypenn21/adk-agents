@@ -1355,16 +1355,9 @@ def extract_agent_usage_stats(
 
 def normalize_stop_reason(stop_reason: Any, default: str = "COMPLETED") -> str:
     """Normalizes an SDK StopReason enum or string while guarding against test mocks."""
-    if (
-        stop_reason is not None
-        and not hasattr(stop_reason, "_mock_name")
-        and type(stop_reason).__name__ not in ("MagicMock", "Mock", "AsyncMock")
-    ):
+    if stop_reason is not None and not _is_mock_object(stop_reason):
         stop_reason_val = getattr(stop_reason, "name", str(stop_reason))
-        if (
-            hasattr(stop_reason_val, "_mock_name")
-            or type(stop_reason_val).__name__ in ("MagicMock", "Mock", "AsyncMock")
-        ):
+        if _is_mock_object(stop_reason_val):
             return default
         return str(stop_reason_val)
     return default
