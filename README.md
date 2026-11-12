@@ -579,9 +579,36 @@ pytest tests/
   uv run pytest tests/test_database_session.py -k "test_normalize_db_url"
   ```
 
+#### 4. Running the CI/CD Agent & LLM Inference Evaluation Suite
+
+- **Run all Tier 1 & Tier 2 offline unit, contract, and cassette replay tests (zero network calls):**
+  ```bash
+  PYTHONPATH=. uv run pytest .github/scripts/tests/ -v
+  ```
+
+- **Run Tier 2 cassette replay & token telemetry pipeline tests specifically:**
+  ```bash
+  PYTHONPATH=. uv run pytest .github/scripts/tests/eval/test_replay_pipeline.py -v
+  ```
+
+- **Run Tier 3 live LLM inference evaluations against Vertex AI / Gemini:**
+  ```bash
+  mkdir -p reports
+  rm -f reports/eval-metrics.json reports/token-usage.json reports/quality-gate-token-usage.json
+  PYTHONPATH=.:.github/scripts:.github/scripts/tests/eval uv run pytest .github/scripts/tests/eval/ -m inference --run-inference --junitxml=reports/eval-results.xml -v
+  ```
+
+- **Generate the Evaluation Summary (`reports/eval-summary.json` & `reports/eval-summary.md`) and enforce threshold gates:**
+  ```bash
+  PYTHONPATH=.:.github/scripts:.github/scripts/tests/eval uv run python .github/scripts/tests/eval/eval_runner.py --generate-summary --output-dir reports --model gemini-3.7-flash
+  PYTHONPATH=.:.github/scripts:.github/scripts/tests/eval uv run python .github/scripts/tests/eval/eval_runner.py --fail-on-threshold-breach --output-dir reports --model gemini-3.7-flash
+  ```
+
 ---
 
 ### How the Tests Work
+
+#### Application & Database Session Tests (`tests/test_database_session.py`)
 
 The test suite in [`tests/test_database_session.py`](tests/test_database_session.py) validates the core session and database infrastructure required by Google ADK in Django:
 
@@ -602,6 +629,10 @@ The test suite in [`tests/test_database_session.py`](tests/test_database_session
 5. **Test Configuration & Environment Flagging**
    - Configured in [`pyproject.toml`](pyproject.toml) with `pythonpath = ["."]` so project modules are discoverable.
    - Sets `os.environ["DJANGO"] = "true"` to prevent `agent.py` from attempting to initialize standalone A2A Starlette server applications during unit test execution.
+
+#### LLM Inference Evaluation & Token Telemetry Pipeline (`.github/scripts/tests/`)
+
+For full details on the CI/CD agent evaluation suite, multi-level testing architecture, and token telemetry pipeline, see [`.github/CI_CD.md`](.github/CI_CD.md).
 
 ---
 

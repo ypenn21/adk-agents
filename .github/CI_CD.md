@@ -143,16 +143,18 @@ flowchart TD
 
 To prevent unexpected API spend and protect against runaway execution loops during multi-turn GitHub MCP interactions, the PR Reviewer Agent enforces proactive token budgets, invocation dials, and real-time cost telemetry.
 
-### 5.1 Pricing Rate Card (`gemini-3.7-flash` & `gemini-3.8-flash`)
+### 5.1 Pricing Rate Card (Gemini 3 Flash & Gemini 4 Models)
 
-The cost calculation engine in [`helper.py`](scripts/helper.py) utilizes Google Cloud Vertex AI rate cards for Gemini Flash models:
+The cost calculation engine (`MODEL_PRICING` in [`helper.py`](scripts/helper.py)) supports both the **Gemini 4** series (`gemini-4-argon`, `gemini-4-argon-cyber-permissive`, `gemini-4-carbon`, `gemini-4-carbon-cyber-permissive`) and the **Gemini 3 Flash** series (`gemini-3.8-flash`, `gemini-3.8-flash-cyber`, `gemini-3.7-flash`, `gemini-3.6-flash`, `gemini-3.5-flash`, `gemini-3.5-flash-lite`, `gemini-3.1-flash-lite`).
 
-| Metric Type | Rate per Million Tokens | Cost per Token | Description |
-| :--- | :--- | :--- | :--- |
-| **Uncached Input Prompt** | **$0.75 / 1M** | `$0.00000075` | Initial prompt and novel tokens sent to the model |
-| **Cached Input Prompt** | **$0.075 / 1M** | `$0.000000075` | Context-cached system prompt and multi-turn history (90% discount) |
-| **Candidate Output** | **$3.75 / 1M** | `$0.00000375` | Generated text and review findings |
-| **Reasoning / Thinking** | **$3.75 / 1M** | `$0.00000375` | Extended internal reasoning tokens (`thoughts_token_count`) |
+For per-model token rates across input, context caching, and output generation, refer to [Google Cloud Model Garden Pricing](https://cloud.google.com/model-garden/pricing).
+
+| Metric Type | Rate Key (`MODEL_PRICING`) | Description |
+| :--- | :--- | :--- |
+| **Uncached Input Prompt** | `input_per_m` | Initial prompt and novel tokens sent to the model (`max(0, prompt_tokens - cached_tokens)`) |
+| **Cached Input Prompt** | `cached_per_m` | Context-cached system prompt and multi-turn history |
+| **Candidate Output** | `output_per_m` | Generated text and review findings |
+| **Reasoning / Thinking** | `output_per_m` | Extended internal reasoning tokens (`thoughts_token_count`) |
 
 ---
 
@@ -644,9 +646,9 @@ The CI/CD pipeline and evaluation runner continuously track token consumption, i
 flowchart TD
     subgraph S1 ["1. SDK & Vertex AI Gemini"]
         direction TB
-        Agent["Antigravity Agent (Vertex AI Gemini)"]
-        RawUsage["agent.conversation.total_usage / response.usage_metadata"]
-        RawStop["response.stop_reason (COMPLETED / BUDGET_EXCEEDED)"]
+        Agent["Antigravity Agent (PR Reviewer & Quality Gate)"]
+        RawUsage["extract_agent_usage_stats():<br/>agent.conversation.total_usage -> response.usage_metadata / usage"]
+        RawStop["normalize_stop_reason():<br/>COMPLETED / FAIL_CLOSED_SKIP / ERROR_FALLBACK / BUDGET_EXCEEDED"]
         Agent --> RawUsage
         Agent --> RawStop
     end
@@ -654,60 +656,71 @@ flowchart TD
     subgraph S2 ["2. Cost Engine (helper.py)"]
         direction TB
         SpendFunc["calculate_token_spend()"]
-        PricingModel["Model Pricing: Prompt $0.75, Cached $0.075, Output $3.75 per 1M"]
+        PricingModel["MODEL_PRICING (Gemini 3 Flash & Gemini 4 Series)"]
         RawUsage --> SpendFunc
         PricingModel --> SpendFunc
     end
 
-    subgraph S3 ["3. Telemetry Persistence"]
+    subgraph S3 ["3. Agent Telemetry Persistence"]
         direction TB
-        TokenJSON["reports/token-usage.json"]
+        PRTokenJSON["reports/token-usage.json<br/>(PR Reviewer Agent)"]
+        QGTokenJSON["reports/quality-gate-token-usage.json &<br/>reports/telemetry/quality_gate_agent/token-usage.json"]
         JobSummary["$GITHUB_STEP_SUMMARY Markdown Table"]
-        SpendFunc --> TokenJSON
-        RawStop --> TokenJSON
-        TokenJSON --> JobSummary
+        SpendFunc --> PRTokenJSON
+        SpendFunc --> QGTokenJSON
+        RawStop --> PRTokenJSON
+        RawStop --> QGTokenJSON
+        PRTokenJSON --> JobSummary
     end
 
-    subgraph S4 ["4. Evaluation Telemetry (eval_runner.py)"]
+    subgraph S4 ["4. Evaluation Suite Telemetry (eval_runner.py)"]
         direction TB
-        JUnitXML["reports/eval-results.xml (Pytest execution duration)"]
-        Runner["eval_runner.py (parse_junit_xml_to_metrics / load_metrics_from_file)"]
-        EvalSummary["EvalSuiteSummary (Pass Rate, Recall, Schema, Cost, Latency)"]
-        JUnitXML --> Runner
+        EvalTests["test_inference_pr_reviewer.py &<br/>test_inference_quality_gate.py (try...finally)"]
+        EvalMetrics["reports/eval-metrics.json<br/>(record_eval_metric per case)"]
+        JUnitXML["reports/eval-results.xml<br/>(Backfill missing/crashed cases only)"]
+        Runner["eval_runner.py (run_summary_generation)"]
+        EvalSummary["EvalSuiteSummary (eval-summary.json, eval-summary.md, $GITHUB_STEP_SUMMARY)"]
+        PRTokenJSON --> EvalTests
+        QGTokenJSON --> EvalTests
+        EvalTests --> EvalMetrics
+        EvalMetrics --> Runner
+        JUnitXML -.-> Runner
         Runner --> EvalSummary
     end
 ```
 
 #### 1. Token Usage Extraction from Google Antigravity SDK
-During agent execution in [`.github/scripts/pr_reviewer_agent.py`](scripts/pr_reviewer_agent.py), the agent extracts runtime telemetry from the Google Antigravity SDK:
-* **Multi-Turn Session Usage**: Retrieved via `agent.conversation.total_usage`, capturing cumulative token metrics across multi-step tool iterations.
-* **Turn-Level Fallback**: Retrieved via `response.usage_metadata` on single-turn responses.
-* **Extracted Token Metrics**:
-  * `prompt_token_count`: Base input tokens processed by Gemini.
-  * `cached_content_token_count`: Context-cached tokens served from the Gemini prefix cache (discounted at 90%).
-  * `candidates_token_count`: Novel tokens generated in the model response.
-  * `thoughts_token_count`: Internal reasoning tokens produced by Gemini extended thinking.
-  * `total_token_count`: Aggregate tokens across input, cache, output, and thoughts.
-* **Stop Reason Telemetry**: Monitored via `response.stop_reason` to flag budget interruptions (`MAX_TOTAL_TOKENS_EXCEEDED`, `MAX_MODEL_CALLS_EXCEEDED`, `MAX_TOOL_CALLS_EXCEEDED`).
+During agent execution in [`.github/scripts/pr_reviewer_agent.py`](scripts/pr_reviewer_agent.py) and [`.github/scripts/quality_gate_agent.py`](scripts/quality_gate_agent.py), runtime telemetry is extracted via `helper.py::extract_agent_usage_stats()`:
+* **Multi-Turn Session Usage**: Retrieved first via `agent.conversation.total_usage`, capturing cumulative token metrics across multi-step tool iterations, and refreshed after `await response.structured_output()` completes so tokens generated during structured output parsing are included.
+* **Turn-Level Fallback**: Falls back to `response.usage_metadata` or `response.usage` whenever session `total_tokens == 0`, while ignoring `MagicMock` / `AsyncMock` objects in offline unit tests.
+* **Extracted Token Metrics** (supporting all SDK field aliases in `calculate_token_spend()`):
+  * `prompt_tokens` (`prompt_token_count`, `input_token_count`, `input_tokens`): Base input tokens processed by Gemini.
+  * `cached_tokens` (`cached_content_token_count`, `cached_token_count`, `cache_read_input_tokens`): Context-cached tokens served from the Gemini prefix cache.
+  * `candidate_tokens` (`candidates_token_count`, `output_token_count`, `output_tokens`, `completion_tokens`): Novel tokens generated in the model response.
+  * `thought_tokens` (`thoughts_token_count`, `thinking_token_count`, `thinking_tokens`, `reasoning_tokens`): Internal reasoning tokens produced by Gemini extended thinking.
+  * `total_tokens` (`total_token_count`, `total_tokens`): Aggregate tokens across input, cache, output, and thoughts.
+* **Stop Reason Telemetry**: Normalized via `helper.py::normalize_stop_reason()` from `response.stop_reason` to record completion states (`COMPLETED`), deterministic fail-closed skips (`FAIL_CLOSED_SKIP`), exception fallbacks (`ERROR_FALLBACK`), and budget interruptions (`MAX_TOTAL_TOKENS_EXCEEDED`, `MAX_MODEL_CALLS_EXCEEDED`, `MAX_TOOL_CALLS_EXCEEDED`).
 
 #### 2. Cost Calculation Engine (`helper.py`)
-In [`.github/scripts/helper.py`](scripts/helper.py) via `calculate_token_spend()`, token counts are mapped to Vertex AI rate cards:
+In [`.github/scripts/helper.py`](scripts/helper.py) via `calculate_token_spend()`, token counts are mapped to the per-model rates in `MODEL_PRICING` ([Google Cloud Model Garden Pricing](https://cloud.google.com/model-garden/pricing)):
 
 1. **Net Novel Input Calculation**:
    $$\text{net\_input} = \max(0, \text{prompt\_tokens} - \text{cached\_tokens})$$
    Accounts for multi-turn cache accumulation to prevent negative novel input token values.
 
-2. **Vertex AI Gemini Flash Pricing Formula**:
-   $$\text{Cost} = \left(\text{net\_input} \times \frac{\$0.75}{10^6}\right) + \left(\text{cached\_tokens} \times \frac{\$0.075}{10^6}\right) + \left((\text{candidate\_tokens} + \text{thought\_tokens}) \times \frac{\$3.75}{10^6}\right)$$
+2. **Model-Aware Pricing Formula**:
+   $$\text{Cost} = \left(\text{net\_input} \times \frac{\text{input\_per\_m}}{10^6}\right) + \left(\text{cached\_tokens} \times \frac{\text{cached\_per\_m}}{10^6}\right) + \left((\text{candidate\_tokens} + \text{thought\_tokens}) \times \frac{\text{output\_per\_m}}{10^6}\right)$$
 
 #### 3. Structured Artifact Persistence & CI Job Summaries
-* **`reports/token-usage.json`**: Generated by `helper.py::write_token_usage_report()`, recording model identifier, token breakdowns, cost in USD rounded to 6 decimal places, stop reason, and budget thresholds.
+* **`reports/token-usage.json`**: Generated by `pr_reviewer_agent.py` via `helper.py::write_token_usage_report()`, recording model identifier, token breakdowns, cost in USD rounded to 6 decimal places, stop reason, and budget thresholds.
+* **`reports/quality-gate-token-usage.json` & `reports/telemetry/quality_gate_agent/token-usage.json`**: Generated by `quality_gate_agent.py` via `_write_quality_gate_token_reports()` across all exit paths (normal completion, `FAIL_CLOSED_SKIP`, and `ERROR_FALLBACK`) without overwriting the PR Reviewer's `reports/token-usage.json`.
 * **GitHub Actions Job Summary**: Rendered into `$GITHUB_STEP_SUMMARY` by [`.github/scripts/generate_job_summary.py`](scripts/generate_job_summary.py) as a markdown table displaying token volume, cache hit ratio, and approximate spend for developer visibility.
 
 #### 4. Evaluation Suite Telemetry (`eval_runner.py`)
-In [`.github/scripts/tests/eval/eval_runner.py`](scripts/tests/eval/eval_runner.py):
-* **Latency Telemetry**: Extracted from Pytest JUnit XML (`reports/eval-results.xml`) via the `time` attribute of each `<testcase>` element, computing the average latency across evaluated cases.
-* **Metrics Aggregation**: Synthesizes pass rates, schema validity (decoupled from semantic assertions by inspecting failure stack traces for `ValidationError`), defect recall, and false positive rates into `EvalSuiteSummary`.
+In [`.github/scripts/tests/eval/test_inference_pr_reviewer.py`](scripts/tests/eval/test_inference_pr_reviewer.py), [`.github/scripts/tests/eval/test_inference_quality_gate.py`](scripts/tests/eval/test_inference_quality_gate.py), and [`.github/scripts/tests/eval/eval_runner.py`](scripts/tests/eval/eval_runner.py):
+* **Per-Case Telemetry Recording (`reports/eval-metrics.json`)**: Each live inference test unlinks stale token usage files before running, measures wall-clock `duration_seconds`, reads the agent's token usage report (`reports/token-usage.json` or `reports/quality-gate-token-usage.json`), and calls `record_eval_metric()` inside a `try...finally` block so token usage, cost, latency, and assertion outcomes are persisted whether assertions pass or fail.
+* **Non-Destructive JUnit XML Backfill**: `run_summary_generation()` loads `reports/eval-metrics.json` first and only backfills missing `(case_id, agent_target)` entries from `reports/eval-results.xml` if a test crashed before reaching `record_eval_metric()`.
+* **Single Step Summary Publication**: `publish_step_summary` ensures `$GITHUB_STEP_SUMMARY` is written once during `--generate-summary` and not duplicated during the subsequent `--fail-on-threshold-breach` gate check.
 
 ---
 
