@@ -1169,15 +1169,62 @@ def parse_agent_structured_output(raw_output: Any, schema_cls: type[T]) -> T:
 # =====================================================================
 
 MODEL_PRICING: dict[str, dict[str, float]] = {
+    # Gemini 4 series (Global Standard Model — https://cloud.google.com/model-garden/pricing)
+    "gemini-4-argon": {
+        "input_per_m": 2.00,
+        "output_per_m": 10.00,
+        "cached_per_m": 0.10,
+    },
+    "gemini-4-argon-cyber-permissive": {
+        "input_per_m": 4.00,
+        "output_per_m": 20.00,
+        "cached_per_m": 0.20,
+    },
+    "gemini-4-carbon": {
+        "input_per_m": 2.00,
+        "output_per_m": 10.00,
+        "cached_per_m": 0.10,
+    },
+    "gemini-4-carbon-cyber-permissive": {
+        "input_per_m": 4.00,
+        "output_per_m": 20.00,
+        "cached_per_m": 0.20,
+    },
+    # Gemini 3 Flash series (Global Standard Model — https://cloud.google.com/model-garden/pricing)
+    "gemini-3.8-flash": {
+        "input_per_m": 0.75,
+        "output_per_m": 3.75,
+        "cached_per_m": 0.075,
+    },
+    "gemini-3.8-flash-cyber": {
+        "input_per_m": 1.50,
+        "output_per_m": 7.50,
+        "cached_per_m": 0.15,
+    },
     "gemini-3.7-flash": {
         "input_per_m": 0.75,
         "output_per_m": 3.75,
         "cached_per_m": 0.075,
     },
-    "gemini-3.8-flash": {
+    "gemini-3.6-flash": {
         "input_per_m": 0.75,
         "output_per_m": 3.75,
         "cached_per_m": 0.075,
+    },
+    "gemini-3.5-flash": {
+        "input_per_m": 1.50,
+        "output_per_m": 9.00,
+        "cached_per_m": 0.15,
+    },
+    "gemini-3.5-flash-lite": {
+        "input_per_m": 0.30,
+        "output_per_m": 2.50,
+        "cached_per_m": 0.03,
+    },
+    "gemini-3.1-flash-lite": {
+        "input_per_m": 0.25,
+        "output_per_m": 1.50,
+        "cached_per_m": 0.025,
     },
     "default": {
         "input_per_m": 0.75,
@@ -1265,6 +1312,11 @@ def calculate_token_spend(
     }
 
 
+def _is_mock_object(obj: Any) -> bool:
+    """Returns True if obj appears to be a unittest.mock object."""
+    return hasattr(obj, "_mock_name") or type(obj).__name__ in ("MagicMock", "Mock", "AsyncMock")
+
+
 def extract_agent_usage_stats(
     agent: Any,
     response: Any,
@@ -1288,15 +1340,12 @@ def extract_agent_usage_stats(
 
     conv = getattr(agent, "conversation", None)
     raw_usage = getattr(conv, "total_usage", None) if conv is not None else None
-def _is_mock_object(obj: Any) -> bool:
-    """Returns True if obj appears to be a unittest.mock object."""
-    return hasattr(obj, "_mock_name") or type(obj).__name__ in ("MagicMock", "Mock", "AsyncMock")
-
+    if raw_usage is not None and not _is_mock_object(raw_usage):
         stats = calculate_token_spend(raw_usage, model_name)
 
     if stats.get("total_tokens", 0) == 0:
         resp_usage = getattr(response, "usage_metadata", None) or getattr(response, "usage", None)
-        if resp_usage is not None and not hasattr(resp_usage, "_mock_name") and type(resp_usage).__name__ not in ("MagicMock", "Mock", "AsyncMock"):
+        if resp_usage is not None and not _is_mock_object(resp_usage):
             resp_stats = calculate_token_spend(resp_usage, model_name)
             if resp_stats.get("total_tokens", 0) > 0:
                 stats = resp_stats

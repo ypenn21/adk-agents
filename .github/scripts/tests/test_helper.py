@@ -511,6 +511,19 @@ def test_calculate_token_spend_standard_usage():
     stats_dict = helper.calculate_token_spend(usage_dict, "gemini-3.8-flash")
     assert stats_dict["total_cost_usd"] == 0.1515
 
+    # Gemini 4 Argon pricing: $2.00/1M input, $0.10/1M cached, $10.00/1M output
+    # 100k net uncached * 2.00 / 1M = 0.20
+    # 20k cached * 0.10 / 1M = 0.002
+    # 20k output (10k candidate + 10k thought) * 10.00 / 1M = 0.20
+    # Total spend = 0.402
+    stats_argon = helper.calculate_token_spend(usage, "gemini-4-argon")
+    assert stats_argon["total_cost_usd"] == 0.402
+
+    # Gemini 3.5 Flash pricing: $1.50/1M input, $0.15/1M cached, $9.00/1M output
+    # 100k * 1.50 / 1M (0.15) + 20k * 0.15 / 1M (0.003) + 20k * 9.00 / 1M (0.18) = 0.333
+    stats_35_flash = helper.calculate_token_spend(usage, "gemini-3.5-flash")
+    assert stats_35_flash["total_cost_usd"] == 0.333
+
 
 def test_calculate_token_spend_empty_or_none():
     """Decision D-13: Safely handles None or empty usage objects with 0 costs."""
