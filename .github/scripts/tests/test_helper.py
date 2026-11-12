@@ -511,6 +511,19 @@ def test_calculate_token_spend_standard_usage():
     stats_dict = helper.calculate_token_spend(usage_dict, "gemini-3.8-flash")
     assert stats_dict["total_cost_usd"] == 0.1515
 
+    # Gemini 4 Argon pricing: $2.00/1M input, $0.10/1M cached, $10.00/1M output
+    # 100k net uncached * 2.00 / 1M = 0.20
+    # 20k cached * 0.10 / 1M = 0.002
+    # 20k output (10k candidate + 10k thought) * 10.00 / 1M = 0.20
+    # Total spend = 0.402
+    stats_argon = helper.calculate_token_spend(usage, "gemini-4-argon")
+    assert stats_argon["total_cost_usd"] == 0.402
+
+    # Gemini 3.5 Flash pricing: $1.50/1M input, $0.15/1M cached, $9.00/1M output
+    # 100k * 1.50 / 1M (0.15) + 20k * 0.15 / 1M (0.003) + 20k * 9.00 / 1M (0.18) = 0.333
+    stats_35_flash = helper.calculate_token_spend(usage, "gemini-3.5-flash")
+    assert stats_35_flash["total_cost_usd"] == 0.333
+
 
 def test_calculate_token_spend_empty_or_none():
     """Decision D-13: Safely handles None or empty usage objects with 0 costs."""
@@ -1019,5 +1032,23 @@ def test_resolve_env_config_batch_cli_priority(monkeypatch):
     assert cfg["batch_max_files"] == 10
     assert cfg["batch_max_tokens"] == 30_000
     assert cfg["max_review_files_cap"] == 50
+
+
+def test_extract_agent_usage_stats_magicmock_fallback_to_usage():
+    """Falls back to response.usage when response is a MagicMock with unset usage_metadata."""
+    mock_agent = MagicMock()
+    mock_response = MagicMock()
+    mock_response.usage = {
+        "prompt_tokens": 250,
+        "candidate_tokens": 50,
+        "total_tokens": 300,
+    }
+
+    stats = helper.extract_agent_usage_stats(mock_agent, mock_response, "gemini-3.7-flash")
+    assert stats["prompt_tokens"] == 250
+    assert stats["candidate_tokens"] == 50
+    assert stats["total_tokens"] == 300
+    assert stats["total_cost_usd"] > 0
+
 
 

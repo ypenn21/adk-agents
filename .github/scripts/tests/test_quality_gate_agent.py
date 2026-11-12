@@ -456,3 +456,183 @@ async def test_evaluate_quality_gate_model_selection_explicit_arg(tmp_path, monk
 
     assert captured_config.model == "gemini-custom-model"
 
+
+@pytest.mark.asyncio
+async def test_evaluate_quality_gate_writes_token_usage_report_success(tmp_path, monkeypatch):
+    """Validates that evaluate_quality_gate writes token usage and USD spend from total_usage."""
+    monkeypatch.chdir(tmp_path)
+    reports_dir = tmp_path / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+
+    pii_scan = reports_dir / "pii-scan.txt"
+    pii_scan.write_text("No findings", encoding="utf-8")
+    (reports_dir / "pr-review.txt").write_text("Clean review", encoding="utf-8")
+
+    expected_decision = QualityGateDecision(
+        passed=True,
+        summary="All quality and security criteria passed cleanly.",
+        failures=[],
+    )
+
+    mock_response = MagicMock()
+    mock_response.stop_reason = "COMPLETED"
+    mock_response.structured_output = AsyncMock(return_value=expected_decision)
+
+    mock_conversation = MagicMock()
+    mock_conversation.total_usage = {
+        "prompt_token_count": 1200,
+        "cached_content_token_count": 200,
+        "candidates_token_count": 150,
+        "thoughts_token_count": 50,
+        "total_token_count": 1400,
+    }
+
+    mock_agent_instance = MagicMock()
+    mock_agent_instance.conversation = mock_conversation
+    mock_agent_instance.__aenter__ = AsyncMock(return_value=mock_agent_instance)
+    mock_agent_instance.__aexit__ = AsyncMock(return_value=None)
+    mock_agent_instance.chat = AsyncMock(return_value=mock_response)
+
+    with patch.object(quality_gate_agent, "Agent", return_value=mock_agent_instance):
+        decision = await evaluate_quality_gate(
+            pii_report_path=str(pii_scan),
+            pr_review_path=str(reports_dir / "pr-review.txt"),
+            project_id="test-project",
+            location="us-central1",
+            pr_number="10",
+        )
+
+    assert decision.passed is True
+    token_usage_file = tmp_path / "reports" / "quality-gate-token-usage.json"
+    assert token_usage_file.exists()
+    data = json.loads(token_usage_file.read_text(encoding="utf-8"))
+
+    assert data["prompt_tokens"] == 1200
+    assert data["cached_tokens"] == 200
+    assert data["candidate_tokens"] == 150
+    assert data["thought_tokens"] == 50
+    assert data["total_tokens"] == 1400
+    assert data["total_cost_usd"] > 0.0
+    assert data["stop_reason"] == "COMPLETED"
+
+    telemetry_usage_file = tmp_path / "reports" / "telemetry" / "quality_gate_agent" / "token-usage.json"
+    assert telemetry_usage_file.exists()
+    telemetry_data = json.loads(telemetry_usage_file.read_text(encoding="utf-8"))
+    assert telemetry_data["total_tokens"] == 1400
+
+
+@pytest.mark.asyncio
+async def test_evaluate_quality_gate_writes_token_usage_from_response_usage_metadata(tmp_path, monkeypatch):
+    """Validates fallback to response.usage_metadata when conversation total_usage is empty."""
+    monkeypatch.chdir(tmp_path)
+    reports_dir = tmp_path / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+
+    pii_scan = reports_dir / "pii-scan.txt"
+    pii_scan.write_text("No findings", encoding="utf-8")
+    (reports_dir / "pr-review.txt").write_text("Clean review", encoding="utf-8")
+
+    expected_decision = QualityGateDecision(
+        passed=True,
+        summary="All quality and security criteria passed cleanly.",
+        failures=[],
+    )
+
+    mock_response = MagicMock()
+    mock_response.stop_reason = "COMPLETED"
+    mock_response.usage_metadata = {
+        "input_token_count": 800,
+        "cached_token_count": 100,
+        "output_token_count": 120,
+        "thinking_token_count": 30,
+        "total_token_count": 950,
+    }
+    mock_response.structured_output = AsyncMock(return_value=expected_decision)
+
+    mock_agent_instance = MagicMock()
+    mock_agent_instance.conversation = None
+    mock_agent_instance.__aenter__ = AsyncMock(return_value=mock_agent_instance)
+    mock_agent_instance.__aexit__ = AsyncMock(return_value=None)
+    mock_agent_instance.chat = AsyncMock(return_value=mock_response)
+
+    with patch.object(quality_gate_agent, "Agent", return_value=mock_agent_instance):
+        decision = await evaluate_quality_gate(
+            pii_report_path=str(pii_scan),
+            pr_review_path=str(reports_dir / "pr-review.txt"),
+            project_id="test-project",
+            location="us-central1",
+            pr_number="10",
+        )
+
+    assert decision.passed is True
+    token_usage_file = tmp_path / "reports" / "quality-gate-token-usage.json"
+    assert token_usage_file.exists()
+    data = json.loads(token_usage_file.read_text(encoding="utf-8"))
+
+    assert data["prompt_tokens"] == 800
+    assert data["cached_tokens"] == 100
+    assert data["candidate_tokens"] == 120
+    assert data["thought_tokens"] == 30
+    assert data["total_tokens"] == 950
+    assert data["total_cost_usd"] > 0.0
+
+
+@pytest.mark.asyncio
+async def test_evaluate_quality_gate_fail_closed_dlp_writes_zero_token_report(tmp_path, monkeypatch):
+    """Validates that fail-closed on missing DLP scan report writes 0-token FAIL_CLOSED_SKIP report."""
+    monkeypatch.chdir(tmp_path)
+    reports_dir = tmp_path / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+
+    non_existent_pii = str(reports_dir / "non-existent-pii.txt")
+
+    decision = await evaluate_quality_gate(
+        pii_report_path=non_existent_pii,
+        pr_review_path=str(reports_dir / "pr-review.txt"),
+        project_id="test-project",
+        location="us-central1",
+        pr_number="10",
+    )
+
+    assert decision.passed is False
+    token_usage_file = tmp_path / "reports" / "quality-gate-token-usage.json"
+    assert token_usage_file.exists()
+    data = json.loads(token_usage_file.read_text(encoding="utf-8"))
+
+    assert data["stop_reason"] == "FAIL_CLOSED_SKIP"
+    assert data["total_tokens"] == 0
+    assert data["total_cost_usd"] == 0.0
+
+
+@pytest.mark.asyncio
+async def test_evaluate_quality_gate_error_fallback_writes_zero_token_report(tmp_path, monkeypatch):
+    """Validates that exception during agent execution writes 0-token ERROR_FALLBACK report."""
+    monkeypatch.chdir(tmp_path)
+    reports_dir = tmp_path / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+
+    pii_scan = reports_dir / "pii-scan.txt"
+    pii_scan.write_text("No findings", encoding="utf-8")
+    (reports_dir / "pr-review.txt").write_text("Clean review", encoding="utf-8")
+
+    mock_agent_instance = MagicMock()
+    mock_agent_instance.__aenter__ = AsyncMock(side_effect=RuntimeError("Vertex AI unavailable"))
+
+    with patch.object(quality_gate_agent, "Agent", return_value=mock_agent_instance):
+        decision = await evaluate_quality_gate(
+            pii_report_path=str(pii_scan),
+            pr_review_path=str(reports_dir / "pr-review.txt"),
+            project_id="test-project",
+            location="us-central1",
+            pr_number="10",
+        )
+
+    token_usage_file = tmp_path / "reports" / "quality-gate-token-usage.json"
+    assert token_usage_file.exists()
+    data = json.loads(token_usage_file.read_text(encoding="utf-8"))
+
+    assert data["stop_reason"] == "ERROR_FALLBACK"
+    assert data["total_tokens"] == 0
+    assert data["total_cost_usd"] == 0.0
+
+

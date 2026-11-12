@@ -26,6 +26,10 @@ from helper import (
     ensure_directory,
     read_text_file,
     parse_agent_structured_output,
+    calculate_token_spend,
+    write_token_usage_report,
+    extract_agent_usage_stats,
+    normalize_stop_reason,
 )
 from prompt_loader import load_prompt_bundle
 
@@ -100,6 +104,27 @@ def build_quality_gate_prompt(
     )
 
 
+def _write_quality_gate_token_reports(
+    model: str,
+    stop_reason: str,
+    prompt_metadata: Optional[dict] = None,
+    usage_data: Optional[dict] = None,
+) -> None:
+    """Writes token usage telemetry to both quality gate report locations."""
+    resolved_usage = usage_data if usage_data is not None else calculate_token_spend(None, model)
+    for output_path in (
+        "reports/quality-gate-token-usage.json",
+        "reports/telemetry/quality_gate_agent/token-usage.json",
+    ):
+        write_token_usage_report(
+            usage_data=resolved_usage,
+            stop_reason=stop_reason,
+            output_path=output_path,
+            model=model,
+            prompt_metadata=prompt_metadata,
+        )
+
+
 async def evaluate_quality_gate(
     pii_report_path: str = "reports/pii-scan.txt",
     pr_review_path: str = "reports/pr-review.txt",
@@ -145,6 +170,11 @@ async def evaluate_quality_gate(
             ],
         )
         write_gate_reports(decision, prompt_metadata=prompt_metadata_audit)
+        _write_quality_gate_token_reports(
+            model=cfg["model"],
+            stop_reason="FAIL_CLOSED_SKIP",
+            prompt_metadata=prompt_metadata_audit,
+        )
         return decision
 
     pii_content = read_text_file(pii_report_path)
@@ -168,6 +198,11 @@ async def evaluate_quality_gate(
                 ],
             )
             write_gate_reports(decision, prompt_metadata=prompt_metadata_audit)
+            _write_quality_gate_token_reports(
+                model=cfg["model"],
+                stop_reason="FAIL_CLOSED_SKIP",
+                prompt_metadata=prompt_metadata_audit,
+            )
             return decision
     else:
         pr_review_content = read_text_file(pr_review_path)
@@ -213,6 +248,7 @@ async def evaluate_quality_gate(
         )
 
     # 4. Attempt to invoke Antigravity SDK Agent
+    usage_stats = None
     try:
         prompt = bundle.render_user_prompt(
             pii_content=pii_content,
@@ -229,13 +265,57 @@ async def evaluate_quality_gate(
         )
         async with Agent(config) as agent:
             response = await agent.chat(prompt)
+            if hasattr(response, "chunks") and hasattr(response.chunks, "__aiter__"):
+                try:
+                    async for _ in response.chunks:
+                        pass
+                except Exception as stream_err:
+                    # Non-fatal: continue to response.structured_output() even if chunk streaming fails
+                    print(f"[Warning streaming chunks: {stream_err}]", flush=True)
+
+            usage_stats = extract_agent_usage_stats(agent, response, cfg["model"])
             raw_output = await response.structured_output()
+            usage_stats = extract_agent_usage_stats(agent, response, cfg["model"])
             decision = parse_agent_structured_output(raw_output, QualityGateDecision)
+
+            stop_reason_str = normalize_stop_reason(
+                getattr(response, "stop_reason", None), default="COMPLETED"
+            )
+
+            _write_quality_gate_token_reports(
+                model=cfg["model"],
+                stop_reason=stop_reason_str,
+                prompt_metadata=prompt_metadata_audit,
+                usage_data=usage_stats,
+            )
+
+            print("\n" + "=" * 60, flush=True)
+            print("📊 QUALITY GATE TOKEN USAGE & ESTIMATED SPEND", flush=True)
+            print("=" * 60, flush=True)
+            print(f"Model: {cfg['model']}")
+            print(f"Prompt Tokens (Uncached): {max(0, usage_stats['prompt_tokens'] - usage_stats['cached_tokens']):,}")
+            print(f"Cached Tokens: {usage_stats['cached_tokens']:,}")
+            print(f"Candidate Tokens: {usage_stats['candidate_tokens']:,}")
+            print(f"Reasoning / Thought Tokens: {usage_stats['thought_tokens']:,}")
+            print(f"Total Tokens: {usage_stats['total_tokens']:,}")
+            print(f"Estimated Spend: ${usage_stats['total_cost_usd']:.6f} USD")
+            print(f"Stop Reason: {stop_reason_str}")
+            print("=" * 60 + "\n", flush=True)
+
             write_gate_reports(decision, prompt_metadata=prompt_metadata_audit)
             return decision
-    except Exception:
+    except Exception as exc:
         # Fallback to deterministic evaluation
-        pass
+        print(
+            f"[WARNING] Quality gate agent invocation failed, falling back to deterministic evaluation: {exc}",
+            file=sys.stderr,
+        )
+        _write_quality_gate_token_reports(
+            model=cfg["model"],
+            stop_reason="ERROR_FALLBACK",
+            prompt_metadata=prompt_metadata_audit,
+            usage_data=usage_stats,
+        )
 
     if failures:
         decision = QualityGateDecision(
