@@ -29,6 +29,7 @@ from helper import (
     calculate_token_spend,
     write_token_usage_report,
     extract_agent_usage_stats,
+    normalize_stop_reason,
 )
 from prompt_loader import load_prompt_bundle
 
@@ -276,13 +277,9 @@ async def evaluate_quality_gate(
             usage_stats = extract_agent_usage_stats(agent, response, cfg["model"])
             decision = parse_agent_structured_output(raw_output, QualityGateDecision)
 
-            stop_reason = getattr(response, "stop_reason", None)
-            if stop_reason is not None and not hasattr(stop_reason, "_mock_name") and type(stop_reason).__name__ not in ("MagicMock", "Mock", "AsyncMock"):
-                stop_reason_str = getattr(stop_reason, "name", str(stop_reason))
-                if hasattr(stop_reason_str, "_mock_name") or type(stop_reason_str).__name__ in ("MagicMock", "Mock", "AsyncMock"):
-                    stop_reason_str = "COMPLETED"
-            else:
-                stop_reason_str = "COMPLETED"
+            stop_reason_str = normalize_stop_reason(
+                getattr(response, "stop_reason", None), default="COMPLETED"
+            )
 
             _write_quality_gate_token_reports(
                 model=cfg["model"],

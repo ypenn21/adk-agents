@@ -1301,6 +1301,23 @@ def extract_agent_usage_stats(
     return stats
 
 
+def normalize_stop_reason(stop_reason: Any, default: str = "COMPLETED") -> str:
+    """Normalizes an SDK StopReason enum or string while guarding against test mocks."""
+    if (
+        stop_reason is not None
+        and not hasattr(stop_reason, "_mock_name")
+        and type(stop_reason).__name__ not in ("MagicMock", "Mock", "AsyncMock")
+    ):
+        stop_reason_val = getattr(stop_reason, "name", str(stop_reason))
+        if (
+            hasattr(stop_reason_val, "_mock_name")
+            or type(stop_reason_val).__name__ in ("MagicMock", "Mock", "AsyncMock")
+        ):
+            return default
+        return str(stop_reason_val)
+    return default
+
+
 def write_token_usage_report(
     usage_data: dict[str, Any],
     stop_reason: Optional[str] = None,
@@ -1319,12 +1336,7 @@ def write_token_usage_report(
         budget_limits: Dict of configured budget thresholds.
         prompt_metadata: Optional dict of prompt template audit telemetry.
     """
-    if stop_reason is not None and not hasattr(stop_reason, "_mock_name") and type(stop_reason).__name__ not in ("MagicMock", "Mock", "AsyncMock"):
-        stop_reason_val = getattr(stop_reason, "name", str(stop_reason))
-        if hasattr(stop_reason_val, "_mock_name") or type(stop_reason_val).__name__ in ("MagicMock", "Mock", "AsyncMock"):
-            stop_reason_val = "COMPLETED"
-    else:
-        stop_reason_val = "COMPLETED"
+    stop_reason_val = normalize_stop_reason(stop_reason, default="COMPLETED")
 
     if "budget_exceeded" in usage_data:
         budget_exceeded = bool(usage_data["budget_exceeded"])

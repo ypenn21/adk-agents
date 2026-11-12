@@ -36,6 +36,7 @@ from helper import (
     calculate_token_spend,
     write_token_usage_report,
     extract_agent_usage_stats,
+    normalize_stop_reason,
     sanitize_and_validate_repo,
     fetch_pr_modified_lines,
     fetch_pr_comments,
@@ -311,14 +312,8 @@ async def review_batch_with_isolated_context(
 
         # Inspect stop_reason and budget limits (Decisions D-13, D-14)
         raw_stop_reason = getattr(response, "stop_reason", None)
-        if raw_stop_reason is not None and not hasattr(raw_stop_reason, "_mock_name") and type(raw_stop_reason).__name__ not in ("MagicMock", "Mock", "AsyncMock"):
-            stop_reason = raw_stop_reason
-            stop_reason_str = getattr(stop_reason, "name", str(stop_reason))
-            if hasattr(stop_reason_str, "_mock_name") or type(stop_reason_str).__name__ in ("MagicMock", "Mock", "AsyncMock"):
-                stop_reason_str = ""
-        else:
-            stop_reason = None
-            stop_reason_str = ""
+        stop_reason_str = normalize_stop_reason(raw_stop_reason, default="")
+        stop_reason = raw_stop_reason if stop_reason_str else None
 
         budget_halted = False
         if stop_reason is not None:

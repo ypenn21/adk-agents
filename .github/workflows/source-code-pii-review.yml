@@ -20,7 +20,7 @@ env:
   GOOGLE_CLOUD_PROJECT_NUMBER: ${{ secrets.GOOGLE_CLOUD_PROJECT_NUMBER || vars.GCP_PROJECT_NUMBER }}
   GOOGLE_GENAI_USE_VERTEXAI: 'true'
   GOOGLE_CLOUD_LOCATION: ${{ secrets.GOOGLE_CLOUD_LOCATION || 'us-central1' }}
-  LLM_Model: ${{ vars.LLM_MODEL || vars.LLM_Model || secrets.LLM_MODEL || secrets.LLM_Model || 'gemini-3.8-flash' }}
+  LLM_Model: ${{ vars.LLM_MODEL || vars.LLM_Model || secrets.LLM_MODEL || secrets.LLM_Model || 'gemini-3.7-flash' }}
   MAX_TOTAL_TOKENS: ${{ vars.MAX_TOTAL_TOKENS || secrets.MAX_TOTAL_TOKENS || '1100000' }}
   MAX_INPUT_TOKENS: ${{ vars.MAX_INPUT_TOKENS || secrets.MAX_INPUT_TOKENS || '800000' }}
   MAX_OUTPUT_TOKENS: ${{ vars.MAX_OUTPUT_TOKENS || secrets.MAX_OUTPUT_TOKENS || '200000' }}
