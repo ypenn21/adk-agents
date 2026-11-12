@@ -93,8 +93,11 @@ async def test_live_inference_quality_gate(
     else:
         pytest.fail(f"Unknown test case scenario: {case_id}")
 
-    # Unlink stale quality gate token usage file
-    Path("reports/quality-gate-token-usage.json").unlink(missing_ok=True)
+    # Unlink stale quality gate token usage files (primary and fallback paths)
+    qg_usage_path = Path("reports/quality-gate-token-usage.json")
+    qg_telemetry_path = Path("reports/telemetry/quality_gate_agent/token-usage.json")
+    qg_usage_path.unlink(missing_ok=True)
+    qg_telemetry_path.unlink(missing_ok=True)
     start_time = time.monotonic()
 
     decision = await evaluate_quality_gate(
@@ -110,8 +113,6 @@ async def test_live_inference_quality_gate(
 
     # Read token telemetry report written by quality_gate_agent
     usage_data: dict[str, Any] = {}
-    qg_usage_path = Path("reports/quality-gate-token-usage.json")
-    qg_telemetry_path = Path("reports/telemetry/quality_gate_agent/token-usage.json")
     if qg_usage_path.exists():
         try:
             with open(qg_usage_path, "r", encoding="utf-8") as f:
