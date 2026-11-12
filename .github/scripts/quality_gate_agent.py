@@ -14,11 +14,10 @@ from typing import Optional
 from pydantic import BaseModel, Field, model_validator
 
 try:
-    from google.antigravity import Agent, LocalAgentConfig, types
+    from google.antigravity import Agent, LocalAgentConfig
 except ImportError:
     Agent = None
     LocalAgentConfig = None
-    types = None
 
 from helper import (
     format_text_decision,
@@ -248,6 +247,7 @@ async def evaluate_quality_gate(
         )
 
     # 4. Attempt to invoke Antigravity SDK Agent
+    usage_stats = None
     try:
         prompt = bundle.render_user_prompt(
             pii_content=pii_content,
@@ -271,10 +271,11 @@ async def evaluate_quality_gate(
                 except Exception:
                     pass
 
+            usage_stats = extract_agent_usage_stats(agent, response, cfg["model"])
             raw_output = await response.structured_output()
+            usage_stats = extract_agent_usage_stats(agent, response, cfg["model"])
             decision = parse_agent_structured_output(raw_output, QualityGateDecision)
 
-            usage_stats = extract_agent_usage_stats(agent, response, cfg["model"])
             stop_reason = getattr(response, "stop_reason", None)
             if stop_reason is not None and not hasattr(stop_reason, "_mock_name") and type(stop_reason).__name__ not in ("MagicMock", "Mock", "AsyncMock"):
                 stop_reason_str = getattr(stop_reason, "name", str(stop_reason))
@@ -311,6 +312,7 @@ async def evaluate_quality_gate(
             model=cfg["model"],
             stop_reason="ERROR_FALLBACK",
             prompt_metadata=prompt_metadata_audit,
+            usage_data=usage_stats,
         )
 
     if failures:
