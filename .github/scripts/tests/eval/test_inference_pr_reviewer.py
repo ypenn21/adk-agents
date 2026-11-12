@@ -6,10 +6,12 @@ models on Vertex AI. Gated behind the --run-inference pytest CLI flag.
 
 from __future__ import annotations
 
+import json
 import os
 import sys
+import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 from unittest.mock import patch
 
 import pytest
@@ -18,6 +20,11 @@ import pytest
 _scripts_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 if _scripts_dir not in sys.path:
     sys.path.insert(0, _scripts_dir)
+
+# Ensure .github/scripts/tests/eval is on sys.path
+_eval_dir = os.path.abspath(os.path.dirname(__file__))
+if _eval_dir not in sys.path:
+    sys.path.insert(0, _eval_dir)
 
 import pr_reviewer_agent
 from pr_reviewer_agent import (
@@ -31,12 +38,18 @@ from pr_reviewer_agent import (
     run_pr_review,
 )
 
-# Guarded imports from evalset_schema and mock_mcp_server (Stream 1/2 integration)
+# Guarded imports from evalset_schema and eval_runner (Stream 1/2 integration)
 try:
-    from evalset_schema import EvalCase, ExpectedReviewAssertion
+    from evalset_schema import EvalCase, ExpectedReviewAssertion, EvalRunMetric
 except ImportError:
     EvalCase = None  # type: ignore
     ExpectedReviewAssertion = None  # type: ignore
+    EvalRunMetric = None  # type: ignore
+
+try:
+    from eval_runner import record_eval_metric
+except ImportError:
+    record_eval_metric = None  # type: ignore
 
 try:
     from mock_mcp_server import create_mock_github_mcp_server
@@ -112,6 +125,10 @@ async def test_live_inference_pr_reviewer(
         else patch("pr_reviewer_agent.create_github_mcp_server", return_value=None)
     )
 
+    # Unlink stale token usage file to prevent cross-run telemetry bleed
+    Path("reports/token-usage.json").unlink(missing_ok=True)
+    start_time = time.monotonic()
+
     with (
         mcp_patcher,
         patch("pr_reviewer_agent.fetch_all_pr_modified_files", return_value=raw_files),
@@ -133,48 +150,133 @@ async def test_live_inference_pr_reviewer(
             max_tool_calls=10,
         )
 
-    # 1. Schema Invariant: LLM output must successfully deserialize into PRReviewReport
-    assert report is not None, "PR reviewer agent returned None"
-    assert isinstance(report, PRReviewReport), f"Expected PRReviewReport instance, got {type(report)}"
+    duration = round(max(0.0, time.monotonic() - start_time), 3)
 
-    # 2. Case-specific assertions
-    if case_id == "tc01_clean_code":
-        assert report.overall_status in (ReviewStatus.APPROVE, ReviewStatus.COMMENT), (
-            f"Clean code was rejected with status {report.overall_status}"
-        )
-        assert not any(f.severity == PRFindingSeverity.BLOCKER for f in report.findings), (
-            "Clean code produced unexpected BLOCKER findings"
-        )
+    # Read token telemetry report written by pr_reviewer_agent
+    usage_data: dict[str, Any] = {}
+    token_usage_path = Path("reports/token-usage.json")
+    if token_usage_path.exists():
+        try:
+            with open(token_usage_path, "r", encoding="utf-8") as f:
+                usage_data = json.load(f)
+        except Exception:
+            usage_data = {}
 
-    elif case_id == "tc02_secret_leak":
-        assert report.overall_status == ReviewStatus.REQUEST_CHANGES, (
-            "Secret leak did not trigger REQUEST_CHANGES"
-        )
-        blockers = [f for f in report.findings if f.severity == PRFindingSeverity.BLOCKER]
-        assert len(blockers) >= 1, "Secret leak produced 0 BLOCKER findings"
-        assert any(f.pii_leak for f in blockers), "Expected at least one finding with pii_leak=True"
+    schema_valid = isinstance(report, PRReviewReport)
+    schema_error = (
+        None
+        if schema_valid
+        else (f"Expected PRReviewReport instance, got {type(report)}" if report is not None else "PR reviewer agent returned None")
+    )
+    findings_count = len(report.findings) if isinstance(report, PRReviewReport) else 0
+    detected_blockers = (
+        sum(1 for f in report.findings if f.severity == PRFindingSeverity.BLOCKER)
+        if isinstance(report, PRReviewReport)
+        else 0
+    )
 
-    elif case_id == "tc03_sql_injection":
-        assert report.overall_status == ReviewStatus.REQUEST_CHANGES, (
-            "SQL injection did not trigger REQUEST_CHANGES"
-        )
-        blockers = [f for f in report.findings if f.severity == PRFindingSeverity.BLOCKER]
-        assert len(blockers) >= 1, "SQL injection produced 0 BLOCKER findings"
+    status_match = False
+    clean_fpr: Optional[float] = None
+    blocker_recall: Optional[float] = None
 
+    if case_id in ("tc01_clean_code", "tc05_style_suggestion"):
+        status_match = isinstance(report, PRReviewReport) and report.overall_status in (ReviewStatus.APPROVE, ReviewStatus.COMMENT)
+        clean_fpr = 0.0 if (status_match and detected_blockers == 0) else 1.0
+    elif case_id in ("tc02_secret_leak", "tc03_sql_injection"):
+        status_match = isinstance(report, PRReviewReport) and report.overall_status == ReviewStatus.REQUEST_CHANGES
+        blocker_recall = 1.0 if (status_match and detected_blockers >= 1) else 0.0
     elif case_id == "tc04_zero_division":
-        # Zero division defect should be flagged as BLOCKER or WARNING
-        assert len(report.findings) >= 1, "Zero division defect went undetected"
-        finding_texts = " ".join(f"{f.title} {f.details}" for f in report.findings).lower()
-        assert any(
-            kw in finding_texts
+        finding_texts_check = (
+            " ".join(f"{f.title} {f.details}" for f in report.findings).lower()
+            if isinstance(report, PRReviewReport)
+            else ""
+        )
+        has_zero_div_kw = any(
+            kw in finding_texts_check
             for kw in ("zero", "division", "zerodivisionerror", "divide", "divisionbyzero")
-        ), "Finding details do not mention division by zero"
+        )
+        status_match = isinstance(report, PRReviewReport) and len(report.findings) >= 1 and has_zero_div_kw
+        blocker_recall = 1.0 if status_match else 0.0
 
-    elif case_id == "tc05_style_suggestion":
-        # Style suggestion should not block PR
-        assert report.overall_status in (ReviewStatus.APPROVE, ReviewStatus.COMMENT), (
-            f"Style suggestion caused unexpected blocking status {report.overall_status}"
-        )
-        assert not any(f.severity == PRFindingSeverity.BLOCKER for f in report.findings), (
-            "Style suggestions should never produce BLOCKER findings"
-        )
+    passed_all_assertions = False
+    failure_reasons: list[str] = []
+
+    try:
+        # 1. Schema Invariant: LLM output must successfully deserialize into PRReviewReport
+        assert report is not None, "PR reviewer agent returned None"
+        assert isinstance(report, PRReviewReport), f"Expected PRReviewReport instance, got {type(report)}"
+
+        # 2. Case-specific assertions
+        if case_id == "tc01_clean_code":
+            assert report.overall_status in (ReviewStatus.APPROVE, ReviewStatus.COMMENT), (
+                f"Clean code was rejected with status {report.overall_status}"
+            )
+            assert not any(f.severity == PRFindingSeverity.BLOCKER for f in report.findings), (
+                "Clean code produced unexpected BLOCKER findings"
+            )
+
+        elif case_id == "tc02_secret_leak":
+            assert report.overall_status == ReviewStatus.REQUEST_CHANGES, (
+                "Secret leak did not trigger REQUEST_CHANGES"
+            )
+            blockers = [f for f in report.findings if f.severity == PRFindingSeverity.BLOCKER]
+            assert len(blockers) >= 1, "Secret leak produced 0 BLOCKER findings"
+            assert any(f.pii_leak for f in blockers), "Expected at least one finding with pii_leak=True"
+
+        elif case_id == "tc03_sql_injection":
+            assert report.overall_status == ReviewStatus.REQUEST_CHANGES, (
+                "SQL injection did not trigger REQUEST_CHANGES"
+            )
+            blockers = [f for f in report.findings if f.severity == PRFindingSeverity.BLOCKER]
+            assert len(blockers) >= 1, "SQL injection produced 0 BLOCKER findings"
+
+        elif case_id == "tc04_zero_division":
+            # Zero division defect should be flagged as BLOCKER or WARNING
+            assert len(report.findings) >= 1, "Zero division defect went undetected"
+            assert has_zero_div_kw, "Finding details do not mention division by zero"
+
+        elif case_id == "tc05_style_suggestion":
+            # Style suggestion should not block PR
+            assert report.overall_status in (ReviewStatus.APPROVE, ReviewStatus.COMMENT), (
+                f"Style suggestion caused unexpected blocking status {report.overall_status}"
+            )
+            assert not any(f.severity == PRFindingSeverity.BLOCKER for f in report.findings), (
+                "Style suggestions should never produce BLOCKER findings"
+            )
+
+        passed_all_assertions = True
+    except Exception as exc:
+        passed_all_assertions = False
+        failure_reasons.append(str(exc))
+        raise
+    finally:
+        if EvalRunMetric is not None and record_eval_metric is not None:
+            try:
+                metric = EvalRunMetric(
+                    case_id=case_id,
+                    name=getattr(case, "name", case.get("name", case_id) if isinstance(case, dict) else case_id),
+                    category=category or ("clean" if "clean" in case_id else "vulnerability"),
+                    agent_target="pr_reviewer",
+                    duration_seconds=duration,
+                    schema_valid=schema_valid,
+                    schema_error=schema_error,
+                    status_match=status_match,
+                    blocker_recall=blocker_recall,
+                    clean_fpr=clean_fpr,
+                    findings_count=findings_count,
+                    detected_blockers=detected_blockers,
+                    prompt_tokens=int(usage_data.get("prompt_tokens", 0)),
+                    candidate_tokens=int(usage_data.get("candidate_tokens", 0)),
+                    cached_tokens=int(usage_data.get("cached_tokens", 0)),
+                    thought_tokens=int(usage_data.get("thought_tokens", 0)),
+                    total_tokens=int(usage_data.get("total_tokens", 0)),
+                    cost_usd=float(usage_data.get("total_cost_usd", usage_data.get("cost_usd", 0.0))),
+                    passed_all_assertions=passed_all_assertions,
+                    failure_reasons=failure_reasons,
+                )
+                record_eval_metric(metric, output_dir="reports")
+            except Exception as metric_exc:
+                print(
+                    f"[WARNING] Failed to record eval metric for {case_id} (pr_reviewer): {metric_exc}",
+                    file=sys.stderr,
+                )

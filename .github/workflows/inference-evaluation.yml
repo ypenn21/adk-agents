@@ -77,6 +77,7 @@ jobs:
           LLM_Model: ${{ env.LLM_Model }}
         run: |
           mkdir -p reports
+          rm -f reports/eval-metrics.json reports/token-usage.json reports/quality-gate-token-usage.json
           pytest .github/scripts/tests/eval/ -m inference --run-inference --junitxml=reports/eval-results.xml -v || true
 
       - name: Generate and Publish Step Summary

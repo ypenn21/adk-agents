@@ -21,6 +21,14 @@ _scripts_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 if _scripts_dir not in sys.path:
     sys.path.insert(0, _scripts_dir)
 
+# Ensure .github/scripts/tests/eval is on sys.path
+_eval_dir = os.path.abspath(os.path.dirname(__file__))
+if _eval_dir not in sys.path:
+    sys.path.insert(0, _eval_dir)
+
+from evalset_schema import EvalRunMetric
+from eval_runner import record_eval_metric, run_summary_generation
+
 from google.antigravity import types
 import pr_reviewer_agent
 from pr_reviewer_agent import (
@@ -424,8 +432,9 @@ async def test_budget_limit_early_halt_no_structured_output(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_quality_gate_replay_pass(tmp_path):
+async def test_quality_gate_replay_pass(tmp_path, monkeypatch):
     """Replays quality gate pass cassette and validates QualityGateDecision passed=True."""
+    monkeypatch.chdir(tmp_path)
     cassette_path = CASSETTES_DIR / "quality_gate_pass.json"
     replayer = CassetteReplayAgent(cassette_path)
 
@@ -450,10 +459,21 @@ async def test_quality_gate_replay_pass(tmp_path):
     assert len(decision.failures) == 0
     assert "passed cleanly" in decision.summary
 
+    # Verify quality-gate token usage report is generated in isolated tmp_path
+    qg_usage_file = tmp_path / "reports" / "quality-gate-token-usage.json"
+    assert qg_usage_file.exists()
+    usage_data = json.loads(qg_usage_file.read_text(encoding="utf-8"))
+    assert usage_data.get("prompt_tokens") == 950
+    assert usage_data.get("candidate_tokens") == 120
+    assert usage_data.get("thought_tokens") == 45
+    assert usage_data.get("total_tokens") == 1115
+    assert usage_data.get("total_cost_usd", 0.0) > 0.0
+
 
 @pytest.mark.asyncio
-async def test_quality_gate_replay_fail(tmp_path):
+async def test_quality_gate_replay_fail(tmp_path, monkeypatch):
     """Replays quality gate fail cassette and validates QualityGateDecision passed=False with failures."""
+    monkeypatch.chdir(tmp_path)
     cassette_path = CASSETTES_DIR / "quality_gate_fail.json"
     replayer = CassetteReplayAgent(cassette_path)
 
@@ -481,6 +501,16 @@ async def test_quality_gate_replay_fail(tmp_path):
     assert failure.severity == SeverityLevel.CRITICAL
     assert "settings.py" in failure.reason
 
+    # Verify quality-gate token usage report is generated in isolated tmp_path
+    qg_usage_file = tmp_path / "reports" / "quality-gate-token-usage.json"
+    assert qg_usage_file.exists()
+    usage_data = json.loads(qg_usage_file.read_text(encoding="utf-8"))
+    assert usage_data.get("prompt_tokens") == 1150
+    assert usage_data.get("candidate_tokens") == 240
+    assert usage_data.get("thought_tokens") == 80
+    assert usage_data.get("total_tokens") == 1470
+    assert usage_data.get("total_cost_usd", 0.0) > 0.0
+
 
 def test_offline_token_spend_calculation_zero_network():
     """Verifies that token spend calculation operates purely offline and correctly applies pricing models."""
@@ -499,3 +529,139 @@ def test_offline_token_spend_calculation_zero_network():
     # Expected: (1420 * 0.75 / 1e6) + ((315 + 128) * 3.75 / 1e6)
     expected_cost = (1420 * 0.75 / 1_000_000.0) + ((315 + 128) * 3.75 / 1_000_000.0)
     assert abs(stats["total_cost_usd"] - expected_cost) < 1e-6
+
+
+def test_eval_runner_summary_preserves_token_telemetry_with_junit_xml(tmp_path, monkeypatch):
+    """Verifies that run_summary_generation preserves token counts and USD spend from
+
+    eval-metrics.json even when a JUnit eval-results.xml is also present in output directory.
+    Also validates that publish_step_summary=False prevents writing to GITHUB_STEP_SUMMARY.
+    """
+    reports_dir = tmp_path / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+
+    # 1. Record metrics with non-zero tokens and USD spend into eval-metrics.json
+    metric_pr = EvalRunMetric(
+        case_id="tc01_clean_code",
+        name="test_live_inference_pr_reviewer[tc01_clean_code]",
+        category="clean",
+        agent_target="pr_reviewer",
+        duration_seconds=2.45,
+        schema_valid=True,
+        schema_error=None,
+        status_match=True,
+        blocker_recall=None,
+        clean_fpr=0.0,
+        findings_count=0,
+        detected_blockers=0,
+        prompt_tokens=1200,
+        candidate_tokens=180,
+        cached_tokens=0,
+        thought_tokens=64,
+        total_tokens=1444,
+        cost_usd=0.001815,
+        passed_all_assertions=True,
+        failure_reasons=[],
+    )
+    metric_gate = EvalRunMetric(
+        case_id="tc01_clean_code",
+        name="test_live_inference_quality_gate[tc01_clean_code]",
+        category="clean",
+        agent_target="quality_gate",
+        duration_seconds=1.85,
+        schema_valid=True,
+        schema_error=None,
+        status_match=True,
+        blocker_recall=None,
+        clean_fpr=0.0,
+        findings_count=0,
+        detected_blockers=0,
+        prompt_tokens=950,
+        candidate_tokens=120,
+        cached_tokens=0,
+        thought_tokens=45,
+        total_tokens=1115,
+        cost_usd=0.001331,
+        passed_all_assertions=True,
+        failure_reasons=[],
+    )
+    record_eval_metric(metric_pr, output_dir=reports_dir)
+    record_eval_metric(metric_gate, output_dir=reports_dir)
+
+    # 2. Create a mock JUnit XML with 0 tokens (as standard JUnit XML has) and an extra crashed case
+    junit_xml_content = """<?xml version="1.0" encoding="utf-8"?>
+<testsuites>
+  <testsuite name="pytest" errors="0" failures="0" skipped="0" tests="3" time="5.5">
+    <testcase classname="test_inference_pr_reviewer" name="test_live_inference_pr_reviewer[tc01_clean_code]" time="2.45" />
+    <testcase classname="test_inference_quality_gate" name="test_live_inference_quality_gate[tc01_clean_code]" time="1.85" />
+    <testcase classname="test_inference_quality_gate" name="test_live_inference_quality_gate[tc02_secret_leak]" time="1.20" />
+  </testsuite>
+</testsuites>
+"""
+    junit_file = reports_dir / "eval-results.xml"
+    junit_file.write_text(junit_xml_content, encoding="utf-8")
+
+    # 3. Setup dummy GITHUB_STEP_SUMMARY file to test step summary publish gating
+    step_summary_file = tmp_path / "step_summary.md"
+    step_summary_file.write_text("Initial Header\n", encoding="utf-8")
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(step_summary_file))
+
+    # 4. Run summary generation with publish_step_summary=False (e.g. --fail-on-threshold-breach call)
+    summary_no_publish = run_summary_generation(
+        output_dir=reports_dir,
+        model_name="gemini-3.7-flash",
+        publish_step_summary=False,
+    )
+
+    # Verify GITHUB_STEP_SUMMARY was not appended to
+    assert step_summary_file.read_text(encoding="utf-8") == "Initial Header\n"
+
+    # 5. Run summary generation with publish_step_summary=True (e.g. --generate-summary call)
+    summary = run_summary_generation(
+        output_dir=reports_dir,
+        model_name="gemini-3.7-flash",
+        publish_step_summary=True,
+    )
+
+    # Verify GITHUB_STEP_SUMMARY was appended to exactly once
+    step_summary_content = step_summary_file.read_text(encoding="utf-8")
+    assert step_summary_content.count("# 🧪 LLM Inference Evaluation Summary") == 1
+
+    # 6. Verify that non-zero tokens and USD spend from eval-metrics.json were preserved
+    # PR Reviewer case preserved
+    pr_metrics = [m for m in summary.case_metrics if m.case_id == "tc01_clean_code" and m.agent_target == "pr_reviewer"]
+    assert len(pr_metrics) == 1
+    assert pr_metrics[0].total_tokens == 1444
+    assert pr_metrics[0].prompt_tokens == 1200
+    assert pr_metrics[0].candidate_tokens == 180
+    assert pr_metrics[0].cost_usd == 0.001815
+
+    # Quality Gate case preserved
+    qg_metrics = [m for m in summary.case_metrics if m.case_id == "tc01_clean_code" and m.agent_target == "quality_gate"]
+    assert len(qg_metrics) == 1
+    assert qg_metrics[0].total_tokens == 1115
+    assert qg_metrics[0].prompt_tokens == 950
+    assert qg_metrics[0].cost_usd == 0.001331
+
+    # Backfilled case from JUnit XML is present
+    backfilled = [m for m in summary.case_metrics if m.case_id == "tc02_secret_leak" and m.agent_target == "quality_gate"]
+    assert len(backfilled) == 1
+
+    # Overall summary totals must reflect the non-zero token spend
+    assert summary.total_tokens >= (1444 + 1115)
+    assert summary.total_cost_usd >= (0.001815 + 0.001331)
+
+    # Verify eval-summary.json and eval-summary.md artifacts on disk
+    summary_json_path = reports_dir / "eval-summary.json"
+    assert summary_json_path.exists()
+    summary_json_data = json.loads(summary_json_path.read_text(encoding="utf-8"))
+    assert summary_json_data["total_tokens"] >= (1444 + 1115)
+    assert summary_json_data["total_cost_usd"] >= (0.001815 + 0.001331)
+
+    summary_md_path = reports_dir / "eval-summary.md"
+    assert summary_md_path.exists()
+    summary_md_text = summary_md_path.read_text(encoding="utf-8")
+    assert "1,444" in summary_md_text
+    assert "1,115" in summary_md_text
+    assert "$0.001815" in summary_md_text
+    assert "$0.001331" in summary_md_text

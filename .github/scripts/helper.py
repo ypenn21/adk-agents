@@ -1169,15 +1169,62 @@ def parse_agent_structured_output(raw_output: Any, schema_cls: type[T]) -> T:
 # =====================================================================
 
 MODEL_PRICING: dict[str, dict[str, float]] = {
+    # Gemini 4 series (Global Standard Model — https://cloud.google.com/model-garden/pricing)
+    "gemini-4-argon": {
+        "input_per_m": 2.00,
+        "output_per_m": 10.00,
+        "cached_per_m": 0.10,
+    },
+    "gemini-4-argon-cyber-permissive": {
+        "input_per_m": 4.00,
+        "output_per_m": 20.00,
+        "cached_per_m": 0.20,
+    },
+    "gemini-4-carbon": {
+        "input_per_m": 2.00,
+        "output_per_m": 10.00,
+        "cached_per_m": 0.10,
+    },
+    "gemini-4-carbon-cyber-permissive": {
+        "input_per_m": 4.00,
+        "output_per_m": 20.00,
+        "cached_per_m": 0.20,
+    },
+    # Gemini 3 Flash series (Global Standard Model — https://cloud.google.com/model-garden/pricing)
+    "gemini-3.8-flash": {
+        "input_per_m": 0.75,
+        "output_per_m": 3.75,
+        "cached_per_m": 0.075,
+    },
+    "gemini-3.8-flash-cyber": {
+        "input_per_m": 1.50,
+        "output_per_m": 7.50,
+        "cached_per_m": 0.15,
+    },
     "gemini-3.7-flash": {
         "input_per_m": 0.75,
         "output_per_m": 3.75,
         "cached_per_m": 0.075,
     },
-    "gemini-3.8-flash": {
+    "gemini-3.6-flash": {
         "input_per_m": 0.75,
         "output_per_m": 3.75,
         "cached_per_m": 0.075,
+    },
+    "gemini-3.5-flash": {
+        "input_per_m": 1.50,
+        "output_per_m": 9.00,
+        "cached_per_m": 0.15,
+    },
+    "gemini-3.5-flash-lite": {
+        "input_per_m": 0.30,
+        "output_per_m": 2.50,
+        "cached_per_m": 0.03,
+    },
+    "gemini-3.1-flash-lite": {
+        "input_per_m": 0.25,
+        "output_per_m": 1.50,
+        "cached_per_m": 0.025,
     },
     "default": {
         "input_per_m": 0.75,
@@ -1232,10 +1279,10 @@ def calculate_token_spend(
                     pass
         return 0
 
-    prompt_tokens = _extract_val(usage, "prompt_token_count", "prompt_tokens")
-    cached_tokens = _extract_val(usage, "cached_content_token_count", "cached_tokens")
-    candidate_tokens = _extract_val(usage, "candidates_token_count", "candidate_tokens")
-    thought_tokens = _extract_val(usage, "thoughts_token_count", "thought_tokens")
+    prompt_tokens = _extract_val(usage, "prompt_token_count", "prompt_tokens", "input_token_count", "input_tokens")
+    cached_tokens = _extract_val(usage, "cached_content_token_count", "cached_tokens", "cached_token_count", "cache_read_input_tokens")
+    candidate_tokens = _extract_val(usage, "candidates_token_count", "candidate_tokens", "output_token_count", "output_tokens", "completion_tokens")
+    thought_tokens = _extract_val(usage, "thoughts_token_count", "thought_tokens", "thinking_token_count", "thinking_tokens", "reasoning_tokens")
     total_tokens = _extract_val(usage, "total_token_count", "total_tokens")
 
     if not total_tokens:
@@ -1265,6 +1312,59 @@ def calculate_token_spend(
     }
 
 
+def _is_mock_object(obj: Any) -> bool:
+    """Returns True if obj appears to be a unittest.mock object."""
+    return hasattr(obj, "_mock_name") or type(obj).__name__ in ("MagicMock", "Mock", "AsyncMock")
+
+
+def extract_agent_usage_stats(
+    agent: Any,
+    response: Any,
+    model_name: str = "gemini-3.7-flash",
+) -> dict[str, Any]:
+    """Extracts token usage from agent.conversation.total_usage or response.usage_metadata.
+
+    Checks agent.conversation.total_usage first, and falls back to
+    response.usage_metadata or response.usage when total_tokens == 0.
+    Preserves all mock guards.
+
+    Args:
+        agent: Antigravity Agent instance or mock.
+        response: Agent response object or mock.
+        model_name: Identifier of the Gemini model used.
+
+    Returns:
+        dict containing token usage and cost metrics from calculate_token_spend.
+    """
+    stats = calculate_token_spend(None, model_name)
+
+    conv = getattr(agent, "conversation", None)
+    raw_usage = getattr(conv, "total_usage", None) if conv is not None else None
+    if raw_usage is not None and not _is_mock_object(raw_usage):
+        stats = calculate_token_spend(raw_usage, model_name)
+
+    if stats.get("total_tokens", 0) == 0:
+        for attr_name in ("usage_metadata", "usage"):
+            resp_usage = getattr(response, attr_name, None)
+            if resp_usage is not None and not _is_mock_object(resp_usage):
+                resp_stats = calculate_token_spend(resp_usage, model_name)
+                if resp_stats.get("total_tokens", 0) > 0:
+                    stats = resp_stats
+                    break
+
+    return stats
+
+
+def normalize_stop_reason(stop_reason: Any, default: str = "COMPLETED") -> str:
+    """Normalizes an SDK StopReason enum or string while guarding against test mocks."""
+    if stop_reason is not None and not _is_mock_object(stop_reason):
+        stop_reason_val = getattr(stop_reason, "name", str(stop_reason))
+        if _is_mock_object(stop_reason_val):
+            return default
+        return str(stop_reason_val)
+    return default
+
+
 def write_token_usage_report(
     usage_data: dict[str, Any],
     stop_reason: Optional[str] = None,
@@ -1283,12 +1383,7 @@ def write_token_usage_report(
         budget_limits: Dict of configured budget thresholds.
         prompt_metadata: Optional dict of prompt template audit telemetry.
     """
-    if stop_reason is not None and not hasattr(stop_reason, "_mock_name") and type(stop_reason).__name__ not in ("MagicMock", "Mock", "AsyncMock"):
-        stop_reason_val = getattr(stop_reason, "name", str(stop_reason))
-        if hasattr(stop_reason_val, "_mock_name") or type(stop_reason_val).__name__ in ("MagicMock", "Mock", "AsyncMock"):
-            stop_reason_val = "COMPLETED"
-    else:
-        stop_reason_val = "COMPLETED"
+    stop_reason_val = normalize_stop_reason(stop_reason, default="COMPLETED")
 
     if "budget_exceeded" in usage_data:
         budget_exceeded = bool(usage_data["budget_exceeded"])
