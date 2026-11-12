@@ -102,3 +102,9 @@ INSERT INTO tickets (title, description, assignee, priority, status) VALUES
 
 INSERT INTO tickets (title, description, assignee, priority, status) VALUES
 ('Security Vulnerability: SQL Injection via Search Bar', 'A potential SQL Injection vulnerability has been identified in the application''s public search bar, allowing malicious input to alter queries.', 'robert.jones@example.com', 'P0 - Critical', 'Open');
+
+INSERT INTO tickets (title, description, assignee, priority, status) VALUES
+('Legacy TLS 1.0/1.1 Deprecation Complete', 'All inbound API gateway endpoints have disabled TLS 1.0 and 1.1 in compliance with company security standards.', 'security-team@example.com', 'P1 - High', 'Closed');
+
+INSERT INTO tickets (title, description, assignee, priority, status) VALUES
+('Billing Webhook Redundant Retries Fixed', 'Third-party payment webhooks were processing duplicate events on network jitter; idempotency keys added and verified.', 'billing-team@example.com', 'P2 - Medium', 'Closed');

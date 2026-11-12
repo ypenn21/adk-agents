@@ -94,6 +94,10 @@ class ServiceManager:
         """Initializes the root agent."""
         print("Initializing Root Agent...")
         MODEL_NAME = os.getenv("MODEL_NAME") or DEFAULT_MODEL_NAME
+        use_workflow = os.getenv("USE_ADK2_WORKFLOW", "true").lower() == "true"
+        if use_workflow:
+            from .workflow_graph import build_bug_ticket_workflow
+            return build_bug_ticket_workflow(model=MODEL_NAME)
         return Agent(
             model=MODEL_NAME,
             name="it_bug_assistant_agent",
@@ -106,8 +110,13 @@ class ServiceManager:
         """Initializes the Vertex AI agent."""
         endpoint_id = os.getenv("VERTEX_AI_ENDPOINT_ID")
         print(f"Initializing Vertex AI Agent...{endpoint_id}")
+        model = LiteLlm(model=f"vertex_ai/openai/{endpoint_id}")
+        use_workflow = os.getenv("USE_ADK2_WORKFLOW", "true").lower() == "true"
+        if use_workflow:
+            from .workflow_graph import build_bug_ticket_workflow
+            return build_bug_ticket_workflow(model=model)
         return Agent(
-            model=LiteLlm(model=f"vertex_ai/openai/{endpoint_id}"),
+            model=model,
             name="it_bug_assistant_agent",
             description="An agent to help users with bug tickets, including searching, creating, and updating them.",
             instruction=system_prompt.agent_instruction,
@@ -119,11 +128,16 @@ class ServiceManager:
         api_base_url = os.getenv("GKE_INFERENCE_ENDPOINT")
         MODEL_NAME = os.getenv("MODEL_NAME") or DEFAULT_MODEL_NAME
         print(f"Initializing GKE AI Agent: {api_base_url} and {MODEL_NAME}")
+        model = LiteLlm(
+            model=MODEL_NAME,
+            api_base=api_base_url,
+        )
+        use_workflow = os.getenv("USE_ADK2_WORKFLOW", "true").lower() == "true"
+        if use_workflow:
+            from .workflow_graph import build_bug_ticket_workflow
+            return build_bug_ticket_workflow(model=model)
         root_agent = Agent(
-            model=LiteLlm(
-                model=MODEL_NAME,
-                api_base=api_base_url,
-            ),
+            model=model,
             name="it_bug_assistant_agent",
             description="An agent to help users with bug tickets, including searching, creating, and updating them.",
             instruction=system_prompt.agent_instruction,

@@ -28,7 +28,7 @@ def get_current_date() -> dict:
 
 # ----- Example of a Built-in Tool -----
 search_agent = Agent(
-    model="gemini-3.7-flash",
+    model=os.getenv("MODEL_NAME") or "gemini-3.7-flash",
     name="search_agent",
     instruction="""
     You're a specialist in Google Search.
@@ -218,3 +218,33 @@ def get_toolbox_tools():
         else:
             _toolbox_tools_cache = []
     return _toolbox_tools_cache
+
+
+def get_toolbox_tool_by_name(tool_name: str) -> LazyToolboxTool | None:
+    """
+    Lazily retrieves a specific LazyToolboxTool by its MCP tool name (e.g., 'search-tickets').
+    Returns None if the MCP Toolbox server is unreachable or tool is not found.
+    """
+    tools = get_toolbox_tools()
+    for tool in tools:
+        if getattr(tool, "name", None) == tool_name or getattr(tool, "__name__", None) == tool_name:
+            return tool
+    return None
+
+
+def invoke_toolbox_tool(tool_name: str, **kwargs: Any) -> Any:
+    """Deterministically invokes a named MCP Toolbox tool and normalizes JSON/text output."""
+    tool = get_toolbox_tool_by_name(tool_name)
+    if tool is None:
+        return {"error": f"MCP Toolbox tool '{tool_name}' is unavailable."}
+    try:
+        raw_result = tool(**kwargs)
+        if isinstance(raw_result, str):
+            import json
+            try:
+                return json.loads(raw_result)
+            except Exception:
+                return raw_result
+        return raw_result
+    except Exception as exc:
+        return {"error": f"Failed to execute '{tool_name}': {exc}"}

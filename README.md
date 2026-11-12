@@ -11,6 +11,111 @@ Queries Gemini 3.7 Flash for AI insights
 
 Connects to MCP Toolbox, which in turn interacts with the Bug Ticket Database
 
+### How the Agent Makes Decisions (ADK 2.0 Graph Workflow)
+
+The agent (`BugTicketWorkflow` in [`adk_bug_ticket_agent/workflow_graph.py`](adk_bug_ticket_agent/workflow_graph.py)) orchestrates requests through a deterministic, multi-stage graph across [`adk_bug_ticket_agent/nodes.py`](adk_bug_ticket_agent/nodes.py), [`adk_bug_ticket_agent/sub_agents.py`](adk_bug_ticket_agent/sub_agents.py), and [`adk_bug_ticket_agent/schemas.py`](adk_bug_ticket_agent/schemas.py):
+
+1. **Session Context Enrichment & Isolation (`enrich_session_context`)**: Injects `current_date` and `user_query`, resets all per-turn routing/payload keys (`intent_classification`, `search_query`, `update_payload`, `create_payload`, `db_operation_result`, `web_search_result`) to `None` to prevent cross-turn state pollution, and preserves `last_ticket_id` across turns for pronoun resolution (e.g., *"update it to Closed"*).
+2. **Intent Classification & Routing (`intent_router_agent` + `dispatch_intent_route`)**: Classifies the user request into one of five deterministic branches: `clarify`, `create`, `update`, `search`, or `external_search`.
+3. **Branch-Specific Extraction & MCP Tool Dispatch**: Extracts validated Pydantic payloads (`TicketCreatePayload`, `TicketUpdatePayload`, `TicketSearchQuery`), normalizes natural ticket IDs (`"ticket-id 10"`, `"#10"`, `"TCK-10"` $\rightarrow$ `"10"`), and invokes the exact PostgreSQL MCP Toolbox tool.
+4. **Post-Query Routing & Solution Synthesis (`execute_ticket_query` $\rightarrow$ `external_web_search_agent` $\rightarrow$ `format_final_response`)**: Evaluates whether to return internal database records immediately (`has_results`), run a compound web search for fixes based on a retrieved ticket's title and description (`research_solutions`), or fall back to external web research when zero internal records match (`fallback_web_search`).
+
+#### 1. End-to-End Graph Decision Architecture
+
+```mermaid
+flowchart TD
+    Start(["User Message"]) --> Enrich["[Node] enrich_session_context<br/>• Injects current_date & user_query<br/>• Resets per-turn state keys to None<br/>• Preserves cross-turn last_ticket_id"]
+
+    Enrich --> Classify{"1. Intent Classification<br/>intent_router_agent /<br/>_classify_intent_deterministic"}
+
+    %% Classification Rules
+    Classify -- "Mentions Ticket + Web Solutions?<br/>('find ticket 10 and solutions on websearch')" --> Dispatch
+    Classify -- "Update Verbs?<br/>(update, set, mark, close, resolve)" --> CheckTID{"Ticket ID found in text<br/>or contextual 'it'/'that'<br/>via last_ticket_id?"}
+    CheckTID -- "Yes" --> Dispatch
+    CheckTID -- "No (Missing ID)" --> Dispatch
+    Classify -- "Create Verbs?<br/>(create, report, file, log new bug)" --> Dispatch
+    Classify -- "Search Verbs / ID / Status /<br/>Priority / 'Show all tickets'?" --> Dispatch
+    Classify -- "Pure External CVE / Docs?" --> Dispatch
+
+    Dispatch{"2. [Node] dispatch_intent_route<br/>Evaluates TicketClassificationResult"}
+
+    %% Branch 1: Clarify
+    Dispatch -- "route = 'clarify'" --> ClarifyLLM["[LLM] clarification_agent<br/>Asks user for missing ticket_id or details"]
+    ClarifyLLM --> EndNode(["Final Markdown Response"])
+
+    %% Branch 2: Create
+    Dispatch -- "route = 'create'" --> CreateExtract["[Extractor] create_ticket_extractor_agent<br/>Outputs TicketCreatePayload"]
+    CreateExtract --> DedupCheck{"[Node] execute_create_with_dedup<br/>Calls MCP 'search-tickets' first"}
+    DedupCheck -- "Duplicate Found" --> SetDedup["Returns existing duplicate warning"]
+    DedupCheck -- "Unique Bug" --> CreateMCP["Calls MCP 'create-new-ticket'<br/>Updates state['last_ticket_id']"]
+    SetDedup --> FormatNode
+    CreateMCP --> FormatNode
+
+    %% Branch 3: Update
+    Dispatch -- "route = 'update'" --> UpdateExtract["[Extractor] update_ticket_extractor_agent<br/>Outputs TicketUpdatePayload<br/>Normalizes ticket_id ('ticket-id 10' -> '10')"]
+    UpdateExtract --> ExecUpdate["[Node] execute_ticket_update<br/>• Calls 'update-ticket-status' (if new_status)<br/>• Calls 'update-ticket-priority' (if new_priority)<br/>• Calls 'get-ticket-by-id' to verify<br/>• Updates state['last_ticket_id']"]
+    ExecUpdate --> FormatNode
+
+    %% Branch 4: Search
+    Dispatch -- "route = 'search'" --> SearchExtract["[Extractor] search_ticket_extractor_agent<br/>Outputs TicketSearchQuery<br/>Sets query_mode & research_solutions flag"]
+    SearchExtract --> QueryModeDecision{"3. [Node] execute_ticket_query<br/>Selects MCP Tool by query_mode"}
+
+    QueryModeDecision -- "by_id" --> MCPById["MCP: get-ticket-by-id"]
+    QueryModeDecision -- "by_date_range" --> MCPByDate["MCP: get-tickets-by-date-range"]
+    QueryModeDecision -- "by_status" --> MCPByStatus["MCP: get-tickets-by-status<br/>(+ secondary priority filter)"]
+    QueryModeDecision -- "by_priority" --> MCPByPriority["MCP: get-tickets-by-priority<br/>(+ secondary status filter)"]
+    QueryModeDecision -- "by_assignee" --> MCPByAssignee["MCP: get-tickets-by-assignee"]
+    QueryModeDecision -- "all" --> MCPAll["MCP: get-all-tickets<br/>(Fallback: get-tickets-by-status '')"]
+    QueryModeDecision -- "semantic_search" --> MCPSemantic["MCP: search-tickets"]
+
+    MCPById & MCPByDate & MCPByStatus & MCPByPriority & MCPByAssignee & MCPAll & MCPSemantic --> PostQueryRoute{"4. Post-Query Routing<br/>Evaluates DB rows & flags"}
+
+    PostQueryRoute -- "research_solutions == True<br/>route = 'research_solutions'" --> BuildWebQuery["Builds web_search_query from<br/>Ticket Title + Description"]
+    BuildWebQuery --> WebSearchLLM
+
+    PostQueryRoute -- "0 rows & allow_web_fallback == True<br/>route = 'fallback_web_search'" --> WebSearchLLM
+    PostQueryRoute -- "Default<br/>route = 'has_results'" --> FormatNode
+
+    %% Branch 5: External Search
+    Dispatch -- "route = 'external_search'" --> WebSearchLLM["[LLM] external_web_search_agent<br/>Runs Google Search / Synthesizes<br/>Troubleshooting Solutions"]
+
+    WebSearchLLM --> FormatNode["[Node] format_final_response<br/>• Renders Markdown Ticket Table<br/>• Renders specific empty-filter notice<br/>• Appends 🌐 Suggested Solutions & Web Research"]
+    FormatNode --> EndNode
+```
+
+#### 2. Search Query Mode Decision Tree (`_extract_search_query_deterministic`)
+
+When the top-level intent routes to `search`, the search extractor evaluates the query against a strict priority waterfall (and sets `research_solutions = True` whenever solution or web-search keywords appear):
+
+```mermaid
+flowchart TD
+    SearchInput(["User Search Query"]) --> CheckSol["Flag Check: Does query mention<br/>'solutions', 'websearch', 'how to fix', 'workaround'?<br/>Sets research_solutions = True / False"]
+    CheckSol --> Step1{"Priority 1: Explicit Ticket ID?<br/>('TCK-123', 'ticket-id 10', '#10',<br/>or pronoun 'it' with last_ticket_id)"}
+
+    Step1 -- "Yes" --> ModeByID["query_mode = BY_ID<br/>MCP: get-ticket-by-id"]
+    Step1 -- "No" --> Step2{"Priority 2: Date Range?<br/>('this week', 'today', 'created this...')"}
+
+    Step2 -- "Yes" --> ModeByDate["query_mode = BY_DATE_RANGE<br/>MCP: get-tickets-by-date-range"]
+    Step2 -- "No" --> Step3{"Priority 3: Status Keyword?<br/>('open', 'in progress', 'closed', 'resolved')"}
+
+    Step3 -- "Yes" --> ModeByStatus["query_mode = BY_STATUS<br/>MCP: get-tickets-by-status<br/>(Also captures priority if present)"]
+    Step3 -- "No" --> Step4{"Priority 4: Priority Keyword?<br/>('P0'–'P3', 'critical', 'high', 'medium', 'low')"}
+
+    Step4 -- "Yes" --> ModeByPriority["query_mode = BY_PRIORITY<br/>MCP: get-tickets-by-priority"]
+    Step4 -- "No" --> Step5{"Priority 5: Assignee Email?<br/>(matches user@domain.tld)"}
+
+    Step5 -- "Yes" --> ModeByAssignee["query_mode = BY_ASSIGNEE<br/>MCP: get-tickets-by-assignee"]
+    Step5 -- "No" --> Step6{"Priority 6: Unfiltered All?<br/>('show all tickets', 'list tickets',<br/>no topic qualifier like 'about...')"}
+
+    Step6 -- "Yes" --> ModeAll["query_mode = ALL<br/>MCP: get-all-tickets"]
+    Step6 -- "No" --> ModeSemantic["Priority 7: Default<br/>query_mode = SEMANTIC_SEARCH<br/>MCP: search-tickets"]
+```
+
+#### Key Decision Gates
+* **Compound Ticket + Web Search Priority**: When a user asks to both look up a ticket and search the web for fixes (e.g., *"find ticket-id 10 and find solutions on websearch"*), the classifier routes to `search` with `research_solutions=True` (rather than jumping straight to `external_search`). This guarantees the agent fetches the ticket's title and description from PostgreSQL first via `execute_ticket_query`, constructs a contextualized `web_search_query`, traverses the `research_solutions` edge into `external_web_search_agent`, and renders both the ticket table and troubleshooting steps in `format_final_response`.
+* **Ambiguous Update Guardrail**: When an update verb is detected (`update`, `set`, `close`, `resolve`), the classifier verifies that either an explicit ticket ID is present or a contextual pronoun (`it`, `that ticket`) can be resolved via `last_ticket_id`. If neither exists, it routes to `clarify` instead of guessing a ticket ID.
+* **Duplicate Prevention on Ticket Creation**: Before inserting a new ticket via `create-new-ticket`, `execute_create_with_dedup` runs `search-tickets` against the bug title/description and halts creation with a warning if a matching open ticket already exists.
+
 ## Key Features
 
 * **Components:**        Tools, Database, RAG, Google Search 
