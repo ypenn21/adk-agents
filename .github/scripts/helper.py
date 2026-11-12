@@ -1344,11 +1344,13 @@ def extract_agent_usage_stats(
         stats = calculate_token_spend(raw_usage, model_name)
 
     if stats.get("total_tokens", 0) == 0:
-        resp_usage = getattr(response, "usage_metadata", None) or getattr(response, "usage", None)
-        if resp_usage is not None and not _is_mock_object(resp_usage):
-            resp_stats = calculate_token_spend(resp_usage, model_name)
-            if resp_stats.get("total_tokens", 0) > 0:
-                stats = resp_stats
+        for attr_name in ("usage_metadata", "usage"):
+            resp_usage = getattr(response, attr_name, None)
+            if resp_usage is not None and not _is_mock_object(resp_usage):
+                resp_stats = calculate_token_spend(resp_usage, model_name)
+                if resp_stats.get("total_tokens", 0) > 0:
+                    stats = resp_stats
+                    break
 
     return stats
 

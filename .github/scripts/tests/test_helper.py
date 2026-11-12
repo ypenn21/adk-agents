@@ -1034,3 +1034,21 @@ def test_resolve_env_config_batch_cli_priority(monkeypatch):
     assert cfg["max_review_files_cap"] == 50
 
 
+def test_extract_agent_usage_stats_magicmock_fallback_to_usage():
+    """Falls back to response.usage when response is a MagicMock with unset usage_metadata."""
+    mock_agent = MagicMock()
+    mock_response = MagicMock()
+    mock_response.usage = {
+        "prompt_tokens": 250,
+        "candidate_tokens": 50,
+        "total_tokens": 300,
+    }
+
+    stats = helper.extract_agent_usage_stats(mock_agent, mock_response, "gemini-3.7-flash")
+    assert stats["prompt_tokens"] == 250
+    assert stats["candidate_tokens"] == 50
+    assert stats["total_tokens"] == 300
+    assert stats["total_cost_usd"] > 0
+
+
+

@@ -233,11 +233,7 @@ async def test_live_inference_pr_reviewer(
         elif case_id == "tc04_zero_division":
             # Zero division defect should be flagged as BLOCKER or WARNING
             assert len(report.findings) >= 1, "Zero division defect went undetected"
-            finding_texts = " ".join(f"{f.title} {f.details}" for f in report.findings).lower()
-            assert any(
-                kw in finding_texts
-                for kw in ("zero", "division", "zerodivisionerror", "divide", "divisionbyzero")
-            ), "Finding details do not mention division by zero"
+            assert has_zero_div_kw, "Finding details do not mention division by zero"
 
         elif case_id == "tc05_style_suggestion":
             # Style suggestion should not block PR
