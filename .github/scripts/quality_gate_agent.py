@@ -269,8 +269,9 @@ async def evaluate_quality_gate(
                 try:
                     async for _ in response.chunks:
                         pass
-                except Exception:
-                    pass
+                except Exception as stream_err:
+                    # Non-fatal: continue to response.structured_output() even if chunk streaming fails
+                    print(f"[Warning streaming chunks: {stream_err}]", flush=True)
 
             usage_stats = extract_agent_usage_stats(agent, response, cfg["model"])
             raw_output = await response.structured_output()
