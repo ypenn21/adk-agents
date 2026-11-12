@@ -270,5 +270,8 @@ async def test_live_inference_pr_reviewer(
                     failure_reasons=failure_reasons,
                 )
                 record_eval_metric(metric, output_dir="reports")
-            except Exception:
-                pass
+            except Exception as metric_exc:
+                print(
+                    f"[WARNING] Failed to record eval metric for {case_id} (pr_reviewer): {metric_exc}",
+                    file=sys.stderr,
+                )

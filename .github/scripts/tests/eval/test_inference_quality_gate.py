@@ -222,5 +222,8 @@ async def test_live_inference_quality_gate(
                     failure_reasons=failure_reasons,
                 )
                 record_eval_metric(metric, output_dir="reports")
-            except Exception:
-                pass
+            except Exception as metric_exc:
+                print(
+                    f"[WARNING] Failed to record eval metric for {case_id} (quality_gate): {metric_exc}",
+                    file=sys.stderr,
+                )
