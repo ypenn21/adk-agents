@@ -304,8 +304,12 @@ async def evaluate_quality_gate(
 
             write_gate_reports(decision, prompt_metadata=prompt_metadata_audit)
             return decision
-    except Exception:
+    except Exception as exc:
         # Fallback to deterministic evaluation
+        print(
+            f"[WARNING] Quality gate agent invocation failed, falling back to deterministic evaluation: {exc}",
+            file=sys.stderr,
+        )
         _write_quality_gate_token_reports(
             model=cfg["model"],
             stop_reason="ERROR_FALLBACK",
