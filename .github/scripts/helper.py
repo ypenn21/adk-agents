@@ -1288,7 +1288,10 @@ def extract_agent_usage_stats(
 
     conv = getattr(agent, "conversation", None)
     raw_usage = getattr(conv, "total_usage", None) if conv is not None else None
-    if raw_usage is not None and not hasattr(raw_usage, "_mock_name") and type(raw_usage).__name__ not in ("MagicMock", "Mock", "AsyncMock"):
+def _is_mock_object(obj: Any) -> bool:
+    """Returns True if obj appears to be a unittest.mock object."""
+    return hasattr(obj, "_mock_name") or type(obj).__name__ in ("MagicMock", "Mock", "AsyncMock")
+
         stats = calculate_token_spend(raw_usage, model_name)
 
     if stats.get("total_tokens", 0) == 0:
