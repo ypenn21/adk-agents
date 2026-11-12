@@ -25,6 +25,7 @@ _eval_dir = os.path.abspath(os.path.dirname(__file__))
 if _eval_dir not in sys.path:
     sys.path.insert(0, _eval_dir)
 
+from helper import MODEL_PRICING, calculate_token_spend
 from pr_reviewer_agent import ReviewStatus, PRFindingSeverity, PRReviewReport, InlineFinding
 from quality_gate_agent import SeverityLevel, ViolationCategory, QualityGateDecision
 from evalset_schema import (
@@ -36,6 +37,7 @@ from evalset_schema import (
 )
 
 __all__ = [
+    "MODEL_PRICING",
     "PROMPT_COST_PER_MILLION",
     "CACHED_COST_PER_MILLION",
     "OUTPUT_COST_PER_MILLION",
@@ -46,10 +48,10 @@ __all__ = [
     "evaluate_case_assertions",
 ]
 
-# Standard pricing for Gemini 3.7/3.8 Flash ($/1M tokens)
-PROMPT_COST_PER_MILLION: float = 0.75
-CACHED_COST_PER_MILLION: float = 0.075
-OUTPUT_COST_PER_MILLION: float = 3.75
+# Default pricing fallback ($/1M tokens), sourced from helper.MODEL_PRICING
+PROMPT_COST_PER_MILLION: float = MODEL_PRICING["default"]["input_per_m"]
+CACHED_COST_PER_MILLION: float = MODEL_PRICING["default"]["cached_per_m"]
+OUTPUT_COST_PER_MILLION: float = MODEL_PRICING["default"]["output_per_m"]
 
 
 def calculate_schema_conformance(results: List[EvalRunMetric]) -> float:
@@ -183,6 +185,7 @@ def evaluate_case_assertions(
     report_or_decision: Any,
     duration: float,
     usage: Dict[str, Any],
+    model_name: Optional[str] = None,
 ) -> EvalRunMetric:
     """Evaluates output assertions for a single golden evaluation case.
 
@@ -425,24 +428,21 @@ def evaluate_case_assertions(
         clean_fpr = None
         blocker_recall = None
 
-    # 5. Token and Cost Telemetry
-    prompt_tokens = _extract_token_val(usage, "prompt_tokens", "prompt_token_count")
-    cached_tokens = _extract_token_val(usage, "cached_tokens", "cached_content_token_count")
-    candidate_tokens = _extract_token_val(usage, "candidate_tokens", "candidates_token_count")
-    thought_tokens = _extract_token_val(usage, "thought_tokens", "thoughts_token_count")
-    total_tokens = _extract_token_val(usage, "total_tokens", "total_token_count")
-
-    if total_tokens == 0:
-        total_tokens = prompt_tokens + candidate_tokens + thought_tokens
-
-    # Compute USD cost using Gemini 3.7/3.8 Flash pricing rates
-    net_prompt = max(0, prompt_tokens - cached_tokens)
-    cost_usd = round(
-        (net_prompt * (PROMPT_COST_PER_MILLION / 1_000_000.0))
-        + (cached_tokens * (CACHED_COST_PER_MILLION / 1_000_000.0))
-        + ((candidate_tokens + thought_tokens) * (OUTPUT_COST_PER_MILLION / 1_000_000.0)),
-        6,
+    # 5. Token and Cost Telemetry (using shared helper.MODEL_PRICING via calculate_token_spend)
+    resolved_model = (
+        model_name
+        or (usage.get("model") if isinstance(usage, dict) else getattr(usage, "model", None))
+        or os.environ.get("LLM_Model")
+        or os.environ.get("LLM_MODEL")
+        or "gemini-3.7-flash"
     )
+    spend_stats = calculate_token_spend(usage, model_name=str(resolved_model))
+    prompt_tokens = spend_stats["prompt_tokens"]
+    cached_tokens = spend_stats["cached_tokens"]
+    candidate_tokens = spend_stats["candidate_tokens"]
+    thought_tokens = spend_stats["thought_tokens"]
+    total_tokens = spend_stats["total_tokens"]
+    cost_usd = spend_stats["total_cost_usd"]
 
     passed_all_assertions = schema_valid and len(failure_reasons) == 0
 

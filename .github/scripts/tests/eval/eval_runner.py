@@ -31,6 +31,7 @@ _eval_dir = os.path.abspath(os.path.dirname(__file__))
 if _eval_dir not in sys.path:
     sys.path.insert(0, _eval_dir)
 
+from helper import MODEL_PRICING
 from evalset_schema import EvalCase, EvalRunMetric, EvalSuiteSummary
 from metrics import (
     calculate_schema_conformance,
@@ -295,18 +296,26 @@ def generate_markdown_summary(
     total_thought = sum(m.thought_tokens for m in summary.case_metrics)
     net_prompt = max(0, total_prompt - total_cached)
 
-    cost_prompt = net_prompt * 0.75 / 1_000_000.0
-    cost_cached = total_cached * 0.075 / 1_000_000.0
-    cost_candidate = total_candidate * 3.75 / 1_000_000.0
-    cost_thought = total_thought * 3.75 / 1_000_000.0
+    rate = MODEL_PRICING.get(summary.model_name, MODEL_PRICING["default"])
+    input_rate = rate.get("input_per_m", 0.75)
+    cached_rate = rate.get("cached_per_m", 0.075)
+    output_rate = rate.get("output_per_m", 3.75)
+
+    def _fmt_rate(val: float) -> str:
+        return f"${val:.2f}" if round(val, 2) == val else f"${val:g}"
+
+    cost_prompt = net_prompt * input_rate / 1_000_000.0
+    cost_cached = total_cached * cached_rate / 1_000_000.0
+    cost_candidate = total_candidate * output_rate / 1_000_000.0
+    cost_thought = total_thought * output_rate / 1_000_000.0
 
     lines.append("### 💰 Token Usage & Spend Breakdown\n")
     lines.append("| Token Type | Count | Rate ($ / 1M) | Cost (USD) |")
     lines.append("| :--- | :---: | :---: | :---: |")
-    lines.append(f"| **Prompt Tokens (Uncached)** | `{net_prompt:,}` | `$0.75` | `${cost_prompt:.6f}` |")
-    lines.append(f"| **Cached Content Tokens** | `{total_cached:,}` | `$0.075` | `${cost_cached:.6f}` |")
-    lines.append(f"| **Candidate Generation Tokens** | `{total_candidate:,}` | `$3.75` | `${cost_candidate:.6f}` |")
-    lines.append(f"| **Thought / Reasoning Tokens** | `{total_thought:,}` | `$3.75` | `${cost_thought:.6f}` |")
+    lines.append(f"| **Prompt Tokens (Uncached)** | `{net_prompt:,}` | `{_fmt_rate(input_rate)}` | `${cost_prompt:.6f}` |")
+    lines.append(f"| **Cached Content Tokens** | `{total_cached:,}` | `{_fmt_rate(cached_rate)}` | `${cost_cached:.6f}` |")
+    lines.append(f"| **Candidate Generation Tokens** | `{total_candidate:,}` | `{_fmt_rate(output_rate)}` | `${cost_candidate:.6f}` |")
+    lines.append(f"| **Thought / Reasoning Tokens** | `{total_thought:,}` | `{_fmt_rate(output_rate)}` | `${cost_thought:.6f}` |")
     lines.append(f"| **Total Evaluated Spend** | `{summary.total_tokens:,}` | — | **`${summary.total_cost_usd:.6f}`** |")
 
     lines.append("\n---\n")

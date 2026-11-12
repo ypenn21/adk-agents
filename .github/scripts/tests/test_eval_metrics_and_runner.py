@@ -167,6 +167,16 @@ def test_evaluate_case_assertions_clean_pr_success():
     # Total = 0.001215
     assert abs(metric.cost_usd - 0.001215) < 1e-6
 
+    # Verify model-aware pricing via shared helper.MODEL_PRICING (e.g. gemini-4-argon)
+    # Net prompt: 1000 * 2.00 / 1M = 0.002
+    # Cached: 200 * 0.10 / 1M = 0.00002
+    # Candidate+Thought: 120 * 10.00 / 1M = 0.0012
+    # Total = 0.00322
+    metric_argon = evaluate_case_assertions(
+        case, report, duration=1.85, usage=usage, model_name="gemini-4-argon"
+    )
+    assert abs(metric_argon.cost_usd - 0.00322) < 1e-6
+
 
 def test_evaluate_case_assertions_clean_pr_comment_status_success():
     case = EvalCase(
@@ -461,6 +471,14 @@ def test_generate_markdown_summary_with_default_and_custom_thresholds():
     assert "| **Vulnerability Recall** | `90.0%` | `85.7%` | ❌ FAIL |" in md_custom
     assert "| **Clean False Positive Rate** | `< 5.0%` | `0.0%` | ✅ PASS |" in md_custom
     assert "### ❌ Status: **EVALUATION FAILED / THRESHOLD BREACHED**" in md_custom
+
+    # 3. Verify MODEL_PRICING rate lookup in markdown breakdown for gemini-4-argon
+    summary_argon = summary.model_copy(update={"model_name": "gemini-4-argon"})
+    md_argon = generate_markdown_summary(summary_argon)
+    assert "| **Prompt Tokens (Uncached)** | `0` | `$2.00` | `$0.000000` |" in md_argon
+    assert "| **Cached Content Tokens** | `0` | `$0.10` | `$0.000000` |" in md_argon
+    assert "| **Candidate Generation Tokens** | `0` | `$10.00` | `$0.000000` |" in md_argon
+    assert "| **Thought / Reasoning Tokens** | `0` | `$10.00` | `$0.000000` |" in md_argon
 
 
 def test_threshold_breach_evaluation_at_85_percent():
