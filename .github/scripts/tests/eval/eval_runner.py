@@ -362,6 +362,7 @@ def run_summary_generation(
     schema_threshold: float = DEFAULT_SCHEMA_CONFORMANCE_THRESHOLD,
     recall_threshold: float = DEFAULT_VULNERABILITY_RECALL_THRESHOLD,
     fpr_threshold: float = DEFAULT_CLEAN_FPR_THRESHOLD,
+    publish_step_summary: bool = True,
 ) -> EvalSuiteSummary:
     """Executes summary generation, writes JSON & Markdown reports, and updates GITHUB_STEP_SUMMARY."""
     out_path = Path(output_dir)
@@ -387,11 +388,18 @@ def run_summary_generation(
         if results_candidate.exists():
             metrics = load_metrics_from_file(results_candidate)
 
-    # 4. Try eval-results.xml (JUnit)
-    if not metrics:
-        xml_candidate = out_path / "eval-results.xml"
-        if xml_candidate.exists():
-            metrics = parse_junit_xml_to_metrics(xml_candidate)
+    # 4. Try eval-results.xml (JUnit) or backfill missing cases from JUnit XML
+    xml_candidate = out_path / "eval-results.xml"
+    if xml_candidate.exists():
+        xml_metrics = parse_junit_xml_to_metrics(xml_candidate)
+        if not metrics:
+            metrics = xml_metrics
+        else:
+            existing_keys = {(x.case_id, x.agent_target) for x in metrics}
+            for m in xml_metrics:
+                if (m.case_id, m.agent_target) not in existing_keys:
+                    metrics.append(m)
+                    existing_keys.add((m.case_id, m.agent_target))
 
     # 5. Fallback: If no metrics found but fixture-dir exists, create default entries for fixtures
     if not metrics and fixture_dir:
@@ -474,7 +482,7 @@ def run_summary_generation(
 
     # Publish to GitHub Step Summary if running in Actions
     github_step_summary = os.environ.get("GITHUB_STEP_SUMMARY")
-    if github_step_summary:
+    if github_step_summary and publish_step_summary:
         try:
             with open(github_step_summary, "a", encoding="utf-8") as f:
                 f.write("\n\n" + md_content + "\n")
@@ -594,6 +602,7 @@ def main() -> None:
         schema_threshold=args.schema_threshold,
         recall_threshold=args.recall_threshold,
         fpr_threshold=args.fpr_threshold,
+        publish_step_summary=bool(args.generate_summary or not args.fail_on_threshold_breach),
     )
 
     print(f"Generated {args.output_dir}/{SUMMARY_JSON_FILENAME}")

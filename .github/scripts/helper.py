@@ -1232,10 +1232,10 @@ def calculate_token_spend(
                     pass
         return 0
 
-    prompt_tokens = _extract_val(usage, "prompt_token_count", "prompt_tokens")
-    cached_tokens = _extract_val(usage, "cached_content_token_count", "cached_tokens")
-    candidate_tokens = _extract_val(usage, "candidates_token_count", "candidate_tokens")
-    thought_tokens = _extract_val(usage, "thoughts_token_count", "thought_tokens")
+    prompt_tokens = _extract_val(usage, "prompt_token_count", "prompt_tokens", "input_token_count", "input_tokens")
+    cached_tokens = _extract_val(usage, "cached_content_token_count", "cached_tokens", "cached_token_count", "cache_read_input_tokens")
+    candidate_tokens = _extract_val(usage, "candidates_token_count", "candidate_tokens", "output_token_count", "output_tokens", "completion_tokens")
+    thought_tokens = _extract_val(usage, "thoughts_token_count", "thought_tokens", "thinking_token_count", "thinking_tokens", "reasoning_tokens")
     total_tokens = _extract_val(usage, "total_token_count", "total_tokens")
 
     if not total_tokens:
@@ -1263,6 +1263,42 @@ def calculate_token_spend(
         "total_tokens": total_tokens,
         "total_cost_usd": round(cost, 6),
     }
+
+
+def extract_agent_usage_stats(
+    agent: Any,
+    response: Any,
+    model_name: str = "gemini-3.7-flash",
+) -> dict[str, Any]:
+    """Extracts token usage from agent.conversation.total_usage or response.usage_metadata.
+
+    Checks agent.conversation.total_usage first, and falls back to
+    response.usage_metadata or response.usage when total_tokens == 0.
+    Preserves all mock guards.
+
+    Args:
+        agent: Antigravity Agent instance or mock.
+        response: Agent response object or mock.
+        model_name: Identifier of the Gemini model used.
+
+    Returns:
+        dict containing token usage and cost metrics from calculate_token_spend.
+    """
+    stats = calculate_token_spend(None, model_name)
+
+    conv = getattr(agent, "conversation", None)
+    raw_usage = getattr(conv, "total_usage", None) if conv is not None else None
+    if raw_usage is not None and not hasattr(raw_usage, "_mock_name") and type(raw_usage).__name__ not in ("MagicMock", "Mock", "AsyncMock"):
+        stats = calculate_token_spend(raw_usage, model_name)
+
+    if stats.get("total_tokens", 0) == 0:
+        resp_usage = getattr(response, "usage_metadata", None) or getattr(response, "usage", None)
+        if resp_usage is not None and not hasattr(resp_usage, "_mock_name") and type(resp_usage).__name__ not in ("MagicMock", "Mock", "AsyncMock"):
+            resp_stats = calculate_token_spend(resp_usage, model_name)
+            if resp_stats.get("total_tokens", 0) > 0:
+                stats = resp_stats
+
+    return stats
 
 
 def write_token_usage_report(

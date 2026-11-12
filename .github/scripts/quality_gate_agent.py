@@ -14,10 +14,11 @@ from typing import Optional
 from pydantic import BaseModel, Field, model_validator
 
 try:
-    from google.antigravity import Agent, LocalAgentConfig
+    from google.antigravity import Agent, LocalAgentConfig, types
 except ImportError:
     Agent = None
     LocalAgentConfig = None
+    types = None
 
 from helper import (
     format_text_decision,
@@ -26,6 +27,9 @@ from helper import (
     ensure_directory,
     read_text_file,
     parse_agent_structured_output,
+    calculate_token_spend,
+    write_token_usage_report,
+    extract_agent_usage_stats,
 )
 from prompt_loader import load_prompt_bundle
 
@@ -145,6 +149,20 @@ async def evaluate_quality_gate(
             ],
         )
         write_gate_reports(decision, prompt_metadata=prompt_metadata_audit)
+        write_token_usage_report(
+            usage_data=calculate_token_spend(None, cfg["model"]),
+            stop_reason="FAIL_CLOSED_SKIP",
+            output_path="reports/quality-gate-token-usage.json",
+            model=cfg["model"],
+            prompt_metadata=prompt_metadata_audit,
+        )
+        write_token_usage_report(
+            usage_data=calculate_token_spend(None, cfg["model"]),
+            stop_reason="FAIL_CLOSED_SKIP",
+            output_path="reports/telemetry/quality_gate_agent/token-usage.json",
+            model=cfg["model"],
+            prompt_metadata=prompt_metadata_audit,
+        )
         return decision
 
     pii_content = read_text_file(pii_report_path)
@@ -168,6 +186,20 @@ async def evaluate_quality_gate(
                 ],
             )
             write_gate_reports(decision, prompt_metadata=prompt_metadata_audit)
+            write_token_usage_report(
+                usage_data=calculate_token_spend(None, cfg["model"]),
+                stop_reason="FAIL_CLOSED_SKIP",
+                output_path="reports/quality-gate-token-usage.json",
+                model=cfg["model"],
+                prompt_metadata=prompt_metadata_audit,
+            )
+            write_token_usage_report(
+                usage_data=calculate_token_spend(None, cfg["model"]),
+                stop_reason="FAIL_CLOSED_SKIP",
+                output_path="reports/telemetry/quality_gate_agent/token-usage.json",
+                model=cfg["model"],
+                prompt_metadata=prompt_metadata_audit,
+            )
             return decision
     else:
         pr_review_content = read_text_file(pr_review_path)
@@ -229,12 +261,71 @@ async def evaluate_quality_gate(
         )
         async with Agent(config) as agent:
             response = await agent.chat(prompt)
+            if hasattr(response, "chunks") and hasattr(response.chunks, "__aiter__"):
+                try:
+                    async for _ in response.chunks:
+                        pass
+                except Exception:
+                    pass
+
             raw_output = await response.structured_output()
             decision = parse_agent_structured_output(raw_output, QualityGateDecision)
+
+            usage_stats = extract_agent_usage_stats(agent, response, cfg["model"])
+            stop_reason = getattr(response, "stop_reason", None)
+            if stop_reason is not None and not hasattr(stop_reason, "_mock_name") and type(stop_reason).__name__ not in ("MagicMock", "Mock", "AsyncMock"):
+                stop_reason_str = getattr(stop_reason, "name", str(stop_reason))
+                if hasattr(stop_reason_str, "_mock_name") or type(stop_reason_str).__name__ in ("MagicMock", "Mock", "AsyncMock"):
+                    stop_reason_str = "COMPLETED"
+            else:
+                stop_reason_str = "COMPLETED"
+
+            write_token_usage_report(
+                usage_data=usage_stats,
+                stop_reason=stop_reason_str,
+                output_path="reports/quality-gate-token-usage.json",
+                model=cfg["model"],
+                prompt_metadata=prompt_metadata_audit,
+            )
+            write_token_usage_report(
+                usage_data=usage_stats,
+                stop_reason=stop_reason_str,
+                output_path="reports/telemetry/quality_gate_agent/token-usage.json",
+                model=cfg["model"],
+                prompt_metadata=prompt_metadata_audit,
+            )
+
+            print("\n" + "=" * 60, flush=True)
+            print("📊 QUALITY GATE TOKEN USAGE & ESTIMATED SPEND", flush=True)
+            print("=" * 60, flush=True)
+            print(f"Model: {cfg['model']}")
+            print(f"Prompt Tokens (Uncached): {max(0, usage_stats['prompt_tokens'] - usage_stats['cached_tokens']):,}")
+            print(f"Cached Tokens: {usage_stats['cached_tokens']:,}")
+            print(f"Candidate Tokens: {usage_stats['candidate_tokens']:,}")
+            print(f"Reasoning / Thought Tokens: {usage_stats['thought_tokens']:,}")
+            print(f"Total Tokens: {usage_stats['total_tokens']:,}")
+            print(f"Estimated Spend: ${usage_stats['total_cost_usd']:.6f} USD")
+            print(f"Stop Reason: {stop_reason_str}")
+            print("=" * 60 + "\n", flush=True)
+
             write_gate_reports(decision, prompt_metadata=prompt_metadata_audit)
             return decision
     except Exception:
         # Fallback to deterministic evaluation
+        write_token_usage_report(
+            usage_data=calculate_token_spend(None, cfg["model"]),
+            stop_reason="ERROR_FALLBACK",
+            output_path="reports/quality-gate-token-usage.json",
+            model=cfg["model"],
+            prompt_metadata=prompt_metadata_audit,
+        )
+        write_token_usage_report(
+            usage_data=calculate_token_spend(None, cfg["model"]),
+            stop_reason="ERROR_FALLBACK",
+            output_path="reports/telemetry/quality_gate_agent/token-usage.json",
+            model=cfg["model"],
+            prompt_metadata=prompt_metadata_audit,
+        )
         pass
 
     if failures:

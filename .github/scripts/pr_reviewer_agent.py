@@ -35,6 +35,7 @@ from helper import (
     MODEL_PRICING,
     calculate_token_spend,
     write_token_usage_report,
+    extract_agent_usage_stats,
     sanitize_and_validate_repo,
     fetch_pr_modified_lines,
     fetch_pr_comments,
@@ -66,6 +67,7 @@ __all__ = [
     "MODEL_PRICING",
     "calculate_token_spend",
     "write_token_usage_report",
+    "extract_agent_usage_stats",
     "sanitize_and_validate_repo",
     "fetch_all_pr_modified_files",
     "triage_and_filter_files",
@@ -334,13 +336,7 @@ async def review_batch_with_isolated_context(
                     budget_halted = True
 
         # Extract token usage and compute spend
-        conv = getattr(agent, "conversation", None)
-        raw_usage = getattr(conv, "total_usage", None) if conv is not None else None
-        if raw_usage is not None and not hasattr(raw_usage, "_mock_name") and type(raw_usage).__name__ not in ("MagicMock", "Mock", "AsyncMock"):
-            usage = raw_usage
-        else:
-            usage = getattr(response, "usage_metadata", None)
-        usage_stats = calculate_token_spend(usage, cfg["model"])
+        usage_stats = extract_agent_usage_stats(agent, response, cfg["model"])
 
         if budget_halted:
             print(
@@ -355,6 +351,7 @@ async def review_batch_with_isolated_context(
             return result, usage_stats, stop_reason, stop_reason_str
 
         raw_output = await response.structured_output()
+        usage_stats = extract_agent_usage_stats(agent, response, cfg["model"])
         if isinstance(raw_output, PRReviewReport):
             result = BatchReviewResult(
                 batch_index=batch.batch_index,
